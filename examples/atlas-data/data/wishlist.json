@@ -1,0 +1,58 @@
+[
+  {
+    "id": "w-lofoten",
+    "placeId": "lofoten",
+    "seasons": [
+      "summer"
+    ],
+    "targetTime": {
+      "season": "summer"
+    },
+    "priority": 5,
+    "why": "Midnight sun, dramatic mountains and hiking.",
+    "inspirations": [
+      {
+        "type": "photo",
+        "title": "Lofoten at midnight",
+        "platform": "flickr"
+      }
+    ],
+    "note": "Maybe 2027 or 2028. Could go with friends. Need to check whether renting a car is necessary."
+  },
+  {
+    "id": "w-lisbon",
+    "placeId": "lisbon",
+    "seasons": [
+      "spring",
+      "autumn"
+    ],
+    "priority": 4,
+    "why": "Coastal light, tilework and long evenings.",
+    "inspirations": [
+      {
+        "type": "book",
+        "title": "Pereira Maintains",
+        "creator": "Antonio Tabucchi"
+      }
+    ]
+  },
+  {
+    "id": "w-santorini",
+    "placeId": "santorini",
+    "seasons": [
+      "summer"
+    ],
+    "targetTime": {
+      "year": 2027,
+      "season": "summer"
+    },
+    "priority": 3,
+    "why": "Caldera views and a slow island week.",
+    "inspirations": [
+      {
+        "type": "friend",
+        "note": "A friend recommended the quieter south coast"
+      }
+    ]
+  }
+]

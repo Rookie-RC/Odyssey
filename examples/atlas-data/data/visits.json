@@ -1,0 +1,85 @@
+[
+  {
+    "id": "v-julich",
+    "placeId": "julich-aachen",
+    "visitType": "lived",
+    "startDate": "2020-08-01",
+    "reflection": "Current base in Germany."
+  },
+  {
+    "id": "v-amsterdam",
+    "placeId": "amsterdam",
+    "visitType": "trip",
+    "startDate": "2021-05-14",
+    "endDate": "2021-05-17",
+    "withFriends": true,
+    "highlights": [
+      {
+        "name": "Rijksmuseum"
+      },
+      {
+        "name": "Canal walk",
+        "note": "Golden hour along the canals"
+      }
+    ]
+  },
+  {
+    "id": "v-barcelona",
+    "placeId": "barcelona",
+    "visitType": "trip",
+    "startDate": "2022-09-02",
+    "endDate": "2022-09-08",
+    "highlights": [
+      {
+        "name": "Sagrada Família"
+      },
+      {
+        "name": "Gothic Quarter"
+      }
+    ]
+  },
+  {
+    "id": "v-bordeaux",
+    "placeId": "bordeaux",
+    "visitType": "trip",
+    "startDate": "2025-11-10",
+    "endDate": "2025-11-15",
+    "withFriends": true,
+    "reflection": "Quiet city, long walks along the Garonne."
+  },
+  {
+    "id": "v-london",
+    "placeId": "london",
+    "visitType": "trip",
+    "startDate": "2023-06-01",
+    "endDate": "2023-06-05",
+    "withFriends": false
+  },
+  {
+    "id": "v-edinburgh",
+    "placeId": "edinburgh",
+    "visitType": "day_trip",
+    "startDate": "2023-06-03",
+    "withFriends": true,
+    "highlights": [
+      {
+        "name": "Arthur's Seat"
+      }
+    ]
+  },
+  {
+    "id": "v-athens",
+    "placeId": "athens",
+    "visitType": "trip",
+    "startDate": "2024-04-12",
+    "endDate": "2024-04-19",
+    "highlights": [
+      {
+        "name": "Acropolis"
+      },
+      {
+        "name": "Plaka"
+      }
+    ]
+  }
+]

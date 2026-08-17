@@ -1,0 +1,54 @@
+# ------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------
+node_modules/
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ------------------------------------------------------------------
+# Build output
+# ------------------------------------------------------------------
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# Go
+bin/
+*.exe
+*.test
+coverage.out
+
+# Generated embedded frontend (copied from apps/web/out by scripts/build.sh)
+apps/runtime/assets/web/*
+!apps/runtime/assets/web/.gitkeep
+
+# ------------------------------------------------------------------
+# Local toolchain (installed into the workspace for this environment)
+# ------------------------------------------------------------------
+.tools/
+
+# ------------------------------------------------------------------
+# Local runtime data (auto-created by the runtime during dev runs;
+# personal data is not part of portable Atlas data)
+# ------------------------------------------------------------------
+apps/runtime/atlas-data/
+
+# ------------------------------------------------------------------
+# Local env / secrets
+# ------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------------------------------------------
+# OS / editor
+# ------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
