@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Media, Place, Profile, Visit, Wishlist } from "../lib/types";
+import type { Media, Place, Profile, Season, Visit, Wishlist } from "../lib/types";
 import {
   getTimelineItems,
   getPrimaryMedia,
@@ -18,6 +18,12 @@ interface JourneyTimelineProps {
   profile: Profile | null;
   media: Media[];
   theme: AtlasTheme;
+  /** Season selected in Where Next; matching future nodes get a subtle
+   * emphasis so the shelf and the Timeline speak to each other. */
+  emphasizedSeason?: Season | null;
+  /** True while an overlay (place detail / profile) is open or closing. */
+  overlayOpen: boolean;
+  onOpenPlace?: (placeId: string) => void;
 }
 
 // Temporal-axis geometry. The scale is deliberately relaxed: nodes are laid out
@@ -114,6 +120,9 @@ export default function JourneyTimeline({
   profile,
   media,
   theme,
+  emphasizedSeason = null,
+  overlayOpen,
+  onOpenPlace,
 }: JourneyTimelineProps) {
   const now = useMemo(() => new Date(), []);
   const nodes = useMemo(
@@ -143,6 +152,11 @@ export default function JourneyTimeline({
   } | null>(null);
   const fadeTimerRef = useRef<number | null>(null);
 
+  // An overlay (Place Detail / Profile) supersedes the hover preview.
+  useEffect(() => {
+    if (overlayOpen) closeNow();
+  }, [overlayOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // --- immediate show / fade-out (no hover-persistence timer) ---
   const keepPreview = useCallback(() => {
     if (fadeTimerRef.current != null) {
@@ -161,6 +175,14 @@ export default function JourneyTimeline({
     setPreviewAnchor(null);
     setPreviewClosing(false);
   }, []);
+
+  const openDetail = useCallback(
+    (placeId: string) => {
+      closeNow();
+      onOpenPlace?.(placeId);
+    },
+    [closeNow, onOpenPlace]
+  );
 
   const showPreview = useCallback(
     (id: string, el: HTMLElement) => {
@@ -465,6 +487,7 @@ export default function JourneyTimeline({
                   theme={theme}
                   media={media}
                   active={previewId === p.node.id}
+                  emphasizedSeason={emphasizedSeason}
                   onShow={(el) => showPreview(p.node.id, el)}
                   onHide={hidePreview}
                 />
@@ -483,6 +506,7 @@ export default function JourneyTimeline({
           closing={previewClosing}
           onMouseEnter={keepPreview}
           onMouseLeave={hidePreview}
+          onOpenDetail={() => openDetail(previewNode.place.id)}
         />
       ) : null}
     </section>
@@ -494,6 +518,7 @@ interface NodeColumnProps {
   theme: AtlasTheme;
   media: Media[];
   active: boolean;
+  emphasizedSeason?: Season | null;
   onShow: (el: HTMLElement) => void;
   onHide: () => void;
 }
@@ -503,6 +528,7 @@ function NodeColumn({
   theme,
   media,
   active,
+  emphasizedSeason = null,
   onShow,
   onHide,
 }: NodeColumnProps) {
@@ -510,14 +536,20 @@ function NodeColumn({
   const seasonColor = node.season ? theme.seasons[node.season] : null;
   const primaryMedia = getPrimaryMedia(node.mediaIds, media);
   const depthClass = depthClassFor(node);
+  const seasonEmphasis =
+    node.kind === "future" && node.season != null && node.season === emphasizedSeason;
 
   // The whole column (marker + card) is one unit: hovering any part shows the
   // preview (anchored to the marker), and the card stays clickable for touch.
   return (
     <button
       type="button"
-      className={"atlas-tl-node" + (active ? " atlas-tl-node--active" : "")}
-      style={{ left: x, top: LINE_Y }}
+      className={
+        "atlas-tl-node" +
+        (active ? " atlas-tl-node--active" : "") +
+        (seasonEmphasis ? " atlas-tl-node--season-emphasis" : "")
+      }
+      style={{ left: x, top: LINE_Y, "--tl-node-season": seasonColor ?? undefined } as React.CSSProperties}
       aria-label={node.place.name + ", " + node.place.country + " — " + node.dateLabel}
       onMouseEnter={(e) => onShow(e.currentTarget)}
       onMouseLeave={onHide}
@@ -527,9 +559,11 @@ function NodeColumn({
     >
       <span
         className={"atlas-tl-node__marker atlas-tl-node__marker--" + node.kind + " " + depthClass}
-        style={seasonColor && node.kind === "future" ? { borderColor: seasonColor } : undefined}
       >
-        <span className="atlas-tl-node__dot" />
+        <span
+          className="atlas-tl-node__dot"
+          style={node.kind === "future" && seasonColor ? { borderColor: seasonColor } : undefined}
+        />
       </span>
 
       <span className="atlas-tl-card" style={{ top: CARD_TOP - LINE_Y }}>
@@ -575,6 +609,7 @@ function TimelinePreviewCard({
   closing,
   onMouseEnter,
   onMouseLeave,
+  onOpenDetail,
 }: {
   node: TimelineNode;
   media: Media[];
@@ -583,6 +618,7 @@ function TimelinePreviewCard({
   closing: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  onOpenDetail: () => void;
 }) {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const cardW = Math.min(280, vw - 24);
@@ -635,6 +671,19 @@ function TimelinePreviewCard({
             {inspiration.platform ? " · " + inspiration.platform : ""}
           </p>
         ) : null}
+        <button type="button" className="atlas-tl-preview__action" onClick={onOpenDetail}>
+          {node.kind === "future" ? "View wish" : "View memory"}
+          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+            <path
+              d="M2 8h11M9 3.5 13.5 8 9 12.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );

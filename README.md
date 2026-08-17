@@ -7,7 +7,11 @@ API, Photon geocoding). Phase 2 adds the fullscreen MapLibre Hero Map with
 data-driven markers, a distinct current-location marker, visited-country
 polygons, hover/focus previews, and Light/Night theme foundations. Phase 3 adds
 the scroll-driven Hero Map → Journey transition and the horizontal, draggable,
-season-coloured Journey Timeline derived from domain data.
+season-coloured Journey Timeline derived from domain data. Phase 4 completes the
+single-page Atlas after the Journey: a Wishlist-driven **Where Next** season
+shelf, a spatial **Place Detail Sheet**, the **Profile Drawer**, URL state
+(`?place=… ?season=… ?profile=true`), and local media serving
+(`atlas-data/media/…`) through the runtime.
 
 > Authoritative specs: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) and
 > [docs/design/VISUAL_SPEC.md](docs/design/VISUAL_SPEC.md).
@@ -203,6 +207,32 @@ horizontal draggable Journey Timeline, derived past/current/future nodes,
 season-coloured line, NOW-centred initial position, Light/Night support,
 lightweight preview/focus interaction.
 
-Explicitly **not** implemented yet (Phase 4+): Where Next, Place Detail Sheet,
-Profile Drawer, Manage Atlas redesign, online place-search UI, media upload,
-`.yuatlas` import/export, LAN mode.
+**Phase 4 (where next + detail + profile):** the single-page Atlas continues
+after the Journey Timeline with:
+
+- **Where Next** — a season-driven inspiration shelf (`src/components/WhereNext.tsx`).
+  Every Wishlist entry is eligible (even without timing); an entry matches a
+  season when it lists that season in `seasons`, or is "timeless" when it has no
+  season info. Ranking is priority first, then a matching target season
+  (`src/lib/domain.ts` → `getWhereNextItems`). One dominant destination plus
+  smaller secondary cards — no equal card grid. Season selection also softly
+  emphasises matching future Timeline nodes.
+- **Place Detail Sheet** — a right-side spatial sheet (bottom sheet on small
+  screens) that opens from map previews ("View memory"), Timeline previews
+  ("View memory" / "View wish") and Where Next cards. Visited stories show
+  date range, visit type, with-friends, photos, highlights and reflection;
+  Wishlist stories show target time, why, inspirations and notes. It is a
+  continuation of the Atlas, not a modal page.
+- **Profile Drawer** — right drawer (`min(420px, 90vw)`) with avatar, name,
+  current base, bio, interests, links, and the Manage Atlas entry point in
+  local writable mode (the full Manage Atlas UI is a later phase).
+- **Single overlay state** (`type ActiveOverlay = place | profile | null`):
+  Place Detail and Profile are mutually exclusive and never stack.
+- **URL state** (PRODUCT_SPEC §36): `/?place=…`, `/?season=…`, `/?profile=true`
+  open directly and stay in sync without reloads.
+- **Local media** — the runtime now serves `atlas-data/media/…` (`/media/*`,
+  read-only, traversal-safe) and the dev server proxies `/media/*` to it;
+  sample data ships with CC-licensed photos under `examples/atlas-data/media/`.
+
+Explicitly **not** implemented yet (next phases): full Manage Atlas CRUD,
+online place-search UI, media upload, `.yuatlas` import/export, LAN mode.

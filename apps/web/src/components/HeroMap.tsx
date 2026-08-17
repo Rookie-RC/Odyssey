@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Place, Profile, Visit } from "../lib/types";
+import type { Media, Place, Profile, Visit } from "../lib/types";
 import { buildMapMarkers, visitedCountryCodes } from "../lib/map-data";
 import type { MapMarker } from "../lib/map-data";
 import { visitTypeLabel } from "../lib/timeline";
+import { getPrimaryMediaForPlace } from "../lib/domain";
 import { loadThemeStyle } from "../lib/map-style";
 import type { AtlasTheme } from "../themes";
 
@@ -38,6 +39,10 @@ interface HeroMapProps {
   profile: Profile | null;
   countriesGeo: CountryCollection | null;
   theme: AtlasTheme;
+  media: Media[];
+  /** True while an overlay (place detail / profile) is open or closing. */
+  overlayOpen: boolean;
+  onOpenPlace?: (placeId: string) => void;
 }
 
 function webglAvailable(): boolean {
@@ -55,6 +60,9 @@ export default function HeroMap({
   profile,
   countriesGeo,
   theme,
+  media,
+  overlayOpen,
+  onOpenPlace,
 }: HeroMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -73,6 +81,19 @@ export default function HeroMap({
   const contentRef = useRef({ theme, markers, countryCodes, countriesGeo });
   contentRef.current = { theme, markers, countryCodes, countriesGeo };
   previewRef.current = preview;
+
+  // A Place Detail / Profile overlay supersedes the map preview.
+  useEffect(() => {
+    if (overlayOpen) setPreview(null);
+  }, [overlayOpen]);
+
+  const openDetail = useCallback(
+    (m: MapMarker) => {
+      setPreview(null);
+      onOpenPlace?.(m.place.id);
+    },
+    [onOpenPlace]
+  );
 
   // --- show / hide / focus callbacks (stable) ---
   const projectPreview = useCallback((m: MapMarker) => {
@@ -292,20 +313,75 @@ export default function HeroMap({
         <div
           className={"atlas-preview atlas-preview--" + preview.mode}
           style={{ left: previewPixel.x, top: previewPixel.y }}
-          role="tooltip"
         >
-          <div className="atlas-preview__name">{preview.marker.place.name}</div>
-          <div className="atlas-preview__meta">
-            {preview.marker.place.country}
-            {preview.marker.dateLabel ? " · " + preview.marker.dateLabel : ""}
-            {" · " + visitTypeLabel(preview.marker.visitType)}
-          </div>
-          {preview.mode === "expanded" && preview.marker.withFriends ? (
-            <div className="atlas-preview__friends">With friends</div>
-          ) : null}
+          {preview.mode === "expanded" ? (
+            <ExpandedPreview
+              marker={preview.marker}
+              visits={visits}
+              media={media}
+              onOpenDetail={() => openDetail(preview.marker)}
+            />
+          ) : (
+            <>
+              <div className="atlas-preview__name">{preview.marker.place.name}</div>
+              <div className="atlas-preview__meta">
+                {preview.marker.place.country}
+                {preview.marker.dateLabel ? " · " + preview.marker.dateLabel : ""}
+                {" · " + visitTypeLabel(preview.marker.visitType)}
+              </div>
+            </>
+          )}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ExpandedPreview({
+  marker,
+  visits,
+  media,
+  onOpenDetail,
+}: {
+  marker: MapMarker;
+  visits: Visit[];
+  media: Media[];
+  onOpenDetail: () => void;
+}) {
+  const photo = getPrimaryMediaForPlace(marker.place.id, visits, [], media);
+  return (
+    <>
+      {photo ? (
+        <img
+          className="atlas-preview__img"
+          src={photo.path}
+          alt={photo.caption ?? marker.place.name}
+          draggable={false}
+        />
+      ) : null}
+      <div className="atlas-preview__body">
+        <div className="atlas-preview__name">{marker.place.name}</div>
+        <div className="atlas-preview__meta">
+          {marker.place.country}
+          {marker.dateLabel ? " · " + marker.dateLabel : ""}
+          {" · " + visitTypeLabel(marker.visitType)}
+        </div>
+        {marker.withFriends ? <div className="atlas-preview__friends">With friends</div> : null}
+        <button type="button" className="atlas-preview__action" onClick={onOpenDetail}>
+          View memory
+          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
+            <path
+              d="M2 8h11M9 3.5 13.5 8 9 12.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+    </>
   );
 }
 

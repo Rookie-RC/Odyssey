@@ -63,6 +63,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", srv.Handler())
+	mux.Handle("/media/", mediaHandler(dir))
 	mux.Handle("/", staticHandler())
 
 	url := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
@@ -166,6 +167,32 @@ func staticHandler() http.Handler {
 			p = "index.html" // SPA fallback
 		}
 		http.ServeFileFS(w, r, sub, p)
+	})
+}
+
+// mediaHandler serves the user's media files from <dataDir>/media so the
+// frontend can reference local images by stable /media/<place>/<file> paths
+// (PRODUCT_SPEC §10 storage layout). It is a read-only, traversal-safe file
+// server: only GET/HEAD, only existing regular files, no directory listings.
+func mediaHandler(dataDir string) http.Handler {
+	mediaRoot := filepath.Join(dataDir, "media")
+	fsys := os.DirFS(mediaRoot)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, "/media/")
+		if name == "" || strings.Contains(name, "..") {
+			http.NotFound(w, r)
+			return
+		}
+		info, err := fs.Stat(fsys, name)
+		if err != nil || info.IsDir() {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFileFS(w, r, fsys, name)
 	})
 }
 

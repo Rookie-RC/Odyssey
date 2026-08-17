@@ -18,7 +18,13 @@ const nextConfig = {
     ? {
         async rewrites() {
           const target = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:4317";
-          return [{ source: "/api/:path*", destination: `${target}/api/:path*` }];
+          return [
+            { source: "/api/:path*", destination: `${target}/api/:path*` },
+            // Local media lives in atlas-data/media and is served by the Go
+            // runtime, so dev also proxies /media/* to it (production serves
+            // both frontend and media from the runtime on one origin).
+            { source: "/media/:path*", destination: `${target}/media/:path*` },
+          ];
         },
       }
     : {}),

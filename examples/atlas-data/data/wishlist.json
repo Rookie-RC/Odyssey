@@ -17,6 +17,9 @@
         "platform": "flickr"
       }
     ],
+    "mediaIds": [
+      "m-lofoten-sakrisoy"
+    ],
     "note": "Maybe 2027 or 2028. Could go with friends. Need to check whether renting a car is necessary."
   },
   {
@@ -34,6 +37,9 @@
         "title": "Pereira Maintains",
         "creator": "Antonio Tabucchi"
       }
+    ],
+    "mediaIds": [
+      "m-lisbon-tram28"
     ]
   },
   {
@@ -53,6 +59,45 @@
         "type": "friend",
         "note": "A friend recommended the quieter south coast"
       }
+    ],
+    "mediaIds": [
+      "m-santorini-oia"
     ]
+  },
+  {
+    "id": "w-sardinia",
+    "placeId": "sardinia",
+    "priority": 2,
+    "why": "Quiet coves, granite coastline and long swims.",
+    "inspirations": [
+      {
+        "type": "friend",
+        "note": "A friend from Milan keeps recommending it"
+      }
+    ],
+    "mediaIds": [
+      "m-sardinia-costa"
+    ],
+    "note": "No timing yet — whenever the calendar allows."
+  },
+  {
+    "id": "w-dolomites",
+    "placeId": "dolomites",
+    "seasons": [
+      "winter"
+    ],
+    "priority": 1,
+    "why": "Winter hikes and quiet mountain villages.",
+    "inspirations": [
+      {
+        "type": "article",
+        "title": "Winter valleys of the Dolomites",
+        "platform": "a travel magazine"
+      }
+    ],
+    "mediaIds": [
+      "m-dolomites-trecime"
+    ],
+    "note": "Would combine with a slow week in northern Italy."
   }
 ]

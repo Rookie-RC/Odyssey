@@ -2,14 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Media, Place, Profile, Settings, Visit, Wishlist } from "../lib/types";
+import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
 import HeroMap, { type CountryCollection } from "./HeroMap";
 import JourneyTimeline from "./JourneyTimeline";
+import WhereNext from "./WhereNext";
+import PlaceDetailSheet from "./PlaceDetailSheet";
+import ProfileDrawer from "./ProfileDrawer";
 import { applyTheme, themes } from "../themes";
 import type { ThemeId } from "../themes";
 
 // Collapsed "contextual strip" height (PRODUCT_SPEC §18: 80–140px).
 const STRIP_HEIGHT = 140;
+
+// One global overlay state (PRODUCT_SPEC §25): Place Detail and Profile are
+// mutually exclusive; nothing else can stack on top of them.
+type ActiveOverlay =
+  | { type: "place"; id: string }
+  | { type: "profile" }
+  | null;
+
+const SEASONS: Season[] = ["spring", "summer", "autumn", "winter"];
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -27,6 +39,14 @@ export default function AtlasApp() {
   const [countriesGeo, setCountriesGeo] = useState<CountryCollection | null>(null);
   const [error, setError] = useState("");
   const [themeId, setThemeId] = useState<ThemeId>("light");
+  const [writable, setWritable] = useState(false);
+
+  // Where Next season + global overlay (single overlay state). Initial state
+  // matches the server render (no hydration mismatch); the URL is applied once
+  // after mount (see url-applied effect below).
+  const [season, setSeason] = useState<Season>("summer");
+  const [overlay, setOverlay] = useState<ActiveOverlay>(null);
+  const [closingOverlay, setClosingOverlay] = useState(false);
 
   const theme = themes[themeId];
 
@@ -60,6 +80,12 @@ export default function AtlasApp() {
         if (alive) setCountriesGeo(geo);
       } catch {
         // country polygons are an optional enhancement
+      }
+      try {
+        const runtime = await api.getRuntime();
+        if (alive) setWritable(runtime.writable);
+      } catch {
+        // writable defaults to false (no Manage Atlas entry)
       }
     })();
     return () => {
@@ -114,6 +140,79 @@ export default function AtlasApp() {
     api.saveSettings({ ...base, theme: next }).catch(() => {});
   }, [themeId, settings]);
 
+  // --- overlay lifecycle (single source; animated close) ---
+  const closeOverlay = useCallback(() => {
+    if (!overlay || closingOverlay) return;
+    setClosingOverlay(true);
+    window.setTimeout(() => {
+      setOverlay(null);
+      setClosingOverlay(false);
+    }, 260);
+  }, [overlay, closingOverlay]);
+
+  const openPlace = useCallback((id: string) => setOverlay({ type: "place", id }), []);
+  const openProfile = useCallback(() => setOverlay({ type: "profile" }), []);
+
+  // Escape collapses the active overlay (spec: single-page, no stacked overlays).
+  useEffect(() => {
+    if (!overlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeOverlay();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [overlay, closeOverlay]);
+
+  // Lock page scroll while an overlay is open.
+  useEffect(() => {
+    const locked = overlay != null || closingOverlay;
+    document.body.style.overflow = locked ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [overlay, closingOverlay]);
+
+  // --- URL state (PRODUCT_SPEC §36): /?place=… /?season=… /?profile=true ---
+  // Applied after hydration (never on the server render) so the initial client
+  // render always matches the pre-rendered HTML.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const prof = params.get("profile");
+    const p = params.get("place");
+    const s = params.get("season");
+    if (prof === "true") setOverlay({ type: "profile" });
+    else if (p) setOverlay({ type: "place", id: p });
+    if (SEASONS.includes(s as Season)) setSeason(s as Season);
+  }, []);
+
+  // Keep the URL in sync when state changes (skip the mount commit so it never
+  // overwrites the URL before the read above has run).
+  const firstPushRef = useRef(true);
+  useEffect(() => {
+    if (firstPushRef.current) {
+      firstPushRef.current = false;
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (overlay?.type === "place") url.searchParams.set("place", overlay.id);
+    else url.searchParams.delete("place");
+    if (overlay?.type === "profile") url.searchParams.set("profile", "true");
+    else url.searchParams.delete("profile");
+    url.searchParams.set("season", season);
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [overlay, season]);
+
+  const profileInitials = (profile?.name?.trim() || "Profile")
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const placeOverlayExists =
+    overlay?.type !== "place" || places.some((p) => p.id === overlay.id);
+
   return (
     <>
       <div className="atlas-map-sticky">
@@ -124,6 +223,9 @@ export default function AtlasApp() {
             profile={profile}
             countriesGeo={countriesGeo}
             theme={theme}
+            media={media}
+            overlayOpen={overlay != null || closingOverlay}
+            onOpenPlace={openPlace}
           />
         </div>
       </div>
@@ -136,16 +238,62 @@ export default function AtlasApp() {
           profile={profile}
           media={media}
           theme={theme}
+          emphasizedSeason={season}
+          overlayOpen={overlay != null || closingOverlay}
+          onOpenPlace={openPlace}
+        />
+        <WhereNext
+          wishlist={wishlist}
+          places={places}
+          media={media}
+          theme={theme}
+          season={season}
+          onSeasonChange={setSeason}
+          onOpenPlace={openPlace}
         />
       </main>
 
-      <header className="atlas-wordmark">Yu&rsquo;s Atlas</header>
-
-      <button className="atlas-theme-toggle" onClick={toggleTheme} type="button">
-        {themeId === "light" ? "Night" : "Light"}
-      </button>
+      <header className="atlas-topbar">
+        <div className="atlas-wordmark">Yu&rsquo;s Atlas</div>
+        <div className="atlas-topbar__actions">
+          <button className="atlas-profile-button" onClick={openProfile} type="button">
+            <span className="atlas-profile-button__avatar" aria-hidden="true">
+              {profileInitials}
+            </span>
+            {profile?.name ? <span className="atlas-profile-button__label">{profile.name}</span> : null}
+          </button>
+          <button className="atlas-theme-toggle" onClick={toggleTheme} type="button">
+            {themeId === "light" ? "Night" : "Light"}
+          </button>
+        </div>
+      </header>
 
       {error ? <div className="atlas-error">{error}</div> : null}
+
+      {overlay?.type === "place" && placeOverlayExists ? (
+        <PlaceDetailSheet
+          placeId={overlay.id}
+          places={places}
+          visits={visits}
+          wishlist={wishlist}
+          profile={profile}
+          media={media}
+          theme={theme}
+          closing={closingOverlay}
+          onClose={closeOverlay}
+        />
+      ) : null}
+
+      {overlay?.type === "profile" ? (
+        <ProfileDrawer
+          profile={profile}
+          places={places}
+          theme={theme}
+          writable={writable}
+          closing={closingOverlay}
+          onClose={closeOverlay}
+        />
+      ) : null}
     </>
   );
 }

@@ -108,5 +108,27 @@
       "lat": 36.3932,
       "lng": 25.4615
     }
+  },
+  {
+    "id": "sardinia",
+    "name": "Sardinia",
+    "country": "Italy",
+    "countryCode": "IT",
+    "type": "island",
+    "coordinates": {
+      "lat": 40.1209,
+      "lng": 9.0129
+    }
+  },
+  {
+    "id": "dolomites",
+    "name": "Dolomites",
+    "country": "Italy",
+    "countryCode": "IT",
+    "type": "natural_area",
+    "coordinates": {
+      "lat": 46.4,
+      "lng": 11.85
+    }
   }
 ]

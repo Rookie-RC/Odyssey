@@ -21,6 +21,9 @@
         "name": "Canal walk",
         "note": "Golden hour along the canals"
       }
+    ],
+    "mediaIds": [
+      "m-amsterdam-canal"
     ]
   },
   {
@@ -45,7 +48,19 @@
     "startDate": "2025-11-10",
     "endDate": "2025-11-15",
     "withFriends": true,
-    "reflection": "Quiet city, long walks along the Garonne."
+    "highlights": [
+      {
+        "name": "Miroir d'eau"
+      },
+      {
+        "name": "Along the Garonne",
+        "note": "Long evening walks on the quays"
+      }
+    ],
+    "mediaIds": [
+      "m-bordeaux-bourse"
+    ],
+    "reflection": "Quiet city, long walks along the Garonne. The light in November sat low and golden on the stone facades."
   },
   {
     "id": "v-london",

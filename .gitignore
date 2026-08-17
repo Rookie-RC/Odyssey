@@ -57,3 +57,6 @@ Thumbs.db
 # Local vision toolkit scratch (artifacts, temp)
 # ------------------------------------------------------------------
 .dsh-vision-toolkit/
+
+# Local validation scratch (screenshots, CDP drivers)
+.media-scratch/
