@@ -60,11 +60,9 @@ Two terminals:
 go run ./apps/runtime/cmd/atlas -data examples/atlas-data
 ```
 
-Without `-data`, the runtime deterministically locates an existing
-`atlas-data` directory (next to the executable, then `./atlas-data`, then the
-dev-tree `apps/runtime/atlas-data` / `examples/atlas-data`) and resolves it to
-an **absolute** path, so the data location never depends on the working
-directory. The effective path is logged at startup and exposed via
+In development always pass `-data examples/atlas-data`. Without `-data`, the
+runtime uses the **portable** default location (see “Data directory” below),
+not the sample data. The effective path is logged at startup and exposed via
 `GET /api/runtime`.
 
 For frontend hot-reload, run the Next dev server separately. It automatically
@@ -98,18 +96,51 @@ The runtime:
 http://127.0.0.1:4317
 ```
 
+## Data directory
+
+Atlas keeps the application binary and user data strictly separate
+(PRODUCT_SPEC §2–3). Without `-data` / `YUATLAS_DATA`, the data directory is
+resolved deterministically, never from the process working directory:
+
+1. **Portable** — `<executable-dir>/atlas-data`. When you ship `Atlas.exe` (or
+   `atlas`) on its own, it creates a sibling `atlas-data/` next to itself and
+   uses it. This is the V1 layout: replace the executable, keep your data.
+2. **Per-user** — when the executable lives in a read-only location (e.g.
+   Program Files):
+   - Windows: `%LOCALAPPDATA%\YuAtlas\atlas-data`
+   - macOS: `~/Library/Application Support/YuAtlas/atlas-data`
+   - Linux: `$XDG_DATA_HOME/yu-atlas/atlas-data` or `~/.local/share/yu-atlas/atlas-data`
+
+`atlas-data/` contains `data/*.json` (the collections), `media/…` (photos, by
+Place), `backups/…` (automatic `.atlas` backups) and optional
+`runtime-config.json` (machine config, never exported).
+
 ## Build
 
 ```bash
-# Frontend static export
-cd apps/web && pnpm install && pnpm run build
-
-# Copy export into the runtime embed dir, then build the binary
-rm -rf apps/runtime/assets/web && cp -r apps/web/out apps/runtime/assets/web
-cd apps/runtime && go build -o bin/atlas ./cmd/atlas
+./scripts/build.sh
 ```
 
-`scripts/build.sh` performs all of the above.
+This builds the frontend static export, embeds it into the Go runtime, and
+produces two binaries in `bin/`:
+
+```text
+bin/atlas      native binary (for local testing on this OS)
+bin/Atlas.exe  Windows amd64 release (self-contained)
+```
+
+To cross-compile the Windows executable by hand:
+
+```bash
+cd apps/runtime
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../bin/Atlas.exe ./cmd/atlas
+```
+
+The `Atlas.exe` is fully self-contained (embedded frontend; no Node/Go/runtime
+required on the target machine). Ship it alone — no source, `node_modules`, or
+development caches. On Windows it is an **unsigned** binary, so SmartScreen may
+warn on first launch; that warning is expected and is not worked around by
+disabling security features.
 
 ## Local API
 
@@ -234,5 +265,21 @@ after the Journey Timeline with:
   read-only, traversal-safe) and the dev server proxies `/media/*` to it;
   sample data ships with CC-licensed photos under `examples/atlas-data/media/`.
 
-Explicitly **not** implemented yet (next phases): full Manage Atlas CRUD,
-online place-search UI, media upload, `.yuatlas` import/export, LAN mode.
+**Phase 5 (manage atlas):** the local content-management utility
+(`src/components/manage/*`) behind Profile → Manage Atlas — overview, Places /
+Visits / Wishlist / Media / Settings editors, online place search (Photon via
+the runtime), media upload/delete, and add-Visit / add-Wishlist flows.
+
+**Phase 6 (portability):** the portable `.atlas` container
+(`apps/runtime/internal/atlas`) — ZIP-based export / import with a
+`schemaVersion`-validated `manifest.json`, automatic backups in
+`atlas-data/backups/`, "New Atlas" reset, and traversal-safe extraction.
+Machine config (`runtime-config.json`) is never exported.
+
+**Phase 7 (release packaging):** portable single-file distribution — `bin/Atlas.exe`
+(Windows amd64, self-contained, embedded frontend) plus a native `bin/atlas`
+for local testing. Data lives next to the executable (or in a per-user directory
+for read-only install locations); see “Data directory”.
+
+Explicitly **not** implemented yet (later phases): LAN sharing, an
+installer/MSI, auto-updater, code signing, and general visual polish.

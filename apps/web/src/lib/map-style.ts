@@ -9,6 +9,9 @@ import type { ThemeId } from "../themes";
 type LayerLike = {
   id: string;
   type: string;
+  source?: string;
+  "source-layer"?: string;
+  filter?: unknown;
   layout?: Record<string, unknown>;
   paint?: Record<string, unknown>;
   minzoom?: number;
@@ -17,6 +20,63 @@ type LayerLike = {
 type StyleLike = {
   layers?: LayerLike[];
 };
+
+// --- shared boundary treatment ---
+// The CARTO basemap renders international boundaries from its own `carto`
+// vector source (source-layer `boundary`, features with `admin_level`,
+// `maritime` and `disputed` properties). The original style's country border
+// is both nearly invisible against our parchment land (light theme) and
+// dashed at higher zooms — which reads as missing segments. We keep the
+// basemap's vector geometry and restyle it:
+//   - ordinary international borders: a continuous, solid line with enough
+//     contrast to read at Europe/world zoom;
+//   - disputed borders: a subtle dashed line, drawn by a thin overlay layer
+//     from the same source using the source's own `disputed` property;
+//   - state/county boundaries stay much weaker; maritime boundaries stay
+//     unrendered (sea, not land).
+function styleCountryBoundaries(style: StyleLike, lineColor: string): void {
+  const inner = style.layers?.find((l) => l.id === "boundary_country_inner");
+  // outline: the original 8px glow layer is kept transparent — the inner line
+  // is the boundary, and a halo would just muddy the editorial look.
+  paint(style, "boundary_country_outline", "line-color", "transparent");
+  if (!inner) return;
+
+  paint(style, "boundary_country_inner", "line-color", lineColor);
+  // Solid line (no dash gaps) for ordinary borders; the CARTO style dashes
+  // borders from zoom 7 on, which reads as missing segments.
+  paint(style, "boundary_country_inner", "line-dasharray", [1]);
+  // Ordinary layer excludes disputed segments so the dashed overlay below
+  // (same geometry) is the only thing drawing them.
+  inner.filter = [
+    "all",
+    ["==", "admin_level", 2],
+    ["==", "maritime", 0],
+    ["!=", "disputed", 1],
+  ];
+
+  // Disputed overlay: same vector source, dashed, slightly thinner.
+  const idx = style.layers?.findIndex((l) => l.id === inner.id) ?? -1;
+  if (idx >= 0) {
+    style.layers?.splice(idx + 1, 0, {
+      id: "boundary_country_disputed",
+      type: "line",
+      source: inner.source,
+      "source-layer": inner["source-layer"],
+      filter: [
+        "all",
+        ["==", "admin_level", 2],
+        ["==", "maritime", 0],
+        ["==", "disputed", 1],
+      ],
+      paint: {
+        "line-color": lineColor,
+        "line-width": 1.1,
+        "line-dasharray": [2, 2],
+        "line-offset": 0,
+      },
+    });
+  }
+}
 
 const cache = new Map<string, Promise<StyleSpecification>>();
 
@@ -99,9 +159,10 @@ function adaptNight(style: StyleLike): void {
   paint(style, "building", "fill-color", "rgba(18, 28, 44, 0.85)");
   paint(style, "building-top", "fill-color", "rgba(20, 32, 50, 1)");
 
-  // Boundaries: barely-there so the map stays a void, not a political map.
-  paint(style, "boundary_country_outline", "line-color", "transparent");
-  paint(style, "boundary_country_inner", "line-color", "rgba(96, 118, 144, 0.38)");
+  // Boundaries: barely-there so the map stays a void, not a political map —
+  // except country borders, which stay legible (solid, clear blue-gray) so
+  // international borders never read as missing. State/county stay faint.
+  styleCountryBoundaries(style, "rgba(124, 151, 182, 0.62)");
   paint(style, "boundary_state", "line-color", "rgba(64, 82, 104, 0.22)");
   paint(style, "boundary_county", "line-color", "rgba(58, 74, 94, 0.14)");
 
@@ -174,8 +235,10 @@ function adaptLight(style: StyleLike): void {
   paint(style, "building", "fill-color", "#EAE6DB");
   paint(style, "building-top", "fill-color", "#EDE9DF");
 
-  paint(style, "boundary_country_outline", "line-color", "transparent");
-  paint(style, "boundary_country_inner", "line-color", "#E4DAC8");
+  // Boundaries: country borders get a clearly visible warm-taupe line (solid,
+  // disputed dashed) so international borders are continuous and legible on
+  // the parchment land; state/county stay faint.
+  styleCountryBoundaries(style, "#C7B89F");
   paint(style, "boundary_state", "line-color", "#E1D7C4");
   paint(style, "boundary_county", "line-color", "#E8DECE");
 

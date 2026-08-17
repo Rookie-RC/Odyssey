@@ -97,19 +97,18 @@ func main() {
 //
 //  1. the explicit -data flag,
 //  2. the YUATLAS_DATA environment variable,
-//  3. discovery of an existing atlas-data directory (see discoverDataDir),
-//  4. a fresh <cwd>/atlas-data, created by storage.Ensure.
+//  3. a portable default (see defaultDataDir).
 //
-// The result is always an absolute path so the effective location is
-// unambiguous regardless of the process working directory, and it is exposed
-// through GET /api/runtime for debugging.
+// The result is always an absolute path so the effective location never
+// depends on the process working directory, and it is exposed through
+// GET /api/runtime for debugging.
 func resolveDataDir(explicit string) (string, error) {
 	dir := explicit
 	if dir == "" {
 		dir = os.Getenv("YUATLAS_DATA")
 	}
 	if dir == "" {
-		dir = discoverDataDir()
+		dir = defaultDataDir()
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -118,32 +117,71 @@ func resolveDataDir(explicit string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
-// discoverDataDir locates an existing atlas-data directory so repeated
-// launches resolve to the same data regardless of the working directory:
+// defaultDataDir returns the deterministic, user-writable location for Atlas
+// data (PRODUCT_SPEC §2–3: the binary and atlas-data/ are kept side by side so
+// replacing the executable never touches user data):
 //
-//  1. <executable-dir>/atlas-data  — packaged installs (binary + data side by side),
-//  2. <cwd>/atlas-data             — classic "run me here" layout,
-//  3. <cwd>/apps/runtime/atlas-data — dev tree launched from the repo root,
-//  4. <cwd>/examples/atlas-data     — sample data.
+//  1. <executable-dir>/atlas-data — the portable layout (Atlas.exe + atlas-data/).
+//     Chosen when it already exists, or when the executable's directory is
+//     writable (so it can be created there).
+//  2. a per-user OS data directory — for read-only install locations (e.g. the
+//     executable dropped into Program Files).
 //
-// If no existing directory matches, the default <cwd>/atlas-data is returned
-// and created fresh by storage.Ensure.
-func discoverDataDir() string {
-	var candidates []string
+// The process working directory is never consulted, so launching Atlas from a
+// different folder (or a shortcut with a different "Start in") keeps the same
+// data. Developers run the source tree with `-data examples/atlas-data`.
+func defaultDataDir() string {
 	if exe, err := os.Executable(); err == nil {
-		candidates = append(candidates, filepath.Join(filepath.Dir(exe), "atlas-data"))
-	}
-	candidates = append(candidates,
-		"atlas-data",
-		filepath.Join("apps", "runtime", "atlas-data"),
-		filepath.Join("examples", "atlas-data"),
-	)
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
-			return c
+		exeDir := filepath.Dir(exe)
+		portable := filepath.Join(exeDir, "atlas-data")
+		if dirExists(portable) || dirWritable(exeDir) {
+			return portable
 		}
 	}
+	return userDataDir()
+}
+
+// userDataDir returns a deterministic per-user directory for Atlas data,
+// suitable when the executable lives in a read-only location.
+func userDataDir() string {
+	switch runtime.GOOS {
+	case "windows":
+		if base := os.Getenv("LOCALAPPDATA"); base != "" {
+			return filepath.Join(base, "YuAtlas", "atlas-data")
+		}
+		if home := os.Getenv("USERPROFILE"); home != "" {
+			return filepath.Join(home, "AppData", "Local", "YuAtlas", "atlas-data")
+		}
+	case "darwin":
+		if home := os.Getenv("HOME"); home != "" {
+			return filepath.Join(home, "Library", "Application Support", "YuAtlas", "atlas-data")
+		}
+	default: // linux and other unix
+		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
+			return filepath.Join(xdg, "yu-atlas", "atlas-data")
+		}
+		if home := os.Getenv("HOME"); home != "" {
+			return filepath.Join(home, ".local", "share", "yu-atlas", "atlas-data")
+		}
+	}
+	// Last resort (no home/env on an unusual system): current directory.
 	return "atlas-data"
+}
+
+func dirExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
+}
+
+// dirWritable reports whether a new file can be created in dir (the directory
+// itself must already exist).
+func dirWritable(dir string) bool {
+	probe := filepath.Join(dir, ".atlas-write-probe")
+	if err := os.WriteFile(probe, []byte{0}, 0o644); err != nil {
+		return false
+	}
+	_ = os.Remove(probe)
+	return true
 }
 
 func selectProvider(cfg config.Config) geocode.Provider {
