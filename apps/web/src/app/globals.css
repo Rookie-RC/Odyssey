@@ -2,23 +2,335 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Semantic theme tokens (light defaults; applyTheme() sets inline overrides). */
 :root {
   --bg: #f7f6f2;
   --surface: #ffffff;
-  --text: #1e1e1c;
+  --surface-elevated: #fcfbf8;
+  --text-primary: #1e1e1c;
   --text-secondary: #6f726e;
   --border: #e4e2dc;
+  --accent: #2563eb;
+  --marker-current: #2563eb;
+  --marker-current-ring: rgba(37, 99, 235, 0.28);
+  --marker-visited: #1e1e1c;
+  --marker-visited-faint: rgba(30, 30, 28, 0.5);
+  --map-tint: transparent;
 }
 
 html,
 body {
-  padding: 0;
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
+  background: var(--bg);
+  color: var(--text-primary);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
+}
+
+/* --- Fullscreen hero map --- */
+.atlas-hero {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.atlas-hero__map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atlas-hero__tint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--map-tint, transparent);
+  pointer-events: none;
+}
+
+/* --- Wordmark --- */
+.atlas-wordmark {
+  position: absolute;
+  top: 20px;
+  left: 26px;
+  z-index: 20;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 22px;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+/* --- Theme toggle --- */
+.atlas-theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 26px;
+  z-index: 20;
+  padding: 7px 15px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.atlas-theme-toggle:hover {
+  background: var(--surface-elevated);
+}
+
+/* --- Marker hierarchy --- */
+.atlas-marker {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.atlas-marker__dot {
+  position: relative;
+  z-index: 1;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: var(--marker-visited);
+  transition: transform 0.15s ease;
+}
+
+.atlas-marker:hover .atlas-marker__dot {
+  transform: scale(1.25);
+}
+
+.atlas-marker--lived .atlas-marker__dot,
+.atlas-marker--trip .atlas-marker__dot {
+  width: 13px;
+  height: 13px;
+  background: var(--marker-visited);
+}
+
+/* Light: a soft contact shadow keeps visited dots crisp on parchment. */
+html[data-theme="light"] .atlas-marker--lived .atlas-marker__dot,
+html[data-theme="light"] .atlas-marker--trip .atlas-marker__dot {
+  box-shadow: 0 1px 3px rgba(30, 30, 28, 0.28);
+}
+
+.atlas-marker--day_trip .atlas-marker__dot {
+  width: 9px;
+  height: 9px;
+  background: var(--marker-visited-faint);
+}
+
+.atlas-marker--stopover .atlas-marker__dot {
+  width: 10px;
+  height: 10px;
+  background: transparent;
+  border: 2px solid var(--marker-visited);
+}
+
+.atlas-marker--transit .atlas-marker__dot {
+  width: 5px;
+  height: 5px;
+  background: var(--marker-visited-faint);
+}
+
+.atlas-marker--current .atlas-marker__dot {
+  width: 14px;
+  height: 14px;
+  background: var(--marker-current);
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+.atlas-marker__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--marker-current-ring);
+  animation: atlas-pulse 2.4s ease-out infinite;
+}
+
+/* Night: a restrained warm glow on visited markers and a cool glow on the
+   current marker echoes the reference's city-light atmosphere without neon. */
+html[data-theme="night"] .atlas-marker--lived .atlas-marker__dot,
+html[data-theme="night"] .atlas-marker--trip .atlas-marker__dot {
+  box-shadow: 0 0 6px 2px rgba(231, 179, 106, 0.4), 0 0 14px 4px rgba(231, 179, 106, 0.18);
+}
+
+html[data-theme="night"] .atlas-marker--current .atlas-marker__dot {
+  box-shadow:
+    0 0 0 3px var(--surface),
+    0 0 8px 3px rgba(56, 189, 248, 0.45),
+    0 0 16px 6px rgba(56, 189, 248, 0.2);
+}
+
+@keyframes atlas-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  70% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-marker__ring {
+    animation: none;
+    opacity: 0;
+  }
+  .atlas-marker__dot {
+    transition: none;
+  }
+}
+
+/* --- Preview card (micro hover / expanded click) --- */
+.atlas-preview {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, calc(-100% - 18px));
+  min-width: 150px;
+  max-width: 280px;
+  padding: 10px 14px;
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.atlas-preview::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--surface-elevated);
+}
+
+.atlas-preview__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.atlas-preview__meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.atlas-preview__friends {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* --- Legend (removed: marker hierarchy reads without a permanent legend) --- */
+
+/* --- MapLibre controls: themed to belong to Light/Night, not stock GIS ---
+   Scoped under .atlas-hero so the rules beat maplibre-gl.css regardless of
+   stylesheet order. */
+.atlas-hero .maplibregl-ctrl-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+.atlas-hero .maplibregl-ctrl-group button {
+  width: 34px;
+  height: 34px;
+  background: var(--surface);
+  border-radius: 0;
+}
+
+.atlas-hero .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--border);
+}
+
+.atlas-hero .maplibregl-ctrl-group button:hover {
+  background: var(--surface-elevated);
+}
+
+.atlas-hero .maplibregl-ctrl-group button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Night: light icons on the navy surface. */
+html[data-theme="night"] .atlas-hero .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+  filter: invert(0.88) brightness(1.35);
+}
+
+.atlas-hero .maplibregl-ctrl-attrib {
+  background: transparent;
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.atlas-hero .maplibregl-ctrl-attrib a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.atlas-hero .maplibregl-ctrl-attrib a:hover {
+  text-decoration: underline;
+}
+
+.atlas-hero .maplibregl-ctrl-attrib-button {
+  background-color: transparent;
+  opacity: 0.7;
+}
+
+/* --- Map (WebGL) error fallback --- */
+.atlas-map-error {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.atlas-map-error__detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* --- Error banner --- */
+.atlas-error {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  padding: 8px 16px;
+  background: #7f1d1d;
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 13px;
 }

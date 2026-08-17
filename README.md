@@ -1,10 +1,11 @@
 # Yu's Atlas
 
 A local-first personal travel atlas centered on **space, time, memory, and future
-travel inspiration**. Phase 1 builds the working foundation: a Next.js +
-TypeScript frontend, a Go local runtime, JSON-backed storage, a repository/data
-abstraction, a local API, and Photon-based online geocoding behind a
-provider-neutral abstraction.
+travel inspiration**. Phase 1 built the working foundation (Next.js + TypeScript
+frontend, Go local runtime, JSON-backed storage, repository abstraction, local
+API, Photon geocoding). Phase 2 adds the fullscreen MapLibre Hero Map with
+data-driven markers, a distinct current-location marker, visited-country
+polygons, hover/focus previews, and Light/Night theme foundations.
 
 > Authoritative specs: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) and
 > [docs/design/VISUAL_SPEC.md](docs/design/VISUAL_SPEC.md).
@@ -117,6 +118,7 @@ cd apps/runtime && go build -o bin/atlas ./cmd/atlas
 | GET / POST | `/api/wishlist` | list / create wishlist entries |
 | PUT / DELETE | `/api/wishlist/:id` | update / delete a wishlist entry |
 | GET | `/api/media` | list media |
+| GET / PUT | `/api/settings` | read / write settings (theme, etc.) |
 | GET | `/api/geocode/search?q=...` | online place search (normalized) |
 | GET | `/api/geocode/reverse?lat=...&lng=...` | reverse geocoding |
 
@@ -139,12 +141,35 @@ filters out country-level and POI/street results, and caches searches (5 min).
 Provider and credentials are machine config in `atlas-data/runtime-config.json`
 (not part of portable Atlas data).
 
-## Phase 1 scope
+## Hero Map (Phase 2)
 
-Implemented: repository structure, domain types, sample JSON data, repository
-abstraction, Go runtime, local API, geocoding-provider abstraction, Photon search,
-geocoding cache/proxy, static frontend serving, browser auto-launch, minimal dev UI.
+The default view is a fullscreen MapLibre GL map framed on Europe.
 
-Explicitly **not** implemented yet (Phase 2+): final MapLibre hero map,
-visited-country polygons, Timeline, Where Next, Place Detail Sheet, Profile Drawer,
-final Light/Night styling, animation/polish, `.yuatlas` import/export, LAN mode.
+- **Markers** derive from `places.json` + `visits.json` (a place referenced by a
+  Visit gets a marker; Wishlist-only places do not appear on the default map).
+- **Current location** comes from `profile.currentBase.placeId` and renders as a
+  distinct accent-colored marker with a subtle pulse ring.
+- **Visited countries** are the distinct `countryCode`s of visited places, drawn
+  as a subtle polygon fill + outline from `public/geodata/countries.geojson`
+  (Natural Earth 110m). Countries are never markers or first-class Places.
+- **Hover** shows a micro preview (place, country, date, visit type); **click**
+  focuses the marker and reveals the expanded preview.
+- **Themes** are semantic tokens (`src/themes/`) applied as CSS variables, with
+  Light (Carto Positron) and Night (Carto Dark Matter) base maps and a toggle
+  persisted through `settings.json`.
+
+## Phase 1–2 scope
+
+**Phase 1 (foundation):** repository structure, domain types, sample JSON data,
+repository abstraction, Go runtime, local API, geocoding-provider abstraction,
+Photon search, geocoding cache/proxy, static frontend serving, browser
+auto-launch, minimal dev UI.
+
+**Phase 2 (hero map):** fullscreen MapLibre hero map, data-driven
+visited-location markers, a visually distinct current-location marker, subtle
+visited-country polygon/outline layer derived from `countryCode`, hover/focus
+preview cards, Light/Night theme tokens + map styles, theme toggle.
+
+Explicitly **not** implemented yet (Phase 3+): scroll-driven map collapse,
+Journey Timeline, seasonal Timeline behavior, Where Next, Place Detail Sheet,
+Profile Drawer, Manage Atlas redesign, `.yuatlas` import/export, LAN mode.

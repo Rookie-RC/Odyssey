@@ -55,6 +55,9 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/media", s.handleGetMedia)
 
+	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
+
 	mux.HandleFunc("GET /api/geocode/search", s.handleGeocodeSearch)
 	mux.HandleFunc("GET /api/geocode/reverse", s.handleGeocodeReverse)
 	return mux
@@ -496,6 +499,30 @@ func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, media)
+}
+
+// --- Settings ---
+
+func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := s.store.LoadSettings()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
+func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
+	var settings domain.Settings
+	if err := decodeBody(r, &settings); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := s.store.SaveSettings(settings); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 // --- Geocoding ---

@@ -1,7 +1,7 @@
 // Thin HTTP client for the local Go runtime API. The base URL defaults to the
 // same origin (the Go runtime serves the static frontend), and can be overridden
 // in dev with NEXT_PUBLIC_API_BASE=http://127.0.0.1:4317.
-import type { Place, Profile, Visit, Wishlist, Media } from "./types";
+import type { Place, Profile, Visit, Wishlist, Media, Settings } from "./types";
 import type { GeocodingResult } from "./geocode";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
@@ -70,6 +70,10 @@ export const api = {
     request<{ deleted: string }>("/api/wishlist/" + id, { method: "DELETE" }),
 
   getMedia: () => request<Media[]>("/api/media"),
+
+  getSettings: () => request<Settings>("/api/settings"),
+  saveSettings: (s: Settings) =>
+    request<Settings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
 
   geocodeSearch: (q: string, limit = 8) =>
     request<GeocodingResult[]>(

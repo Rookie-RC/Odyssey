@@ -1,5 +1,5 @@
-import DevDashboard from "../components/DevDashboard";
+import HeroMap from "../components/HeroMap";
 
 export default function Home() {
-  return <DevDashboard />;
+  return <HeroMap />;
 }

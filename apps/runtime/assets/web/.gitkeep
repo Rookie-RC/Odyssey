@@ -1,2 +1,0 @@
-# Placeholder so the go:embed all:web directive in assets/assets.go
-# still compiles in a fresh clone (real build output is gitignored).
