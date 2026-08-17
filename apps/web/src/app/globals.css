@@ -2754,3 +2754,14 @@ html[data-theme="night"] .atlas-minimap__hint {
     animation: none;
   }
 }
+
+/* --- Import / Export (Phase 6) --- */
+.atlas-manage-transfer__ok {
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+}

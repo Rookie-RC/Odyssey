@@ -113,4 +113,25 @@ export const api = {
     request<GeocodingResult | null>(
       "/api/geocode/reverse?lat=" + lat + "&lng=" + lng
     ),
+
+  // --- portability (.atlas export / import / new) ---
+  exportAtlas: async (): Promise<Blob> => {
+    const res = await fetch(API_BASE + "/api/atlas/export", { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(res.status + " " + res.statusText + ": " + text);
+    }
+    return res.blob();
+  },
+  importAtlas: async (file: File): Promise<{ imported: boolean; backup: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(API_BASE + "/api/atlas/import", { method: "POST", body: form });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(res.status + " " + res.statusText + ": " + text);
+    }
+    return JSON.parse(text) as { imported: boolean; backup: string };
+  },
+  newAtlas: () => request<{ created: boolean; backup: string }>("/api/atlas/new", { method: "POST" }),
 };

@@ -35,6 +35,13 @@ export interface AtlasRepository {
   }): Promise<Media>;
   updateMedia(media: Media): Promise<Media>;
   deleteMedia(id: string): Promise<void>;
+
+  /** Downloads a portable .atlas package of the whole Atlas. */
+  exportAtlas(): Promise<Blob>;
+  /** Validates, backs up and replaces the current Atlas from a .atlas file. */
+  importAtlas(file: File): Promise<{ imported: boolean; backup: string }>;
+  /** Replaces the current Atlas with a blank one (backup created first). */
+  newAtlas(): Promise<{ created: boolean; backup: string }>;
 }
 
 export class HttpAtlasRepository implements AtlasRepository {
@@ -98,5 +105,14 @@ export class HttpAtlasRepository implements AtlasRepository {
   }
   async deleteMedia(id: string): Promise<void> {
     await api.deleteMedia(id);
+  }
+  exportAtlas(): Promise<Blob> {
+    return api.exportAtlas();
+  }
+  importAtlas(file: File): Promise<{ imported: boolean; backup: string }> {
+    return api.importAtlas(file);
+  }
+  newAtlas(): Promise<{ created: boolean; backup: string }> {
+    return api.newAtlas();
   }
 }

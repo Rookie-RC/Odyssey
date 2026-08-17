@@ -16,11 +16,12 @@ import ManageVisits from "./ManageVisits";
 import ManageWishlist from "./ManageWishlist";
 import ManageMedia from "./ManageMedia";
 import ManageSettings from "./ManageSettings";
+import ManageTransfer from "./ManageTransfer";
 import AddFlow, { type AddKind } from "./AddFlow";
 import EntityEditor from "./EntityEditor";
 import { Btn } from "./FormUI";
 
-export type ManageSection = "overview" | "places" | "visits" | "wishlist" | "media" | "settings";
+export type ManageSection = "overview" | "places" | "visits" | "wishlist" | "media" | "transfer" | "settings";
 
 export interface ManageContext {
   places: Place[];
@@ -53,6 +54,7 @@ const SECTIONS: { id: ManageSection; label: string }[] = [
   { id: "visits", label: "Visits" },
   { id: "wishlist", label: "Wishlist" },
   { id: "media", label: "Media" },
+  { id: "transfer", label: "Import / Export" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -178,6 +180,7 @@ export default function ManageAtlas({
           {section === "visits" ? <ManageVisits ctx={ctx} /> : null}
           {section === "wishlist" ? <ManageWishlist ctx={ctx} /> : null}
           {section === "media" ? <ManageMedia ctx={ctx} /> : null}
+          {section === "transfer" ? <ManageTransfer ctx={ctx} /> : null}
           {section === "settings" ? <ManageSettings ctx={ctx} /> : null}
         </main>
       </div>

@@ -9,13 +9,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 	"unicode/utf8"
 
+	"github.com/yuatlas/runtime/internal/atlas"
 	"github.com/yuatlas/runtime/internal/domain"
 	"github.com/yuatlas/runtime/internal/geocode"
 	"github.com/yuatlas/runtime/internal/storage"
@@ -27,6 +31,10 @@ type Server struct {
 	dataDir  string
 	provider string
 	port     int
+
+	// atlasMu serializes export/import/new so destructive replacements never
+	// race each other (or with themselves).
+	atlasMu sync.Mutex
 }
 
 func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int) *Server {
@@ -66,6 +74,10 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/geocode/search", s.handleGeocodeSearch)
 	mux.HandleFunc("GET /api/geocode/reverse", s.handleGeocodeReverse)
+
+	mux.HandleFunc("POST /api/atlas/export", s.handleExportAtlas)
+	mux.HandleFunc("POST /api/atlas/import", s.handleImportAtlas)
+	mux.HandleFunc("POST /api/atlas/new", s.handleNewAtlas)
 	return mux
 }
 
@@ -887,8 +899,7 @@ func (s *Server) handleGeocodeReverse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (s *Server) placeExists(placeID string) bool {
-	places, err := s.store.LoadPlaces()
+func (s *Server) placeExists(placeID string) bool {	places, err := s.store.LoadPlaces()
 	if err != nil {
 		return false
 	}
@@ -904,4 +915,110 @@ func newID() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// --- Atlas portability (export / import / new) ---
+// The runtime owns packaging, validation, backup and replacement; the browser
+// only invokes these endpoints and presents progress/results (PRODUCT_SPEC
+// §30–33). A single mutex serializes these operations so a destructive
+// replacement never races another packaging operation.
+
+func (s *Server) handleExportAtlas(w http.ResponseWriter, r *http.Request) {
+	s.atlasMu.Lock()
+	defer s.atlasMu.Unlock()
+
+	name := "yu-atlas-" + time.Now().Format("20060102-150405") + ".atlas"
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	if err := atlas.Export(s.dataDir, w); err != nil {
+		// Headers are already committed when streaming; report the failure via
+		// the runtime log (the client sees a truncated download).
+		s.reportError("export failed", err)
+	}
+}
+
+func (s *Server) handleImportAtlas(w http.ResponseWriter, r *http.Request) {
+	s.atlasMu.Lock()
+	defer s.atlasMu.Unlock()
+
+	if err := r.ParseMultipartForm(512 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "upload too large or invalid multipart body")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file field is required")
+		return
+	}
+	defer file.Close()
+
+	// The package must be readable as a random-access archive (zip.NewReader),
+	// so spool it to a temp file instead of holding it in memory.
+	tmp, err := os.CreateTemp("", "atlas-import-*.atlas")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	size, err := io.Copy(tmp, file)
+	tmp.Close()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if size == 0 {
+		writeError(w, http.StatusBadRequest, "empty package")
+		return
+	}
+
+	rf, err := os.Open(tmpName)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rf.Close()
+
+	st, err := atlas.ValidateAndStage(s.dataDir, size, rf)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	backupRel, err := st.Replace()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	st.Cleanup()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"imported": true,
+		"backup":   backupRel,
+		"schemaVersion": st.Manifest.SchemaVersion,
+	})
+}
+
+func (s *Server) handleNewAtlas(w http.ResponseWriter, r *http.Request) {
+	s.atlasMu.Lock()
+	defer s.atlasMu.Unlock()
+
+	keepTheme := ""
+	if settings, err := s.store.LoadSettings(); err == nil {
+		keepTheme = settings.Theme
+	}
+	backupRel, err := atlas.NewAtlas(s.dataDir, keepTheme)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"created": true, "backup": backupRel})
+}
+
+// reportError logs a server-side failure (used where headers are already
+// committed while streaming).
+func (s *Server) reportError(op string, err error) {
+	if err != nil {
+		log.Printf("%s: %v", op, err)
+	}
 }
