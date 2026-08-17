@@ -8,7 +8,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -54,6 +57,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/wishlist/{id}", s.handleDeleteWishlist)
 
 	mux.HandleFunc("GET /api/media", s.handleGetMedia)
+	mux.HandleFunc("POST /api/media", s.handleUploadMedia)
+	mux.HandleFunc("PUT /api/media/{id}", s.handleUpdateMedia)
+	mux.HandleFunc("DELETE /api/media/{id}", s.handleDeleteMedia)
 
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", s.handlePutSettings)
@@ -199,6 +205,33 @@ func (s *Server) handleUpdatePlace(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeletePlace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	visits, err := s.store.LoadVisits()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	wishlist, err := s.store.LoadWishlist()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	visitRefs := 0
+	for _, v := range visits {
+		if v.PlaceID == id {
+			visitRefs++
+		}
+	}
+	wishlistRefs := 0
+	for _, w := range wishlist {
+		if w.PlaceID == id {
+			wishlistRefs++
+		}
+	}
+	if visitRefs > 0 || wishlistRefs > 0 {
+		writeError(w, http.StatusConflict,
+			"place is still referenced by "+strconv.Itoa(visitRefs)+" visit(s) and "+strconv.Itoa(wishlistRefs)+" wishlist item(s); remove those entries first")
+		return
+	}
 	places, err := s.store.LoadPlaces()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -499,6 +532,291 @@ func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, media)
+}
+
+// handleUploadMedia stores an uploaded image under atlas-data/media and appends
+// a Media record to media.json. The optional placeId chooses the storage folder
+// (organized by Place, PRODUCT_SPEC §10); without it a "misc" folder is used.
+func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(25 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "upload too large or invalid multipart body")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file field is required")
+		return
+	}
+	defer file.Close()
+
+	if !supportedImageType(header.Header.Get("Content-Type")) && !supportedImageExt(header.Filename) {
+		writeError(w, http.StatusBadRequest, "unsupported file type; expected an image (jpg, png, gif, webp, avif)")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 25<<20))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(data) == 0 {
+		writeError(w, http.StatusBadRequest, "empty file")
+		return
+	}
+
+	// Storage folder follows the Place when one is referenced.
+	folder := "misc"
+	if placeID := strings.TrimSpace(r.FormValue("placeId")); placeID != "" {
+		if places, err := s.store.LoadPlaces(); err == nil {
+			for _, p := range places {
+				if p.ID == placeID {
+					if slug := slugify(p.Name); slug != "" {
+						folder = slug
+					}
+					break
+				}
+			}
+		}
+	}
+	filename := sanitizeFilename(header.Filename)
+
+	// Avoid filename collisions (never silently overwrite an existing file).
+	if s.mediaFileExists(folder, filename) {
+		filename = addRandomSuffix(filename)
+	}
+	relPath, err := s.store.SaveMediaFile(folder, filename, data)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	m := domain.Media{
+		ID:        newID(),
+		Type:      "image",
+		Source:    domain.MediaSourceLocal,
+		Path:      relPath,
+		Caption:   strings.TrimSpace(r.FormValue("caption")),
+		SourceURL: strings.TrimSpace(r.FormValue("sourceUrl")),
+		Author:    strings.TrimSpace(r.FormValue("author")),
+		License:   strings.TrimSpace(r.FormValue("license")),
+	}
+	if m.SourceURL != "" {
+		m.Source = domain.MediaSourceWeb
+	}
+	media, err := s.store.LoadMedia()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	media = append(media, m)
+	if err := s.store.SaveMedia(media); err != nil {
+		_ = s.store.RemoveMediaFile(relPath)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, m)
+}
+
+func (s *Server) handleUpdateMedia(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var m domain.Media
+	if err := decodeBody(r, &m); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if m.ID != "" && m.ID != id {
+		writeError(w, http.StatusBadRequest, "id mismatch")
+		return
+	}
+	m.ID = id
+	if m.Type == "" {
+		m.Type = "image"
+	}
+	if m.Type != "image" {
+		writeError(w, http.StatusBadRequest, "type must be image")
+		return
+	}
+	media, err := s.store.LoadMedia()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	found := false
+	for i := range media {
+		if media[i].ID == id {
+			media[i] = m
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "media not found")
+		return
+	}
+	if err := s.store.SaveMedia(media); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, m)
+}
+
+// handleDeleteMedia removes a Media record and its file. Records still
+// referenced by a Visit or Wishlist are rejected so shared media is never
+// silently removed (the reference lists are the authoritative association).
+func (s *Server) handleDeleteMedia(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	media, err := s.store.LoadMedia()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var target *domain.Media
+	for i := range media {
+		if media[i].ID == id {
+			target = &media[i]
+			break
+		}
+	}
+	if target == nil {
+		writeError(w, http.StatusNotFound, "media not found")
+		return
+	}
+	visits, err := s.store.LoadVisits()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	wishlist, err := s.store.LoadWishlist()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	refs := 0
+	for _, v := range visits {
+		if containsString(v.MediaIDs, id) {
+			refs++
+		}
+	}
+	for _, w := range wishlist {
+		if containsString(w.MediaIDs, id) {
+			refs++
+		}
+	}
+	if refs > 0 {
+		writeError(w, http.StatusConflict, "media is still referenced by "+strconv.Itoa(refs)+" visit(s)/wishlist item(s); remove the references first")
+		return
+	}
+	for i := range media {
+		if media[i].ID == id {
+			media = append(media[:i], media[i+1:]...)
+			break
+		}
+	}
+	if err := s.store.SaveMedia(media); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_ = s.store.RemoveMediaFile(strings.TrimPrefix(target.Path, "/media/"))
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": id})
+}
+
+func (s *Server) mediaAbsPath(relPath string) string {
+	dir, err := s.store.MediaDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(relPath, "/media/")))
+}
+
+// mediaFileExists reports whether a media file already exists under
+// media/<folder>/<filename>.
+func (s *Server) mediaFileExists(folder, filename string) bool {
+	path := s.mediaAbsPath("/media/" + folder + "/" + filename)
+	if path == "" {
+		return false
+	}
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func containsString(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+func supportedImageType(mime string) bool {
+	switch strings.ToLower(strings.TrimSpace(strings.SplitN(mime, ";", 2)[0])) {
+	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif":
+		return true
+	}
+	return false
+}
+
+func supportedImageExt(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif":
+		return true
+	}
+	return false
+}
+
+func sanitizeFilename(name string) string {
+	name = filepath.Base(name)
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), ".-")
+	if out == "" {
+		out = "image"
+	}
+	if len(out) > 80 {
+		out = out[len(out)-80:]
+	}
+	return out
+}
+
+func addRandomSuffix(name string) string {
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	return base + "-" + newID()[:6] + ext
+}
+
+func slugify(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-' || r == '/' || r == '\\' || r == '_':
+			b.WriteRune('-')
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return ""
+	}
+	// collapse repeated separators
+	prev := rune(0)
+	var c strings.Builder
+	for _, r := range out {
+		if r == '-' && prev == '-' {
+			continue
+		}
+		c.WriteRune(r)
+		prev = r
+	}
+	return c.String()
 }
 
 // --- Settings ---

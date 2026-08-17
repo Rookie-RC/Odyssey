@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Media, Place, Profile, Season, Visit, Wishlist } from "../lib/types";
 import {
   getTimelineItems,
@@ -32,17 +32,32 @@ interface JourneyTimelineProps {
 const PX_PER_YEAR = 200;
 const MIN_NODE_GAP = 160;
 const SIDE_PADDING = 160;
-const LINE_Y = 64;
-const CARD_TOP = LINE_Y + 22;
-const TRACK_HEIGHT = 340;
+// The line sits between two card lanes (season polarity, VISUAL_SPEC §8 + the
+// alternating-lane refinement): cards alternate above/below the line by season,
+// so the track reserves vertical space for both lanes.
+const LINE_Y = 220;
+const CARD_GAP = 26;
+const TRACK_HEIGHT = 480;
 
 // Fade-out duration. The hide is triggered immediately (no linger); this is
 // only how long the subtle opacity fade takes to complete.
 const PREVIEW_FADE_MS = 140;
 
+// Deterministic season → lane polarity. Adjacent seasons alternate sides;
+// same-season cards always share a side. The initial polarity (spring below)
+// is arbitrary but fixed, and applies to past and future alike.
+type Lane = "above" | "below";
+const SEASON_LANE: Record<Season, Lane> = {
+  spring: "below",
+  summer: "above",
+  autumn: "below",
+  winter: "above",
+};
+
 interface PositionedNode {
   node: TimelineNode;
   x: number;
+  lane: Lane;
 }
 
 interface TimelineLayout {
@@ -71,6 +86,7 @@ function computeLayout(
   const positions: PositionedNode[] = nodes.map((node) => ({
     node,
     x: SIDE_PADDING + (node.time - minTime) * PX_PER_YEAR,
+    lane: "below",
   }));
 
   // Enforce a minimum gap between neighbouring nodes (label collision avoidance).
@@ -78,6 +94,14 @@ function computeLayout(
   for (const p of positions) {
     p.x = Math.max(p.x, prevX + MIN_NODE_GAP);
     prevX = p.x;
+  }
+
+  // Assign lanes by season; nodes without a season inherit the previous node's
+  // lane so the alternation stays deterministic.
+  let prevLane: Lane = "below";
+  for (const p of positions) {
+    p.lane = p.node.season ? SEASON_LANE[p.node.season] : prevLane;
+    prevLane = p.lane;
   }
 
   const firstX = positions[0].x;
@@ -108,9 +132,22 @@ function computeLayout(
   };
 }
 
+interface PreviewRect {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 interface PreviewAnchor {
   cx: number;
   cy: number;
+  /** Lane of the hovered node's primary card; the preview prefers the opposite
+   * lane so it never covers the card. */
+  lane: Lane;
+  /** Real on-screen bounds of the source primary card, used to guarantee the
+   * preview never covers it even in fallback placements. */
+  cardRect: PreviewRect | null;
 }
 
 export default function JourneyTimeline({
@@ -188,10 +225,21 @@ export default function JourneyTimeline({
     (id: string, el: HTMLElement) => {
       keepPreview();
       const r = el.getBoundingClientRect();
-      setPreviewAnchor({ cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+      const lane =
+        layout?.positions.find((p) => p.node.id === id)?.lane ?? "below";
+      const card = el.querySelector(".atlas-tl-card");
+      const cardRect = card ? card.getBoundingClientRect() : null;
+      setPreviewAnchor({
+        cx: r.left + r.width / 2,
+        cy: r.top + r.height / 2,
+        lane,
+        cardRect: cardRect
+          ? { left: cardRect.left, right: cardRect.right, top: cardRect.top, bottom: cardRect.bottom }
+          : null,
+      });
       setPreviewId(id);
     },
-    [keepPreview]
+    [keepPreview, layout]
   );
 
   const hidePreview = useCallback(() => {
@@ -222,7 +270,8 @@ export default function JourneyTimeline({
   }, [previewId, closeNow]);
 
   // Close the preview when the page scrolls, so it never lingers detached from
-  // a node that scrolled away (hover state doesn't update on scroll).
+  // a node that scrolled away (hover state doesn't update on scroll) and never
+  // drifts into the collapsed map strip.
   useEffect(() => {
     if (!previewId) return;
     const onScroll = () => closeNow();
@@ -377,6 +426,11 @@ export default function JourneyTimeline({
     [nodes, previewId]
   );
 
+  const nowLane = useMemo(
+    () => layout?.positions.find((p) => p.node.kind === "now")?.lane ?? "below",
+    [layout]
+  );
+
   if (nodes.length === 0) {
     return (
       <section className="atlas-journey">
@@ -461,20 +515,24 @@ export default function JourneyTimeline({
 
               <span
                 className="atlas-timeline__axis atlas-timeline__axis--past"
-                style={{ left: layout.firstX, top: LINE_Y - 34 }}
+                style={{ left: 8, top: LINE_Y + 6 }}
               >
                 Past
               </span>
               <span
                 className="atlas-timeline__axis atlas-timeline__axis--future"
-                style={{ left: layout.lastX + 32, top: LINE_Y - 34 }}
+                style={{ left: layout.trackWidth - SIDE_PADDING, top: LINE_Y + 6 }}
               >
                 Future
               </span>
 
-              {/* NOW anchor tick on the line itself. */}
+              {/* NOW anchor tick on the line itself; its label flips below the
+                  line when the NOW card occupies the lane above. */}
               <span
-                className="atlas-timeline__now-tick"
+                className={
+                  "atlas-timeline__now-tick" +
+                  (nowLane === "above" ? " atlas-timeline__now-tick--label-below" : "")
+                }
                 style={{ left: layout.nowX, top: LINE_Y }}
               >
                 <span className="atlas-timeline__now-tick-label">Now</span>
@@ -532,7 +590,7 @@ function NodeColumn({
   onShow,
   onHide,
 }: NodeColumnProps) {
-  const { node, x } = positioned;
+  const { node, x, lane } = positioned;
   const seasonColor = node.season ? theme.seasons[node.season] : null;
   const primaryMedia = getPrimaryMedia(node.mediaIds, media);
   const depthClass = depthClassFor(node);
@@ -541,11 +599,15 @@ function NodeColumn({
 
   // The whole column (marker + card) is one unit: hovering any part shows the
   // preview (anchored to the marker), and the card stays clickable for touch.
+  // The button is a zero-height anchor on the line; the marker sits centred on
+  // the line and the card extends into its season's lane (above or below),
+  // connected by a subtle stem.
   return (
     <button
       type="button"
       className={
         "atlas-tl-node" +
+        " atlas-tl-node--lane-" + lane +
         (active ? " atlas-tl-node--active" : "") +
         (seasonEmphasis ? " atlas-tl-node--season-emphasis" : "")
       }
@@ -557,6 +619,7 @@ function NodeColumn({
       onBlur={onHide}
       onClick={(e) => onShow(e.currentTarget)}
     >
+      <span className="atlas-tl-node__stem" aria-hidden="true" />
       <span
         className={"atlas-tl-node__marker atlas-tl-node__marker--" + node.kind + " " + depthClass}
       >
@@ -566,7 +629,7 @@ function NodeColumn({
         />
       </span>
 
-      <span className="atlas-tl-card" style={{ top: CARD_TOP - LINE_Y }}>
+      <span className="atlas-tl-card">
         {primaryMedia ? (
           <img
             className="atlas-tl-card__img"
@@ -601,6 +664,113 @@ function depthClassFor(node: TimelineNode): string {
   return "atlas-tl-node__marker--faint";
 }
 
+// --- Adaptive preview placement ---
+// The preview is anchored to its node and, once measured, placed to stay inside
+// the usable viewport: never under the collapsed map strip, never off-screen,
+// and never covering its own source primary card.
+//
+// Priority (source-card-aware):
+//   1. the card's lane decides the preferred side — the preview occupies the
+//      OPPOSITE lane whenever possible;
+//   2. horizontal overflow is solved by shifting left/right on the same side
+//      (the caret then points back at the node);
+//   3. only when the preferred side is genuinely unavailable (map strip,
+//      viewport or Timeline container boundary) do we fall back — to the other
+//      side, but horizontally shifted until it clears the source card, so the
+//      card stays visible and the preview is never placed on top of it.
+
+const PREVIEW_GAP = 14;
+const PREVIEW_EDGE = 12;
+const CARD_CLEAR_MARGIN = 12;
+
+function computePreviewPlacement(anchor: PreviewAnchor, cardW: number, cardH: number) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Usable top: below the collapsed map strip (when it covers the viewport top).
+  const strip = document.querySelector(".atlas-map-clip");
+  const stripBottom = strip ? strip.getBoundingClientRect().bottom : 0;
+  const topBoundary = Math.min(stripBottom + 8, vh - PREVIEW_EDGE);
+
+  // Usable horizontal range: the viewport intersected with the Timeline
+  // container (so the preview never escapes the section it belongs to).
+  let hMin = PREVIEW_EDGE;
+  let hMax = vw - PREVIEW_EDGE;
+  const timeline = document.querySelector(".atlas-timeline");
+  if (timeline) {
+    const tr = timeline.getBoundingClientRect();
+    hMin = Math.max(hMin, tr.left + PREVIEW_EDGE);
+    hMax = Math.min(hMax, tr.right - PREVIEW_EDGE);
+  }
+
+  const topFor = (side: Lane) =>
+    side === "above" ? anchor.cy - PREVIEW_GAP - cardH : anchor.cy + PREVIEW_GAP;
+  const fits = (side: Lane) => {
+    const top = topFor(side);
+    return top >= topBoundary && top + cardH <= vh - PREVIEW_EDGE;
+  };
+  const flip = (side: Lane): Lane => (side === "above" ? "below" : "above");
+
+  // Preferred: opposite the source card's lane.
+  const preferred: Lane = anchor.lane === "above" ? "below" : "above";
+  let side: Lane;
+  let center = anchor.cx; // default: horizontally centred on the node
+
+  if (fits(preferred)) {
+    side = preferred;
+  } else if (fits(flip(preferred))) {
+    // Preferred side genuinely blocked (strip / viewport / container): fall back
+    // to the card's own lane, but shift horizontally so the preview clears the
+    // source card — it must never sit on top of it.
+    side = flip(preferred);
+    center = avoidSourceCard(anchor, cardW, hMin, hMax);
+  } else {
+    // Extreme (tiny viewport): take the side with more room, still clearing the
+    // source card when that side happens to be the card's lane.
+    const aboveTop = topFor("above");
+    const belowTop = topFor("below");
+    const aboveRoom = aboveTop >= topBoundary ? aboveTop - topBoundary : -Infinity;
+    const belowRoom = belowTop + cardH <= vh - PREVIEW_EDGE ? vh - PREVIEW_EDGE - belowTop : -Infinity;
+    side = aboveRoom >= belowRoom ? "above" : "below";
+    if (side === flip(preferred)) {
+      center = avoidSourceCard(anchor, cardW, hMin, hMax);
+    }
+  }
+
+  const left = clamp(center, hMin + cardW / 2, hMax - cardW / 2);
+  const top = topFor(side);
+  // Caret offset keeps the connector pointing at the node when shifted sideways.
+  const caret = clamp(anchor.cx - left, -(cardW / 2 - 16), cardW / 2 - 16);
+  return { left, top, side, caret };
+}
+
+// Chooses a horizontal preview centre that keeps the preview entirely clear of
+// the source primary card, preferring the side nearest to the node and staying
+// inside the usable horizontal range.
+function avoidSourceCard(
+  anchor: PreviewAnchor,
+  cardW: number,
+  hMin: number,
+  hMax: number
+): number {
+  const half = cardW / 2;
+  const margin = CARD_CLEAR_MARGIN;
+  const leftEdge = anchor.cardRect ? anchor.cardRect.left : anchor.cx - 75;
+  const rightEdge = anchor.cardRect ? anchor.cardRect.right : anchor.cx + 75;
+  const leftCenter = leftEdge - half - margin; // preview entirely left of the card
+  const rightCenter = rightEdge + half + margin; // entirely right of the card
+  const minCenter = hMin + half;
+  const maxCenter = hMax - half;
+  const candidates = [leftCenter, rightCenter].sort(
+    (a, b) => Math.abs(a - anchor.cx) - Math.abs(b - anchor.cx)
+  );
+  for (const c of candidates) {
+    if (c >= minCenter && c <= maxCenter) return c;
+  }
+  // No side fully clears the card within range: clamp toward the edge with the
+  // most room (extreme narrow-viewport case).
+  return anchor.cx > (minCenter + maxCenter) / 2 ? maxCenter : minCenter;
+}
+
 function TimelinePreviewCard({
   node,
   media,
@@ -622,7 +792,34 @@ function TimelinePreviewCard({
 }) {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1280;
   const cardW = Math.min(280, vw - 24);
-  const left = clamp(anchor.cx, cardW / 2 + 12, vw - cardW / 2 - 12);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [cardH, setCardH] = useState(0);
+  const [bump, setBump] = useState(0); // forces re-placement on resize
+
+  // Measure the real card height before placing it (no flicker: the placement
+  // state is set synchronously in a layout effect, before paint).
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const measure = () => {
+      setCardH(el.offsetHeight);
+      setBump((b) => b + 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  const placement = useMemo(
+    () => computePreviewPlacement(anchor, cardW, cardH),
+    [anchor, cardW, cardH, bump] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   const primaryMedia = getPrimaryMedia(node.mediaIds, media);
   const seasonColor = node.season ? theme.seasons[node.season] : null;
   const stateLabel =
@@ -634,13 +831,19 @@ function TimelinePreviewCard({
 
   return (
     <div
-      className={"atlas-tl-preview" + (closing ? " atlas-tl-preview--closing" : "")}
+      ref={cardRef}
+      className={
+        "atlas-tl-preview" +
+        (closing ? " atlas-tl-preview--closing" : "") +
+        (placement.side === "below" ? " atlas-tl-preview--below" : "")
+      }
       style={{
-        left,
-        top: anchor.cy - 14,
+        left: placement.left,
+        top: placement.top,
         width: cardW,
-        transform: "translate(-50%, -100%)",
-      }}
+        transform: "translateX(-50%)",
+        "--tl-caret": placement.caret + "px",
+      } as React.CSSProperties}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >

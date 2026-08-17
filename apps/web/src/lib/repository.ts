@@ -1,7 +1,7 @@
 // Repository abstraction. The UI depends on AtlasRepository so the JSON-backed
 // implementation (HttpAtlasRepository -> local runtime) can later be swapped
 // for SupabaseRepository or RemoteApiRepository without UI changes.
-import type { Place, Profile, Visit, Wishlist, Media } from "./types";
+import type { Media, Place, Profile, Visit, Wishlist } from "./types";
 import { api } from "./api";
 
 export interface AtlasRepository {
@@ -13,14 +13,28 @@ export interface AtlasRepository {
 
   saveProfile(profile: Profile): Promise<void>;
 
-  createPlace(place: Place): Promise<void>;
-  updatePlace(place: Place): Promise<void>;
+  createPlace(place: Place): Promise<Place>;
+  updatePlace(place: Place): Promise<Place>;
+  deletePlace(id: string): Promise<void>;
 
-  createVisit(visit: Visit): Promise<void>;
-  updateVisit(visit: Visit): Promise<void>;
+  createVisit(visit: Visit): Promise<Visit>;
+  updateVisit(visit: Visit): Promise<Visit>;
+  deleteVisit(id: string): Promise<void>;
 
-  createWishlist(item: Wishlist): Promise<void>;
-  updateWishlist(item: Wishlist): Promise<void>;
+  createWishlist(item: Wishlist): Promise<Wishlist>;
+  updateWishlist(item: Wishlist): Promise<Wishlist>;
+  deleteWishlist(id: string): Promise<void>;
+
+  uploadMedia(opts: {
+    file: File;
+    placeId?: string;
+    caption?: string;
+    sourceUrl?: string;
+    author?: string;
+    license?: string;
+  }): Promise<Media>;
+  updateMedia(media: Media): Promise<Media>;
+  deleteMedia(id: string): Promise<void>;
 }
 
 export class HttpAtlasRepository implements AtlasRepository {
@@ -42,22 +56,47 @@ export class HttpAtlasRepository implements AtlasRepository {
   async saveProfile(profile: Profile): Promise<void> {
     await api.saveProfile(profile);
   }
-  async createPlace(place: Place): Promise<void> {
-    await api.createPlace(place);
+  createPlace(place: Place): Promise<Place> {
+    return api.createPlace(place);
   }
-  async updatePlace(place: Place): Promise<void> {
-    await api.updatePlace(place);
+  updatePlace(place: Place): Promise<Place> {
+    return api.updatePlace(place);
   }
-  async createVisit(visit: Visit): Promise<void> {
-    await api.createVisit(visit);
+  async deletePlace(id: string): Promise<void> {
+    await api.deletePlace(id);
   }
-  async updateVisit(visit: Visit): Promise<void> {
-    await api.updateVisit(visit);
+  createVisit(visit: Visit): Promise<Visit> {
+    return api.createVisit(visit);
   }
-  async createWishlist(item: Wishlist): Promise<void> {
-    await api.createWishlist(item);
+  updateVisit(visit: Visit): Promise<Visit> {
+    return api.updateVisit(visit);
   }
-  async updateWishlist(item: Wishlist): Promise<void> {
-    await api.updateWishlist(item);
+  async deleteVisit(id: string): Promise<void> {
+    await api.deleteVisit(id);
+  }
+  createWishlist(item: Wishlist): Promise<Wishlist> {
+    return api.createWishlist(item);
+  }
+  updateWishlist(item: Wishlist): Promise<Wishlist> {
+    return api.updateWishlist(item);
+  }
+  async deleteWishlist(id: string): Promise<void> {
+    await api.deleteWishlist(id);
+  }
+  uploadMedia(opts: {
+    file: File;
+    placeId?: string;
+    caption?: string;
+    sourceUrl?: string;
+    author?: string;
+    license?: string;
+  }): Promise<Media> {
+    return api.uploadMedia(opts);
+  }
+  updateMedia(media: Media): Promise<Media> {
+    return api.updateMedia(media);
+  }
+  async deleteMedia(id: string): Promise<void> {
+    await api.deleteMedia(id);
   }
 }

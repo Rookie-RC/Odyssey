@@ -43,6 +43,9 @@ interface HeroMapProps {
   /** True while an overlay (place detail / profile) is open or closing. */
   overlayOpen: boolean;
   onOpenPlace?: (placeId: string) => void;
+  /** Optional default map position from Settings (PRODUCT_SPEC §34). */
+  initialCenter?: [number, number] | null;
+  initialZoom?: number | null;
 }
 
 function webglAvailable(): boolean {
@@ -63,6 +66,8 @@ export default function HeroMap({
   media,
   overlayOpen,
   onOpenPlace,
+  initialCenter,
+  initialZoom,
 }: HeroMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -296,6 +301,18 @@ export default function HeroMap({
     }
     createMap();
   }, [theme.map.styleUrl, createMap]);
+
+  // --- optional default map position (Settings) ---
+  // The map is created once on mount (possibly before Settings arrive), so the
+  // default position is applied with a one-shot jump the first time it is known.
+  const appliedInitialRef = useRef(false);
+  useEffect(() => {
+    if (appliedInitialRef.current || !initialCenter) return;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    appliedInitialRef.current = true;
+    map.jumpTo({ center: initialCenter, zoom: initialZoom ?? EUROPE_ZOOM });
+  }, [initialCenter, initialZoom, mapReady]);
 
   return (
     <div className="atlas-hero">

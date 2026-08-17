@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
+import { api, type RuntimeInfo } from "../lib/api";
 import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
 import HeroMap, { type CountryCollection } from "./HeroMap";
 import JourneyTimeline from "./JourneyTimeline";
 import WhereNext from "./WhereNext";
 import PlaceDetailSheet from "./PlaceDetailSheet";
 import ProfileDrawer from "./ProfileDrawer";
+import ManageAtlas from "./manage/ManageAtlas";
 import { applyTheme, themes } from "../themes";
 import type { ThemeId } from "../themes";
 
@@ -40,6 +41,8 @@ export default function AtlasApp() {
   const [error, setError] = useState("");
   const [themeId, setThemeId] = useState<ThemeId>("light");
   const [writable, setWritable] = useState(false);
+  const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
+  const [view, setView] = useState<"atlas" | "manage">("atlas");
 
   // Where Next season + global overlay (single overlay state). Initial state
   // matches the server render (no hydration mismatch); the URL is applied once
@@ -50,7 +53,30 @@ export default function AtlasApp() {
 
   const theme = themes[themeId];
 
-  // --- data load ---
+  // --- data load / reload (reload keeps the main Atlas in sync with Manage
+  // Atlas edits without a page refresh) ---
+  const loadData = useCallback(async () => {
+    try {
+      const [p, v, w, pr, m, s] = await Promise.all([
+        api.getPlaces(),
+        api.getVisits(),
+        api.getWishlist(),
+        api.getProfile(),
+        api.getMedia(),
+        api.getSettings(),
+      ]);
+      setPlaces(p);
+      setVisits(v);
+      setWishlist(w);
+      setProfile(pr);
+      setMedia(m);
+      setSettings(s);
+      if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -82,8 +108,11 @@ export default function AtlasApp() {
         // country polygons are an optional enhancement
       }
       try {
-        const runtime = await api.getRuntime();
-        if (alive) setWritable(runtime.writable);
+        const rt = await api.getRuntime();
+        if (alive) {
+          setWritable(rt.writable);
+          setRuntime(rt);
+        }
       } catch {
         // writable defaults to false (no Manage Atlas entry)
       }
@@ -163,14 +192,14 @@ export default function AtlasApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [overlay, closeOverlay]);
 
-  // Lock page scroll while an overlay is open.
+  // Lock page scroll while an overlay or Manage Atlas is open.
   useEffect(() => {
-    const locked = overlay != null || closingOverlay;
+    const locked = overlay != null || closingOverlay || view === "manage";
     document.body.style.overflow = locked ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [overlay, closingOverlay]);
+  }, [overlay, closingOverlay, view]);
 
   // --- URL state (PRODUCT_SPEC §36): /?place=… /?season=… /?profile=true ---
   // Applied after hydration (never on the server render) so the initial client
@@ -213,6 +242,10 @@ export default function AtlasApp() {
   const placeOverlayExists =
     overlay?.type !== "place" || places.some((p) => p.id === overlay.id);
 
+  const defaultMapPosition = settings?.defaultMapPosition
+    ? ([settings.defaultMapPosition.lng, settings.defaultMapPosition.lat] as [number, number])
+    : null;
+
   return (
     <>
       <div className="atlas-map-sticky">
@@ -226,6 +259,7 @@ export default function AtlasApp() {
             media={media}
             overlayOpen={overlay != null || closingOverlay}
             onOpenPlace={openPlace}
+            initialCenter={defaultMapPosition}
           />
         </div>
       </div>
@@ -292,6 +326,27 @@ export default function AtlasApp() {
           writable={writable}
           closing={closingOverlay}
           onClose={closeOverlay}
+          onManage={() => {
+            closeOverlay();
+            setView("manage");
+          }}
+          onProfileSaved={loadData}
+        />
+      ) : null}
+
+      {view === "manage" ? (
+        <ManageAtlas
+          places={places}
+          visits={visits}
+          wishlist={wishlist}
+          media={media}
+          profile={profile}
+          settings={settings}
+          theme={theme}
+          runtime={runtime}
+          onReload={loadData}
+          onExit={() => setView("atlas")}
+          onToggleTheme={toggleTheme}
         />
       ) : null}
     </>

@@ -70,6 +70,36 @@ export const api = {
     request<{ deleted: string }>("/api/wishlist/" + id, { method: "DELETE" }),
 
   getMedia: () => request<Media[]>("/api/media"),
+  // uploadMedia sends an image to the local runtime; the returned Media record
+  // is already persisted in media.json.
+  uploadMedia: (opts: {
+    file: File;
+    placeId?: string;
+    caption?: string;
+    sourceUrl?: string;
+    author?: string;
+    license?: string;
+  }) => {
+    const form = new FormData();
+    form.append("file", opts.file);
+    if (opts.placeId) form.append("placeId", opts.placeId);
+    if (opts.caption) form.append("caption", opts.caption);
+    if (opts.sourceUrl) form.append("sourceUrl", opts.sourceUrl);
+    if (opts.author) form.append("author", opts.author);
+    if (opts.license) form.append("license", opts.license);
+    return fetch(API_BASE + "/api/media", { method: "POST", body: form }).then((res) => {
+      if (!res.ok) {
+        return res.text().then((t) => {
+          throw new Error(res.status + " " + res.statusText + ": " + t);
+        });
+      }
+      return res.json() as Promise<Media>;
+    });
+  },
+  updateMedia: (m: Media) =>
+    request<Media>("/api/media/" + m.id, { method: "PUT", body: JSON.stringify(m) }),
+  deleteMedia: (id: string) =>
+    request<{ deleted: string }>("/api/media/" + id, { method: "DELETE" }),
 
   getSettings: () => request<Settings>("/api/settings"),
   saveSettings: (s: Settings) =>

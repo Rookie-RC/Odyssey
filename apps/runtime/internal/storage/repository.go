@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/yuatlas/runtime/internal/domain"
@@ -169,4 +170,60 @@ func (r *Repository) SaveMedia(media []domain.Media) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.writeJSON(filepath.Join(r.dataDir(), "media.json"), media)
+}
+
+// MediaDir returns the <dataDir>/media directory, creating it if needed.
+// Media files live outside the JSON collections so they are served directly
+// and survive JSON rewrites (PRODUCT_SPEC §10 storage layout).
+func (r *Repository) MediaDir() (string, error) {
+	dir := filepath.Join(r.root, "media")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// SaveMediaFile stores a media blob under media/<folder>/<filename> and returns
+// the URL path used by Media records ("/media/<folder>/<filename>"). The folder
+// and filename must already be sanitized by the caller.
+func (r *Repository) SaveMediaFile(folder, filename string, data []byte) (string, error) {
+	dir, err := r.MediaDir()
+	if err != nil {
+		return "", err
+	}
+	folder = filepath.Clean(folder)
+	if folder == "." || folder == "" {
+		folder = "misc"
+	}
+	sub := filepath.Join(dir, folder)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		return "", err
+	}
+	rel := filepath.Join(folder, filename)
+	if err := os.WriteFile(filepath.Join(dir, rel), data, 0o644); err != nil {
+		return "", err
+	}
+	return "/media/" + filepath.ToSlash(rel), nil
+}
+
+// RemoveMediaFile deletes a stored media file. The path must be a relative
+// media path ("folder/file"); missing files are treated as success so cleanup
+// is idempotent.
+func (r *Repository) RemoveMediaFile(relPath string) error {
+	if relPath == "" {
+		return nil
+	}
+	dir, err := r.MediaDir()
+	if err != nil {
+		return err
+	}
+	clean := filepath.Clean(filepath.FromSlash(relPath))
+	if clean == "." || filepath.IsAbs(clean) || strings.Contains(clean, "..") {
+		return nil // defensive: never remove outside the media root
+	}
+	err = os.Remove(filepath.Join(dir, clean))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
