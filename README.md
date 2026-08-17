@@ -5,7 +5,9 @@ travel inspiration**. Phase 1 built the working foundation (Next.js + TypeScript
 frontend, Go local runtime, JSON-backed storage, repository abstraction, local
 API, Photon geocoding). Phase 2 adds the fullscreen MapLibre Hero Map with
 data-driven markers, a distinct current-location marker, visited-country
-polygons, hover/focus previews, and Light/Night theme foundations.
+polygons, hover/focus previews, and Light/Night theme foundations. Phase 3 adds
+the scroll-driven Hero Map → Journey transition and the horizontal, draggable,
+season-coloured Journey Timeline derived from domain data.
 
 > Authoritative specs: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) and
 > [docs/design/VISUAL_SPEC.md](docs/design/VISUAL_SPEC.md).
@@ -158,7 +160,33 @@ The default view is a fullscreen MapLibre GL map framed on Europe.
   Light (Carto Positron) and Night (Carto Dark Matter) base maps and a toggle
   persisted through `settings.json`.
 
-## Phase 1–2 scope
+## Journey Timeline (Phase 3)
+
+Scrolling past the hero map collapses it into a compact contextual strip
+(140px) that stays pinned to the top, and reveals the horizontal Journey
+Timeline. Scrolling back up restores the fullscreen map.
+
+- **Timeline data is derived, never hand-maintained** (`src/lib/timeline.ts`):
+  past nodes come from `visits.json`, the NOW anchor from
+  `profile.currentBase.placeId`, and future nodes only from Wishlist entries
+  with a `targetTime` (year and/or season).
+- **Approximate Wishlist timing**: `year + season` places at that season;
+  `year` only places mid-year; `season` only ("Summer, year unknown") places at
+  the next occurrence of that season after NOW. No target time → not on the
+  Timeline.
+- **NOW positioning**: the Timeline initially pans so NOW sits at the viewport
+  centre, with a "Now" tick on the line; a "future runway" keeps the open-ended
+  future readable.
+- **Season on the line**: the line is a gradient whose segments take each
+  node's season colour (spring green / summer gold / autumn amber / winter
+  blue), gently segmented at node boundaries — not large season bars.
+- **Node hierarchy**: past = filled (size by visit depth), current = accent
+  ring, future = outline (season-tinted). Hover focuses, click expands a
+  lightweight preview (no full Detail Sheet yet).
+- **Navigation**: mouse drag, trackpad, horizontal wheel, touch swipe, arrow
+  keys; `prefers-reduced-motion` is respected.
+
+## Phase 1–3 scope
 
 **Phase 1 (foundation):** repository structure, domain types, sample JSON data,
 repository abstraction, Go runtime, local API, geocoding-provider abstraction,
@@ -170,6 +198,11 @@ visited-location markers, a visually distinct current-location marker, subtle
 visited-country polygon/outline layer derived from `countryCode`, hover/focus
 preview cards, Light/Night theme tokens + map styles, theme toggle.
 
-Explicitly **not** implemented yet (Phase 3+): scroll-driven map collapse,
-Journey Timeline, seasonal Timeline behavior, Where Next, Place Detail Sheet,
-Profile Drawer, Manage Atlas redesign, `.yuatlas` import/export, LAN mode.
+**Phase 3 (journey):** scroll-driven Hero Map collapse into a contextual strip,
+horizontal draggable Journey Timeline, derived past/current/future nodes,
+season-coloured line, NOW-centred initial position, Light/Night support,
+lightweight preview/focus interaction.
+
+Explicitly **not** implemented yet (Phase 4+): Where Next, Place Detail Sheet,
+Profile Drawer, Manage Atlas redesign, online place-search UI, media upload,
+`.yuatlas` import/export, LAN mode.

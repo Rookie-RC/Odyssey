@@ -6,6 +6,7 @@
 //   - Wishlist-only places are excluded from the default Hero Map
 //   - countries are derived from visited Place.countryCode and are metadata only
 import type { Place, Profile, Visit, VisitType } from "./types";
+import { VISIT_RANK } from "./timeline";
 
 export interface MapMarker {
   place: Place;
@@ -15,14 +16,6 @@ export interface MapMarker {
   withFriends: boolean;
   rank: number; // higher = stronger visual weight
 }
-
-const VISIT_RANK: Record<VisitType, number> = {
-  lived: 5,
-  trip: 4,
-  day_trip: 3,
-  stopover: 2,
-  transit: 1,
-};
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",

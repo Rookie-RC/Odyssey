@@ -1,5 +1,5 @@
-import HeroMap from "../components/HeroMap";
+import AtlasApp from "../components/AtlasApp";
 
 export default function Home() {
-  return <HeroMap />;
+  return <AtlasApp />;
 }

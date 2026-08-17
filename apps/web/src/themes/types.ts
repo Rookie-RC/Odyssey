@@ -1,5 +1,12 @@
 export type ThemeId = "light" | "night";
 
+export interface SeasonColors {
+  spring: string;
+  summer: string;
+  autumn: string;
+  winter: string;
+}
+
 export interface AtlasTheme {
   id: ThemeId;
   label: string;
@@ -26,4 +33,7 @@ export interface AtlasTheme {
     fill: string;
     outline: string;
   };
+  // Seasonal palette for the Journey Timeline line. Semantic meaning is
+  // stable across themes; only luminance/saturation may shift (VISUAL_SPEC §20).
+  seasons: SeasonColors;
 }

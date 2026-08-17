@@ -30,6 +30,10 @@ export function applyTheme(theme: AtlasTheme): void {
     "--marker-visited-faint": theme.markers.visitedFaint,
     "--country-fill": theme.countries.fill,
     "--country-outline": theme.countries.outline,
+    "--season-spring": theme.seasons.spring,
+    "--season-summer": theme.seasons.summer,
+    "--season-autumn": theme.seasons.autumn,
+    "--season-winter": theme.seasons.winter,
   };
   for (const [key, value] of Object.entries(vars)) {
     root.style.setProperty(key, value);

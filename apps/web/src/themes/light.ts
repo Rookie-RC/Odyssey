@@ -35,4 +35,11 @@ export const lightTheme: AtlasTheme = {
     fill: "rgba(64, 90, 140, 0.05)",
     outline: "rgba(64, 90, 140, 0.0)",
   },
+  seasons: {
+    // VISUAL_SPEC §20 starting palette (light): soft, natural, low saturation.
+    spring: "#8FC89B",
+    summer: "#F4C95D",
+    autumn: "#E98A4A",
+    winter: "#80A9D4",
+  },
 };

@@ -3,23 +3,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { api } from "../lib/api";
-import type { Place, Profile, Settings, Visit } from "../lib/types";
+import type { Place, Profile, Visit } from "../lib/types";
 import { buildMapMarkers, visitedCountryCodes } from "../lib/map-data";
 import type { MapMarker } from "../lib/map-data";
+import { visitTypeLabel } from "../lib/timeline";
 import { loadThemeStyle } from "../lib/map-style";
-import { applyTheme, themes } from "../themes";
-import type { ThemeId } from "../themes";
+import type { AtlasTheme } from "../themes";
 
 const EUROPE_CENTER: [number, number] = [10, 50];
 const EUROPE_ZOOM = 4.2;
 
-interface CountryFeature {
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+export interface CountryFeature {
   type: "Feature";
   properties: { ISO_A2: string; NAME: string };
   geometry: unknown;
 }
-interface CountryCollection {
+export interface CountryCollection {
   type: "FeatureCollection";
   features: CountryFeature[];
 }
@@ -27,6 +30,14 @@ interface CountryCollection {
 interface PreviewState {
   marker: MapMarker;
   mode: "micro" | "expanded";
+}
+
+interface HeroMapProps {
+  places: Place[];
+  visits: Visit[];
+  profile: Profile | null;
+  countriesGeo: CountryCollection | null;
+  theme: AtlasTheme;
 }
 
 function webglAvailable(): boolean {
@@ -38,36 +49,23 @@ function webglAvailable(): boolean {
   }
 }
 
-function visitLabel(visitType: MapMarker["visitType"]): string {
-  const labels: Record<string, string> = {
-    lived: "Lived",
-    trip: "Trip",
-    day_trip: "Day trip",
-    stopover: "Stopover",
-    transit: "Transit",
-  };
-  return labels[visitType] ?? visitType;
-}
-
-export default function HeroMap() {
+export default function HeroMap({
+  places,
+  visits,
+  profile,
+  countriesGeo,
+  theme,
+}: HeroMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerObjsRef = useRef<maplibregl.Marker[]>([]);
   const previewRef = useRef<PreviewState | null>(null);
 
-  const [places, setPlaces] = useState<Place[]>([]);
-  const [visits, setVisits] = useState<Visit[]>([]);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [countriesGeo, setCountriesGeo] = useState<CountryCollection | null>(null);
-  const [error, setError] = useState("");
-  const [themeId, setThemeId] = useState<ThemeId>("light");
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState("");
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewPixel, setPreviewPixel] = useState<{ x: number; y: number } | null>(null);
 
-  const theme = themes[themeId];
   const markers = useMemo(() => buildMapMarkers(places, visits, profile), [places, visits, profile]);
   const countryCodes = useMemo(() => visitedCountryCodes(places, visits), [places, visits]);
 
@@ -187,6 +185,20 @@ export default function HeroMap() {
         style,
         center: EUROPE_CENTER,
         zoom: EUROPE_ZOOM,
+        // Wheel input over the hero map must scroll the page (it drives the
+        // collapse/expand transition), so MapLibre's built-in scroll zoom is
+        // disabled. Zoom is reserved for explicit intent: Ctrl+wheel (scoped
+        // handler below) or the +/- controls.
+        scrollZoom: false,
+        // The Atlas is a flat 2D map: rotation and pitch/tilt are disabled at
+        // the gesture level (right-drag rotate, Ctrl+drag rotate, drag-to-pitch,
+        // touch rotate/pitch) and clamped so the camera can never leave 2D.
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchZoomRotate: false,
+        touchPitch: false,
+        keyboard: false,
+        maxPitch: 0,
         attributionControl: { compact: true },
       });
     } catch (e) {
@@ -206,44 +218,6 @@ export default function HeroMap() {
     mapRef.current = map;
   }, []);
 
-  // --- data load ---
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const [p, v, pr, s] = await Promise.all([
-          api.getPlaces(),
-          api.getVisits(),
-          api.getProfile(),
-          api.getSettings(),
-        ]);
-        if (!alive) return;
-        setPlaces(p);
-        setVisits(v);
-        setProfile(pr);
-        setSettings(s);
-        if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
-      }
-      try {
-        const res = await fetch("/geodata/countries.geojson");
-        const geo = (await res.json()) as CountryCollection;
-        if (alive) setCountriesGeo(geo);
-      } catch {
-        // country polygons are an optional enhancement
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // --- apply theme tokens ---
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
   // --- init map (once) ---
   useEffect(() => {
     createMap();
@@ -254,6 +228,38 @@ export default function HeroMap() {
       }
     };
   }, [createMap]);
+
+  // --- scoped Ctrl+wheel zoom ---
+  // MapLibre's built-in scrollZoom is disabled so a normal wheel scrolls the
+  // page (driving the hero collapse/expand). Zoom becomes an explicit gesture:
+  // Ctrl+wheel over the map container. preventDefault() also stops the
+  // browser's own Ctrl+wheel page zoom. Without Ctrl we touch nothing, so
+  // normal page scrolling is never interfered with.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // plain wheel → page scroll (no interference)
+      const map = mapRef.current;
+      if (!map) return;
+      e.preventDefault(); // suppress browser page zoom + page scroll
+      let value = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 40 : e.deltaY;
+      if (value === 0) return;
+      // Scale like MapLibre's own scroll zoom (sigmoid), tuned so a wheel
+      // notch and small trackpad deltas both feel deliberate. Wheel up
+      // (deltaY < 0) zooms in, wheel down zooms out.
+      const rate = 1 / 200;
+      let scale = 2 / (1 + Math.exp(-Math.abs(value * rate)));
+      if (value > 0) scale = 1 / scale;
+      const zoom = clamp(map.getZoom() * scale, map.getMinZoom(), map.getMaxZoom());
+      // Keep the point under the cursor stationary while zooming.
+      const rect = map.getCanvasContainer().getBoundingClientRect();
+      const around = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+      map.easeTo({ zoom, duration: 0, around });
+    };
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, []);
 
   // --- re-render map content when data or readiness changes ---
   useEffect(() => {
@@ -270,31 +276,17 @@ export default function HeroMap() {
     createMap();
   }, [theme.map.styleUrl, createMap]);
 
-  const toggleTheme = useCallback(() => {
-    const next: ThemeId = themeId === "light" ? "night" : "light";
-    setThemeId(next);
-    const base = settings ?? {};
-    api.saveSettings({ ...base, theme: next }).catch(() => {});
-  }, [themeId, settings]);
-
   return (
     <div className="atlas-hero">
       <div ref={containerRef} className="atlas-hero__map" />
       <div className="atlas-hero__tint" aria-hidden="true" />
 
-      {error ? <div className="atlas-error">{error}</div> : null}
       {mapError ? (
         <div className="atlas-map-error">
           <p>Yu&rsquo;s Atlas needs WebGL to render the map.</p>
           <p className="atlas-map-error__detail">{mapError}</p>
         </div>
       ) : null}
-
-      <header className="atlas-wordmark">Yu&rsquo;s Atlas</header>
-
-      <button className="atlas-theme-toggle" onClick={toggleTheme} type="button">
-        {themeId === "light" ? "Night" : "Light"}
-      </button>
 
       {preview && previewPixel ? (
         <div
@@ -306,7 +298,7 @@ export default function HeroMap() {
           <div className="atlas-preview__meta">
             {preview.marker.place.country}
             {preview.marker.dateLabel ? " · " + preview.marker.dateLabel : ""}
-            {" · " + visitLabel(preview.marker.visitType)}
+            {" · " + visitTypeLabel(preview.marker.visitType)}
           </div>
           {preview.mode === "expanded" && preview.marker.withFriends ? (
             <div className="atlas-preview__friends">With friends</div>

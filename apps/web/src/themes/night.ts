@@ -36,4 +36,11 @@ export const nightTheme: AtlasTheme = {
     fill: "rgba(110, 140, 190, 0.07)",
     outline: "rgba(126, 152, 196, 0.0)",
   },
+  seasons: {
+    // VISUAL_SPEC §20 starting palette (night): slightly deeper, more luminous.
+    spring: "#70C58B",
+    summer: "#F1B83A",
+    autumn: "#F08A3C",
+    winter: "#6FA8E7",
+  },
 };
