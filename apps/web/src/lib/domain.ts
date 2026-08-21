@@ -183,23 +183,36 @@ function fmtDate(dateStr: string): { y: string; mo: string; d: string | null } |
   };
 }
 
-function squeeze(s: string): string {
-  return s.replace(/\s+/g, " ").trim();
-}
-
-/** "Nov 10 – 15, 2025", "May 2021", "Aug 2020", "" when unknown. */
+/** "Nov 10 – 15, 2025", "Jul – Aug 2025", "May 2021", "" when unknown.
+ *
+ * Both day-precision (`2025-11-10`) and month-precision (`2025-07`) inputs are
+ * supported — the Visit form uses month inputs, so month precision is the
+ * common case and must read as naturally as a full date. The year is written
+ * once when both ends share it, and a comma only ever follows a day number. */
 export function formatDateRange(start?: string, end?: string): string {
   const s = start ? fmtDate(start) : null;
   const e = end ? fmtDate(end) : null;
   if (!s) return "";
-  if (!e) return s.d ? `${s.mo} ${s.d}, ${s.y}` : `${s.mo} ${s.y}`;
-  if (s.y === e.y && s.mo === e.mo && s.d && e.d) {
-    return `${s.mo} ${s.d} – ${e.d}, ${s.y}`;
-  }
+
+  // "Nov 10, 2025" / "May 2021"
+  const single = (p: NonNullable<ReturnType<typeof fmtDate>>) =>
+    p.d ? `${p.mo} ${p.d}, ${p.y}` : `${p.mo} ${p.y}`;
+
+  if (!e) return single(s);
+
   if (s.y === e.y) {
-    return squeeze(`${s.mo} ${s.d ?? ""} – ${e.mo} ${e.d ?? ""}, ${s.y}`);
+    if (s.mo === e.mo) {
+      // Same month: "Nov 10 – 15, 2025" with days, else just "Jul 2025".
+      if (s.d && e.d) return s.d === e.d ? single(s) : `${s.mo} ${s.d} – ${e.d}, ${s.y}`;
+      return `${s.mo} ${s.y}`;
+    }
+    // Same year, different months: "Jul 4 – Aug 9, 2025" / "Jul – Aug 2025".
+    if (s.d && e.d) return `${s.mo} ${s.d} – ${e.mo} ${e.d}, ${s.y}`;
+    return `${s.mo} – ${e.mo} ${s.y}`;
   }
-  return squeeze(`${s.mo} ${s.d ?? ""} ${s.y} – ${e.mo} ${e.d ?? ""} ${e.y}`);
+
+  // Different years: each side carries its own year.
+  return `${single(s)} – ${single(e)}`;
 }
 
 /** "Summer 2027", "Summer", "2028", "Sometime". */
@@ -223,6 +236,15 @@ export function inspirationSourceLabel(i: Inspiration): string {
   if (i.platform) return i.platform;
   if (i.note) return i.note;
   return inspirationTypeLabel(i.type).toLowerCase();
+}
+
+/** Flag emoji from a 2-letter ISO country code (regional indicator symbols),
+ * or "" when the code isn't a plausible ISO alpha-2 (missing/manual Places). */
+export function flagEmoji(countryCode?: string): string {
+  const cc = (countryCode ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return "";
+  const A = 0x1f1e6;
+  return String.fromCodePoint(A + (cc.charCodeAt(0) - 65), A + (cc.charCodeAt(1) - 65));
 }
 
 export { seasonLabel, visitTypeLabel };

@@ -4,7 +4,7 @@
 // utility layer opened from the Profile drawer. It is deliberately more
 // conventional than the public Atlas but uses the same theme tokens, type and
 // Light/Night system. Sections: Overview, Places, Visits, Wishlist, Media,
-// Settings. Import/Export is out of V1 scope.
+// Import / Export, Settings.
 import { useMemo, useState } from "react";
 import type { Media, Place, Profile, Settings, Visit, Wishlist } from "../../lib/types";
 import { HttpAtlasRepository, type AtlasRepository } from "../../lib/repository";

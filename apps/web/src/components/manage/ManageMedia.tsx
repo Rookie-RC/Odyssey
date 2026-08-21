@@ -66,7 +66,14 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
       </div>
       {message ? <p className="atlas-locpicker__error">{message}</p> : null}
 
-      <div className="atlas-manage-media-upload">
+      <div
+        className="atlas-manage-media-upload"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (e.dataTransfer.files.length > 0) upload(e.dataTransfer.files);
+        }}
+      >
         <div className="atlas-form-grid">
           <label className="atlas-form-field">
             <span className="atlas-form-label">Store under place (optional)</span>
@@ -97,7 +104,7 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
             <Btn kind="primary" onClick={() => inputRef.current?.click()} disabled={uploading}>
               {uploading ? "Uploading…" : "+ Upload photos"}
             </Btn>
-            <span className="atlas-form-hint">Files are stored under atlas-data/media.</span>
+            <span className="atlas-form-hint">Drag photos here, or click to choose. Stored under atlas-data/media.</span>
           </div>
         </div>
       </div>
@@ -217,7 +224,6 @@ function MediaMetaForm({
               author: author.trim() || undefined,
               license: license.trim() || undefined,
               sourceUrl: sourceUrl.trim() || undefined,
-              source: sourceUrl.trim() ? "web" : "local",
             });
             setSaving(false);
           }}

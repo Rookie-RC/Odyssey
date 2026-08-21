@@ -18,6 +18,11 @@ BIN_DIR="$ROOT/bin"
 echo "==> Building frontend (Next.js static export)"
 (
   cd "$ROOT/apps/web"
+  # CI=true keeps pnpm non-interactive: without it, both `pnpm install` and
+  # `pnpm run` abort with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY whenever
+  # they want to reconcile node_modules on a non-TTY (CI runner, headless
+  # build script).
+  export CI=true
   pnpm install --frozen-lockfile
   pnpm run build
 )

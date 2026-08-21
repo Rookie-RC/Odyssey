@@ -32,18 +32,34 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange }: M
     setUploading(true);
     setError("");
     const added: string[] = [];
-    try {
-      for (const file of Array.from(files)) {
+    let failed: string | null = null;
+    for (const file of Array.from(files)) {
+      try {
         const m = await api.uploadMedia({ file, placeId: placeId ?? undefined });
         added.push(m.id);
+      } catch (e) {
+        failed = e instanceof Error ? e.message : String(e);
+        break; // stop on first failure, but keep what already succeeded
       }
-      onChange([...selectedIds, ...added]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
     }
+    // Attach whatever succeeded even on partial failure — files already
+    // uploaded to the runtime must not become orphaned/unselected just
+    // because a later file in the same batch failed.
+    if (added.length > 0) onChange([...selectedIds, ...added]);
+    if (failed) {
+      setError(
+        added.length > 0
+          ? `${added.length} photo${added.length > 1 ? "s" : ""} uploaded; then failed: ${failed}`
+          : failed
+      );
+    }
+    setUploading(false);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length > 0) upload(e.dataTransfer.files);
   };
 
   return (
@@ -73,7 +89,11 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange }: M
         </div>
       )}
 
-      <div className="atlas-mediapicker__upload">
+      <div
+        className="atlas-mediapicker__upload"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+      >
         <input
           ref={inputRef}
           type="file"
@@ -85,7 +105,7 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange }: M
         <Btn kind="primary" onClick={() => inputRef.current?.click()} disabled={uploading}>
           {uploading ? "Uploading…" : "+ Upload photos"}
         </Btn>
-        <span className="atlas-form-hint">Stored locally under atlas-data/media.</span>
+        <span className="atlas-form-hint">Drag photos here, or click to choose. Stored under atlas-data/media.</span>
       </div>
       {error ? <p className="atlas-locpicker__error">{error}</p> : null}
     </div>

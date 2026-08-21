@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { Media, Place, Season, Wishlist } from "../lib/types";
 import { getPrimaryMedia, seasonLabel } from "../lib/timeline";
 import {
+  flagEmoji,
   getWhereNextItems,
   inspirationSourceLabel,
   targetTimeLabel,
@@ -138,7 +139,14 @@ function PrimaryCard({
         )}
         <div className="atlas-wn-primary__gradient" aria-hidden="true" />
         <div className="atlas-wn-primary__place">
-          <div className="atlas-wn-primary__name">{place.name}</div>
+          <div className="atlas-wn-primary__name">
+            {place.name}
+            {flagEmoji(place.countryCode) ? (
+              <span className="atlas-wn-primary__flag" aria-hidden="true">
+                {" " + flagEmoji(place.countryCode)}
+              </span>
+            ) : null}
+          </div>
           <div className="atlas-wn-primary__country">
             {place.country}
             {" · "}

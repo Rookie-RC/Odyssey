@@ -143,6 +143,9 @@ export default function AtlasApp() {
       clip.style.borderBottomLeftRadius = radius + "px";
       clip.style.borderBottomRightRadius = radius + "px";
       clip.classList.toggle("atlas-map-clip--strip", progress > 0.7);
+      // Drives the "Scroll to explore" hint's fade-out (globals.css) — written
+      // as a CSS var rather than React state so scrolling never re-renders.
+      document.documentElement.style.setProperty("--hero-scroll", String(progress));
     };
     let ticking = false;
     const onScroll = () => {
@@ -231,7 +234,10 @@ export default function AtlasApp() {
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [overlay, season]);
 
-  const profileInitials = (profile?.name?.trim() || "Profile")
+  // Fallback matches ProfileDrawer's own "Traveler" default, so an unnamed
+  // profile doesn't show one initial in the topbar and a different name in
+  // the drawer it opens.
+  const profileInitials = (profile?.name?.trim() || "Traveler")
     .split(/\s+/)
     .map((w) => w[0])
     .filter(Boolean)

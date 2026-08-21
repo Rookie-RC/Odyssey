@@ -98,6 +98,42 @@ body {
   pointer-events: none;
 }
 
+/* "Scroll to explore" hint: only meaningful on the first, fullscreen
+   viewport, so it fades out (via --hero-scroll, written by the scroll rAF
+   loop in AtlasApp) well before the map finishes collapsing into the strip. */
+.atlas-hero__hint {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-shadow: 0 0 6px var(--surface), 0 0 6px var(--surface);
+  pointer-events: none;
+  opacity: calc(1 - var(--hero-scroll, 0) * 4);
+}
+
+.atlas-hero__hint svg {
+  animation: atlas-hint-bounce 1.8s ease-in-out infinite;
+}
+
+@keyframes atlas-hint-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-hero__hint svg {
+    animation: none;
+  }
+}
+
 /* --- Top bar: wordmark (left) + profile / theme actions (right) --- */
 .atlas-topbar {
   position: fixed;
@@ -202,6 +238,38 @@ html[data-theme="night"] .atlas-profile-button__avatar {
   display: grid;
   place-items: center;
   cursor: pointer;
+  overflow: visible;
+}
+
+/* Current-location label (visible by default — see makeMarkerElement). Reads
+   as map typography, not a UI chip: no background, just a legible halo. */
+.atlas-marker__label {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  white-space: nowrap;
+  pointer-events: none;
+  line-height: 1.25;
+}
+
+.atlas-marker__label-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-shadow: 0 0 4px var(--surface), 0 0 4px var(--surface), 0 1px 2px var(--surface);
+}
+
+.atlas-marker__label-country {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-shadow: 0 0 4px var(--surface), 0 0 4px var(--surface);
 }
 
 .atlas-marker__dot {
@@ -215,6 +283,19 @@ html[data-theme="night"] .atlas-profile-button__avatar {
 }
 
 .atlas-marker:hover .atlas-marker__dot {
+  transform: scale(1.25);
+}
+
+/* Markers are keyboard-focusable (role="button"), so focus needs to be as
+   visible as hover. The offset ring reads against both the pale and the deep
+   basemap without hiding the dot itself. */
+.atlas-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+.atlas-marker:focus-visible .atlas-marker__dot {
   transform: scale(1.25);
 }
 
@@ -516,11 +597,53 @@ html[data-theme="night"] .atlas-hero .maplibregl-ctrl-group .maplibregl-ctrl-ico
   color: var(--text-primary);
 }
 
+/* The SVG "Past"/"Future" axis labels sit at the ends of the full temporal
+   track, which is usually wider than the viewport and starts centred on NOW
+   — so they're normally scrolled out of view. This header hint is the only
+   affordance that tells a first-time visitor the Timeline drags/scrolls at
+   all, without adding a persistent on-canvas control. */
+.atlas-journey__hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.atlas-journey__hint-arrow {
+  opacity: 0.55;
+}
+
+.atlas-journey__hint-mid {
+  font-style: italic;
+}
+
+@media (max-width: 760px) {
+  .atlas-journey__hint {
+    display: none;
+  }
+}
+
+/* Matches .atlas-wherenext__empty so both sections speak with one voice when
+   the Atlas is new/empty (the first thing a friend sees on a blank Atlas). */
 .atlas-timeline__empty {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 0 40px;
+  padding: 44px 40px;
+  border: 1px dashed var(--border);
+  border-radius: 16px;
+  text-align: center;
   font-size: 14px;
+  color: var(--text-primary);
+}
+
+.atlas-timeline__empty-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
@@ -1389,6 +1512,25 @@ html[data-theme="night"] .atlas-detail-sheet {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 600;
+}
+
+/* Place and profile names are user-supplied and can be a single very long
+   token (real ones exist: "Llanfairpwllgwyngyll…"). Without a break rule such
+   a word is clipped mid-glyph at the container edge. `break-word` keeps
+   normal names breaking at spaces as usual and only splits a word that cannot
+   otherwise fit. */
+.atlas-preview__name,
+.atlas-tl-card__name,
+.atlas-tl-card__country,
+.atlas-tl-preview__name,
+.atlas-tl-preview__country,
+.atlas-wn-primary__name,
+.atlas-wn-secondary__name,
+.atlas-detail__hero-name,
+.atlas-detail__hero-country,
+.atlas-profile__name,
+.atlas-locpicker__chosen-name {
+  overflow-wrap: break-word;
 }
 
 .atlas-detail__hero-name {
@@ -2483,6 +2625,37 @@ html[data-theme="night"] .atlas-locpicker__error {
   color: var(--accent);
 }
 
+.atlas-locpicker__reuse-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.atlas-locpicker__manual-link {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.atlas-locpicker__manual {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
 /* --- Mini map --- */
 
 .atlas-minimap {
@@ -2493,8 +2666,17 @@ html[data-theme="night"] .atlas-locpicker__error {
 }
 
 .atlas-minimap__map {
+  /* maplibre-gl.css sets .maplibregl-map { position: relative } on this same
+     element (MapLibre adds that class itself) with equal selector
+     specificity, and it loads after this stylesheet, so it wins the
+     `position` cascade — inset:0 alone would then do nothing and the
+     container would collapse to 0 height (nothing else in normal flow sizes
+     it). Explicit width/height keep it filling .atlas-minimap regardless of
+     which position value wins, matching .atlas-hero__map's same fix. */
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .atlas-minimap__hint {

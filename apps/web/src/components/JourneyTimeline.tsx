@@ -437,7 +437,12 @@ export default function JourneyTimeline({
         <header className="atlas-journey__head">
           <h2 className="atlas-journey__title">My journey</h2>
         </header>
-        <p className="atlas-timeline__empty">Nothing here yet.</p>
+        <div className="atlas-timeline__empty">
+          <p>No journey yet.</p>
+          <span className="atlas-timeline__empty-sub">
+            Add a visit or a wish in Manage Atlas and it will appear here on the timeline.
+          </span>
+        </div>
       </section>
     );
   }
@@ -446,6 +451,13 @@ export default function JourneyTimeline({
     <section className="atlas-journey" aria-label="Journey timeline">
       <header className="atlas-journey__head">
         <h2 className="atlas-journey__title">My journey</h2>
+        <div className="atlas-journey__hint" aria-hidden="true">
+          <span>Past</span>
+          <span className="atlas-journey__hint-arrow">←</span>
+          <span className="atlas-journey__hint-mid">Drag or scroll</span>
+          <span className="atlas-journey__hint-arrow">→</span>
+          <span>Future</span>
+        </div>
       </header>
 
       <div

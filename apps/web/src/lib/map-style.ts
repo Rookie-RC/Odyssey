@@ -213,6 +213,16 @@ function adaptNight(style: StyleLike): void {
   hideUntil(style, "place_town", 8);
   hideUntil(style, "place_state", 6.5);
   hideUntil(style, "place_country_2", 5.5);
+  // Large-country names (GERMANY, POLAND, UKRAINE…) and major-city dots
+  // (Berlin, Vienna, Madrid, Kyiv…) default to minzoom 2/4/5, so they cover
+  // the Europe-wide hero framing in dense text (VISUAL_SPEC §3/§4: "avoid
+  // dense European text clutter", other labels "selective… reveal with hover
+  // / zoom"). Deferred to the same zoom as state/country_2 so the hero view
+  // stays quiet; our own place markers (not the basemap) carry the visited
+  // places the user actually cares about at that zoom.
+  hideUntil(style, "place_country_1", 5.5);
+  hideUntil(style, "place_city_dot_r2", 6.5);
+  hideUntil(style, "place_city_dot_r4", 6.5);
   hideUntil(style, "poi_stadium", 13);
   hideUntil(style, "poi_park", 13);
   hideUntil(style, "roadname_minor", 12);
@@ -282,6 +292,9 @@ function adaptLight(style: StyleLike): void {
   hideUntil(style, "place_town", 8);
   hideUntil(style, "place_state", 6.5);
   hideUntil(style, "place_country_2", 5.5);
+  hideUntil(style, "place_country_1", 5.5);
+  hideUntil(style, "place_city_dot_r2", 6.5);
+  hideUntil(style, "place_city_dot_r4", 6.5);
   hideUntil(style, "poi_stadium", 13);
   hideUntil(style, "poi_park", 13);
   hideUntil(style, "roadname_minor", 12);

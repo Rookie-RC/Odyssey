@@ -129,6 +129,18 @@ export const api = {
     const res = await fetch(API_BASE + "/api/atlas/import", { method: "POST", body: form });
     const text = await res.text();
     if (!res.ok) {
+      // The runtime always creates a backup before attempting the swap, and
+      // rolls back on failure, so a failed import never loses the existing
+      // Atlas — the backup name is included for reference when available.
+      let parsed: { error?: string; backup?: string } | null = null;
+      try {
+        parsed = JSON.parse(text) as { error?: string; backup?: string };
+      } catch {
+        // not JSON — fall through to the raw message below
+      }
+      if (parsed?.error) {
+        throw new Error(parsed.error + (parsed.backup ? " (backup kept: " + parsed.backup + ")" : ""));
+      }
       throw new Error(res.status + " " + res.statusText + ": " + text);
     }
     return JSON.parse(text) as { imported: boolean; backup: string };

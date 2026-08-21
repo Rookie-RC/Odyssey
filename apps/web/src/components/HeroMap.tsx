@@ -92,6 +92,18 @@ export default function HeroMap({
     if (overlayOpen) setPreview(null);
   }, [overlayOpen]);
 
+  // The page scroll drives the hero collapse (PRODUCT_SPEC §18): once the map
+  // shrinks to the strip, a marker's projected pixel position is meaningless
+  // (or sits above content that has scrolled underneath), so a lingering
+  // preview would float detached over Journey/Where Next. Close it as soon as
+  // scrolling starts, mirroring the Timeline preview's own scroll dismissal.
+  useEffect(() => {
+    if (!preview) return;
+    const onScroll = () => setPreview(null);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [preview]);
+
   const openDetail = useCallback(
     (m: MapMarker) => {
       setPreview(null);
@@ -167,9 +179,24 @@ export default function HeroMap({
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([m.place.coordinates.lng, m.place.coordinates.lat])
         .addTo(map);
+      // MapLibre stamps its own generic aria-label ("Map marker") and no
+      // tabindex onto the element during addTo(), so both are (re)applied
+      // afterwards: every marker announces its own place, and the
+      // role="button" it already carries becomes a promise keyboard users can
+      // actually act on (PRODUCT_SPEC §38).
+      el.setAttribute("aria-label", m.place.name + ", " + m.place.country);
+      el.tabIndex = 0;
       el.addEventListener("mouseenter", () => showPreview(m, "micro"));
       el.addEventListener("mouseleave", () => clearMicroPreview(m));
+      el.addEventListener("focus", () => showPreview(m, "micro"));
+      el.addEventListener("blur", () => clearMicroPreview(m));
       el.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        focusMarker(m);
+      });
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault(); // Space would otherwise scroll the page
         ev.stopPropagation();
         focusMarker(m);
       });
@@ -319,6 +346,22 @@ export default function HeroMap({
       <div ref={containerRef} className="atlas-hero__map" />
       <div className="atlas-hero__tint" aria-hidden="true" />
 
+      {!overlayOpen ? (
+        <div className="atlas-hero__hint" aria-hidden="true">
+          <span>Scroll to explore my journey</span>
+          <svg viewBox="0 0 16 16" width="14" height="14">
+            <path
+              d="M3 6l5 5 5-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+      ) : null}
+
       {mapError ? (
         <div className="atlas-map-error">
           <p>Yu&rsquo;s Atlas needs WebGL to render the map.</p>
@@ -407,7 +450,8 @@ function makeMarkerElement(m: MapMarker): HTMLDivElement {
   el.className =
     "atlas-marker atlas-marker--" + m.visitType + (m.isCurrent ? " atlas-marker--current" : "");
   el.setAttribute("role", "button");
-  el.setAttribute("aria-label", m.place.name + ", " + m.place.country);
+  // aria-label and tabindex are (re)applied by the caller after addTo(),
+  // because MapLibre overwrites the label and drops focusability there.
   if (m.isCurrent) {
     const ring = document.createElement("span");
     ring.className = "atlas-marker__ring";
@@ -416,5 +460,21 @@ function makeMarkerElement(m: MapMarker): HTMLDivElement {
   const dot = document.createElement("span");
   dot.className = "atlas-marker__dot";
   el.appendChild(dot);
+  // The current location is the one marker whose label is visible by default
+  // (VISUAL_SPEC §4: "Current location: … label visible by default"); every
+  // other place only reveals its name through the hover/focus preview.
+  if (m.isCurrent) {
+    const label = document.createElement("span");
+    label.className = "atlas-marker__label";
+    label.setAttribute("aria-hidden", "true"); // the button's own aria-label already announces this
+    const name = document.createElement("span");
+    name.className = "atlas-marker__label-name";
+    name.textContent = m.place.name;
+    const country = document.createElement("span");
+    country.className = "atlas-marker__label-country";
+    country.textContent = m.place.country;
+    label.append(name, country);
+    el.appendChild(label);
+  }
   return el;
 }
