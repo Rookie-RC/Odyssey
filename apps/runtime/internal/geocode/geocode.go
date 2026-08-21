@@ -78,7 +78,7 @@ func (m *Manager) set(key string, v any) {
 }
 
 func (m *Manager) Search(ctx context.Context, query string, opts SearchOptions) ([]Result, error) {
-	key := "s:" + query
+	key := fmt.Sprintf("s:%d:%s", opts.Limit, query)
 	if v, ok := m.get(key); ok {
 		if res, ok := v.([]Result); ok {
 			return res, nil

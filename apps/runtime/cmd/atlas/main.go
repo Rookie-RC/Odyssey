@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -234,17 +235,40 @@ func mediaHandler(dataDir string) http.Handler {
 	})
 }
 
+// corsMiddleware exists only so the Next.js dev server (a different origin,
+// e.g. http://localhost:3000) can call the API directly when
+// NEXT_PUBLIC_API_BASE bypasses its rewrite proxy. The production app is
+// always same-origin (the Go runtime serves the frontend itself), so this
+// never needs to allow the open internet: a wildcard here would let any page
+// open in the user's browser read Atlas data or issue writes/deletes against
+// the local server (PRODUCT_SPEC §43 — "editing must only be available from
+// localhost"). Only reflect back an Origin that is itself loopback.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if origin := r.Header.Get("Origin"); origin != "" && isLoopbackOrigin(origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isLoopbackOrigin reports whether origin is http(s)://127.0.0.1[:port],
+// http(s)://localhost[:port], or http(s)://[::1][:port] — the only origins a
+// legitimate local Atlas client (the dev server or the app itself) can have.
+func isLoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 func openBrowserURL(url string) {

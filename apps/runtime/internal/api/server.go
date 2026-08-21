@@ -32,9 +32,17 @@ type Server struct {
 	provider string
 	port     int
 
-	// atlasMu serializes export/import/new so destructive replacements never
-	// race each other (or with themselves).
-	atlasMu sync.Mutex
+	// writeMu serializes every mutating request (CRUD create/update/delete,
+	// media upload, profile/settings save, and atlas export/import/new).
+	// Each CRUD handler is a load-mutate-save sequence over the same JSON
+	// files with no atomicity of its own: two concurrent writes (a
+	// double-submit, two browser tabs) would otherwise both load the same
+	// base slice, and the second Save silently discards the first write.
+	// Serializing at the handler level is the simplest correct fix for a
+	// local, low-concurrency, single-user server. It also keeps CRUD writes
+	// from interleaving with atlas import/new, which used to be guarded by a
+	// separate mutex and so could still race with unrelated CRUD requests.
+	writeMu sync.Mutex
 }
 
 func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int) *Server {
@@ -116,6 +124,8 @@ func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePutProfile(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	var p domain.Profile
 	if err := decodeBody(r, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -144,6 +154,8 @@ func (s *Server) handleGetPlaces(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreatePlace(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	var p domain.Place
 	if err := decodeBody(r, &p); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -176,6 +188,8 @@ func (s *Server) handleCreatePlace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdatePlace(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	var p domain.Place
 	if err := decodeBody(r, &p); err != nil {
@@ -216,6 +230,8 @@ func (s *Server) handleUpdatePlace(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeletePlace(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	visits, err := s.store.LoadVisits()
 	if err != nil {
@@ -293,6 +309,8 @@ func (s *Server) handleGetVisits(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateVisit(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	var v domain.Visit
 	if err := decodeBody(r, &v); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -329,6 +347,8 @@ func (s *Server) handleCreateVisit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateVisit(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	var v domain.Visit
 	if err := decodeBody(r, &v); err != nil {
@@ -373,6 +393,8 @@ func (s *Server) handleUpdateVisit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteVisit(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	visits, err := s.store.LoadVisits()
 	if err != nil {
@@ -420,6 +442,8 @@ func (s *Server) handleGetWishlist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateWishlist(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	var item domain.Wishlist
 	if err := decodeBody(r, &item); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -456,6 +480,8 @@ func (s *Server) handleCreateWishlist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateWishlist(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	var item domain.Wishlist
 	if err := decodeBody(r, &item); err != nil {
@@ -500,6 +526,8 @@ func (s *Server) handleUpdateWishlist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteWishlist(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	items, err := s.store.LoadWishlist()
 	if err != nil {
@@ -550,6 +578,8 @@ func (s *Server) handleGetMedia(w http.ResponseWriter, r *http.Request) {
 // a Media record to media.json. The optional placeId chooses the storage folder
 // (organized by Place, PRODUCT_SPEC §10); without it a "misc" folder is used.
 func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	if err := r.ParseMultipartForm(25 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "upload too large or invalid multipart body")
 		return
@@ -629,6 +659,8 @@ func (s *Server) handleUploadMedia(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateMedia(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	var m domain.Media
 	if err := decodeBody(r, &m); err != nil {
@@ -675,6 +707,8 @@ func (s *Server) handleUpdateMedia(w http.ResponseWriter, r *http.Request) {
 // referenced by a Visit or Wishlist are rejected so shared media is never
 // silently removed (the reference lists are the authoritative association).
 func (s *Server) handleDeleteMedia(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	id := r.PathValue("id")
 	media, err := s.store.LoadMedia()
 	if err != nil {
@@ -843,6 +877,8 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 	var settings domain.Settings
 	if err := decodeBody(r, &settings); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -924,8 +960,8 @@ func newID() string {
 // replacement never races another packaging operation.
 
 func (s *Server) handleExportAtlas(w http.ResponseWriter, r *http.Request) {
-	s.atlasMu.Lock()
-	defer s.atlasMu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	name := "yu-atlas-" + time.Now().Format("20060102-150405") + ".atlas"
 	w.Header().Set("Content-Type", "application/zip")
@@ -938,8 +974,8 @@ func (s *Server) handleExportAtlas(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImportAtlas(w http.ResponseWriter, r *http.Request) {
-	s.atlasMu.Lock()
-	defer s.atlasMu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	if err := r.ParseMultipartForm(512 << 20); err != nil {
 		writeError(w, http.StatusBadRequest, "upload too large or invalid multipart body")
@@ -987,7 +1023,14 @@ func (s *Server) handleImportAtlas(w http.ResponseWriter, r *http.Request) {
 
 	backupRel, err := st.Replace()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		// Replace() always creates the backup before attempting the swap (and
+		// rolls the swap back on failure, so the live Atlas is left
+		// untouched) — surface the backup name even on failure so the user
+		// has it for reference.
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":  err.Error(),
+			"backup": backupRel,
+		})
 		return
 	}
 	st.Cleanup()
@@ -1000,8 +1043,8 @@ func (s *Server) handleImportAtlas(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNewAtlas(w http.ResponseWriter, r *http.Request) {
-	s.atlasMu.Lock()
-	defer s.atlasMu.Unlock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
 
 	keepTheme := ""
 	if settings, err := s.store.LoadSettings(); err == nil {

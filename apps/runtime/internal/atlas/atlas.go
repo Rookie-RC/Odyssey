@@ -411,16 +411,41 @@ func (st *Staged) Replace() (string, error) {
 		return "", fmt.Errorf("backup failed, import aborted: %w", err)
 	}
 
-	// Data files: write the staged content over each known file.
+	// Data files: staged into a fresh directory first, then swapped into place
+	// as a whole (same rename-swap-rollback pattern as media below), so a
+	// failure partway through never leaves data/ with some files replaced and
+	// others still the old version — it is all-or-nothing, matching the
+	// guarantee this method's doc comment makes.
 	dataDirPath := filepath.Join(st.dataDir, "data")
-	if err := os.MkdirAll(dataDirPath, 0o755); err != nil {
+	newDataDir := dataDirPath + ".new-" + randSuffix()
+	if err := os.MkdirAll(newDataDir, 0o755); err != nil {
 		return backupRel, err
 	}
 	for name, content := range st.DataFiles {
-		p := filepath.Join(dataDirPath, name)
+		p := filepath.Join(newDataDir, name)
 		if err := writeFileAtomic(p, content); err != nil {
-			return backupRel, fmt.Errorf("replacing %s failed: %w", name, err)
+			_ = os.RemoveAll(newDataDir)
+			return backupRel, fmt.Errorf("staging %s failed: %w", name, err)
 		}
+	}
+	oldDataDir := dataDirPath + ".old-" + randSuffix()
+	hadOldData := false
+	if _, err := os.Stat(dataDirPath); err == nil {
+		if err := os.Rename(dataDirPath, oldDataDir); err != nil {
+			_ = os.RemoveAll(newDataDir)
+			return backupRel, err
+		}
+		hadOldData = true
+	}
+	if err := os.Rename(newDataDir, dataDirPath); err != nil {
+		// Restore the previous data tree before failing.
+		if hadOldData {
+			_ = os.Rename(oldDataDir, dataDirPath)
+		}
+		return backupRel, fmt.Errorf("replacing data failed: %w", err)
+	}
+	if hadOldData {
+		_ = os.RemoveAll(oldDataDir)
 	}
 
 	// Media: swap the whole directory (rename old aside, move staged in,
