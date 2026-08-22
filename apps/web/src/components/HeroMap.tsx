@@ -6,9 +6,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { Media, Place, Profile, Visit } from "../lib/types";
 import { buildMapMarkers, visitedCountryCodes } from "../lib/map-data";
 import type { MapMarker } from "../lib/map-data";
+import { getRouteTrajectory } from "../lib/routes";
 import { visitTypeLabel } from "../lib/timeline";
 import { getPrimaryMediaForPlace } from "../lib/domain";
 import { loadThemeStyle } from "../lib/map-style";
+import type { SyncFocus } from "../lib/sync";
 import type { AtlasTheme } from "../themes";
 
 const EUROPE_CENTER: [number, number] = [10, 50];
@@ -42,6 +44,18 @@ interface HeroMapProps {
   media: Media[];
   /** True while an overlay (place detail / profile) is open or closing. */
   overlayOpen: boolean;
+  /** Chronological route layer visibility (v1.2). */
+  routesOn: boolean;
+  onToggleRoutes: () => void;
+  /** Shared Map ↔ Timeline focus (v1.3). The map responds when the Timeline
+   * initiated (`source === "timeline"`): the marker is emphasized and the
+   * camera is gently adjusted only when needed. Map-initiated focus is
+   * already where the user clicked. */
+  focus?: SyncFocus | null;
+  /** Emitted when a marker is clicked/selected (Map → Timeline sync). */
+  onFocusPlace?: (placeId: string) => void;
+  /** Emitted when the map background is clicked (selection cleared). */
+  onClearFocus?: () => void;
   onOpenPlace?: (placeId: string) => void;
   /** Optional default map position from Settings (PRODUCT_SPEC §34). */
   initialCenter?: [number, number] | null;
@@ -65,6 +79,11 @@ export default function HeroMap({
   theme,
   media,
   overlayOpen,
+  routesOn,
+  onToggleRoutes,
+  focus = null,
+  onFocusPlace,
+  onClearFocus,
   onOpenPlace,
   initialCenter,
   initialZoom,
@@ -72,6 +91,8 @@ export default function HeroMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerObjsRef = useRef<maplibregl.Marker[]>([]);
+  // placeId -> marker DOM element, used to apply the shared focus emphasis.
+  const markerElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const previewRef = useRef<PreviewState | null>(null);
 
   const [mapReady, setMapReady] = useState(false);
@@ -81,10 +102,14 @@ export default function HeroMap({
 
   const markers = useMemo(() => buildMapMarkers(places, visits, profile), [places, visits, profile]);
   const countryCodes = useMemo(() => visitedCountryCodes(places, visits), [places, visits]);
+  // Residence-based route trajectory, derived in the domain layer (lib/routes)
+  // and memoized: it only changes when Places/Visits change, never on map
+  // moves or the hero collapse scroll.
+  const trajectory = useMemo(() => getRouteTrajectory(places, visits), [places, visits]);
 
   // Latest values for map callbacks (kept stable across renders).
-  const contentRef = useRef({ theme, markers, countryCodes, countriesGeo });
-  contentRef.current = { theme, markers, countryCodes, countriesGeo };
+  const contentRef = useRef({ theme, markers, countryCodes, countriesGeo, routesOn, trajectory });
+  contentRef.current = { theme, markers, countryCodes, countriesGeo, routesOn, trajectory };
   previewRef.current = preview;
 
   // A Place Detail / Profile overlay supersedes the map preview.
@@ -145,7 +170,7 @@ export default function HeroMap({
   const renderMapContent = useCallback(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const { theme, markers, countryCodes, countriesGeo } = contentRef.current;
+    const { theme, markers, countryCodes, countriesGeo, routesOn, trajectory } = contentRef.current;
 
     const codes = new Set(countryCodes);
     const filtered: CountryCollection = {
@@ -172,10 +197,62 @@ export default function HeroMap({
       paint: { "fill-color": theme.countries.fill },
     });
 
+    // Chronological route layer (v1.2): a thin GeoJSON line layer between the
+    // country fill and the (DOM) markers, which therefore always stay on top.
+    // The layer is only present while routesOn; geometry updates only when the
+    // memoized trajectory changes.
+    if (routesOn) {
+      if (!map.getSource("routes")) {
+        map.addSource("routes", { type: "geojson", data: trajectory.geojson as never });
+      } else {
+        (map.getSource("routes") as maplibregl.GeoJSONSource).setData(trajectory.geojson as never);
+      }
+      if (!map.getLayer("routes-line")) {
+        map.addLayer({
+          id: "routes-line",
+          type: "line",
+          source: "routes",
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: {
+            "line-color": theme.routes.line,
+            // Thin and restrained; width grows very slightly as the user zooms
+            // in, but never enough to dominate markers. The focused segment
+            // (feature-state "emphasized", driven by Map ↔ Timeline sync) is
+            // subtly stronger — slightly wider and more opaque — while every
+            // other segment stays visible but weaker. ("zoom" must sit at the
+            // top level of the expression, so the emphasis case is inside the
+            // interpolate outputs.)
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              3,
+              ["case", ["boolean", ["feature-state", "emphasized"], false], 2.6, 1.2],
+              7,
+              ["case", ["boolean", ["feature-state", "emphasized"], false], 3.1, 1.7],
+              11,
+              ["case", ["boolean", ["feature-state", "emphasized"], false], 3.8, 2.4],
+            ],
+            "line-opacity": [
+              "case",
+              ["boolean", ["feature-state", "emphasized"], false],
+              0.95,
+              0.55,
+            ],
+          },
+        });
+      }
+    } else if (map.getLayer("routes-line")) {
+      map.removeLayer("routes-line");
+      map.removeSource("routes");
+    }
+
     markerObjsRef.current.forEach((m) => m.remove());
     markerObjsRef.current = [];
+    markerElsRef.current.clear();
     for (const m of markers) {
       const el = makeMarkerElement(m);
+      markerElsRef.current.set(m.place.id, el);
       const marker = new maplibregl.Marker({ element: el, anchor: "center" })
         .setLngLat([m.place.coordinates.lng, m.place.coordinates.lat])
         .addTo(map);
@@ -193,6 +270,9 @@ export default function HeroMap({
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
         focusMarker(m);
+        // Map → Timeline synchronization (v1.3): selecting a marker focuses
+        // the matching Timeline item in the shared focus state.
+        onFocusPlace?.(m.place.id);
       });
       el.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" && ev.key !== " ") return;
@@ -202,7 +282,7 @@ export default function HeroMap({
       });
       markerObjsRef.current.push(marker);
     }
-  }, [mapReady, showPreview, clearMicroPreview, focusMarker]);
+  }, [mapReady, showPreview, clearMicroPreview, focusMarker, onFocusPlace]);
 
   // --- create (or recreate) the map ---
   const mapGenRef = useRef(0);
@@ -260,7 +340,11 @@ export default function HeroMap({
     }
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.on("load", () => setMapReady(true));
-    map.on("click", () => setPreview(null));
+    map.on("click", () => {
+      setPreview(null);
+      // Map background click clears the shared selection (v1.3).
+      onClearFocus?.();
+    });
     map.on("move", () => {
       const prev = previewRef.current;
       if (prev) {
@@ -269,7 +353,7 @@ export default function HeroMap({
       }
     });
     mapRef.current = map;
-  }, []);
+  }, [onClearFocus]);
 
   // --- init map (once) ---
   useEffect(() => {
@@ -317,7 +401,77 @@ export default function HeroMap({
   // --- re-render map content when data or readiness changes ---
   useEffect(() => {
     renderMapContent();
-  }, [markers, countryCodes, countriesGeo, mapReady, renderMapContent]);
+  }, [markers, countryCodes, countriesGeo, mapReady, trajectory, routesOn, renderMapContent]);
+
+  // --- Map ↔ Timeline synchronization (v1.3): marker emphasis ---
+  // Timeline-initiated focus emphasizes the matching marker (a restrained
+  // ring); anything else (map-initiated, cleared, or a place without a
+  // marker, e.g. a future/wishlist node) leaves markers untouched. Runs after
+  // renderMapContent so freshly recreated markers are covered.
+  useEffect(() => {
+    const focusPlaceId =
+      focus && markerElsRef.current.has(focus.placeId) ? focus.placeId : null;
+    for (const [placeId, el] of markerElsRef.current) {
+      el.classList.toggle("atlas-marker--focused", placeId === focusPlaceId);
+    }
+  }, [focus, markers, mapReady]);
+
+  // --- Map ↔ Timeline synchronization (v1.3): restrained camera ---
+  // Only a timeline-initiated focus moves the camera, and only when the Place
+  // is not already comfortably visible: a small pan preserving the current
+  // zoom, with modest easing. Hover never moves the camera; a collapsed Hero
+  // Map never moves the camera (marker emphasis still applies — see above).
+  useEffect(() => {
+    if (!focus || focus.source !== "timeline" || !mapReady) return;
+    const map = mapRef.current;
+    const place = places.find((p) => p.id === focus.placeId);
+    // Only visited Places have markers; a future/wishlist node has nothing to
+    // emphasize on the hero map, so the camera must not wander to it.
+    if (!map || !place || !markerElsRef.current.has(focus.placeId)) return;
+    if (
+      document.querySelector(".atlas-map-clip")?.classList.contains("atlas-map-clip--strip")
+    ) {
+      return; // collapsed contextual strip: keep the user's scroll position
+    }
+    const p = map.project([place.coordinates.lng, place.coordinates.lat]);
+    const w = map.getCanvas().clientWidth;
+    const h = map.getCanvas().clientHeight;
+    const margin = Math.min(110, Math.round(Math.min(w, h) * 0.16));
+    if (p.x > margin && p.x < w - margin && p.y > margin && p.y < h - margin) {
+      return; // already comfortably visible — do not move the camera
+    }
+    map.easeTo({ center: [place.coordinates.lng, place.coordinates.lat], duration: 480 });
+  }, [focus, places, mapReady]);
+
+  // --- Map ↔ Timeline synchronization (v1.3): route-segment emphasis ---
+  // When the focused node is a Visit with a residence → destination segment
+  // and Routes are enabled, that segment is emphasized via MapLibre
+  // feature-state (wider, more opaque) while the others stay visible but
+  // weaker. Routes disabled → no emphasis, and synchronization keeps working.
+  const emphasizedSegIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const clearEmphasis = () => {
+      if (emphasizedSegIdRef.current != null && map.getSource("routes")) {
+        map.setFeatureState(
+          { source: "routes", id: emphasizedSegIdRef.current },
+          { emphasized: false }
+        );
+      }
+      emphasizedSegIdRef.current = null;
+    };
+    const segId = focus?.visitId
+      ? trajectory.segments.find((s) => s.id.endsWith("#" + focus.visitId))?.id
+      : undefined;
+    if (!segId || !routesOn || !map.getSource("routes")) {
+      clearEmphasis();
+      return;
+    }
+    clearEmphasis();
+    map.setFeatureState({ source: "routes", id: segId }, { emphasized: true });
+    emphasizedSegIdRef.current = segId;
+  }, [focus, routesOn, trajectory, mapReady]);
 
   // --- recreate map on theme change (base style swap) ---
   const skipFirstStyle = useRef(true);
@@ -360,6 +514,36 @@ export default function HeroMap({
             />
           </svg>
         </div>
+      ) : null}
+
+      {!overlayOpen ? (
+        <button
+          type="button"
+          className={"atlas-hero__routes" + (routesOn ? " atlas-hero__routes--on" : "")}
+          onClick={onToggleRoutes}
+          aria-pressed={routesOn}
+          title={routesOn ? "Hide chronological routes" : "Show chronological routes"}
+        >
+          <svg
+            className="atlas-hero__routes-icon"
+            viewBox="0 0 20 12"
+            width="20"
+            height="12"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 6h16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+            <circle cx="6.5" cy="6" r="1.6" fill="currentColor" />
+            <circle cx="13.5" cy="6" r="1.6" fill="currentColor" />
+          </svg>
+          <span className="atlas-hero__routes-label">Routes</span>
+          <span className="atlas-hero__routes-state">{routesOn ? "On" : "Off"}</span>
+        </button>
       ) : null}
 
       {mapError ? (
@@ -475,6 +659,15 @@ function makeMarkerElement(m: MapMarker): HTMLDivElement {
     country.textContent = m.place.country;
     label.append(name, country);
     el.appendChild(label);
+  }
+  // A residence (lived Visit) that is not the current base gets a calm static
+  // ring so the map reads as clusters radiating from home bases (v1.3) —
+  // restrained, theme-aware, and never animated like the current marker.
+  if (m.visitType === "lived" && !m.isCurrent) {
+    const home = document.createElement("span");
+    home.className = "atlas-marker__home";
+    home.setAttribute("aria-hidden", "true");
+    el.appendChild(home);
   }
   return el;
 }

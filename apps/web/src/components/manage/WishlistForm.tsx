@@ -20,9 +20,12 @@ interface WishlistFormProps {
   onChange: (d: WishlistDraft) => void;
   media: Media[];
   placeId?: string | null;
+  /** Hide the built-in Images picker (Direct Edit renders its own media
+   * section with cover/caption/reorder actions instead). */
+  hideImages?: boolean;
 }
 
-export default function WishlistForm({ value, onChange, media, placeId }: WishlistFormProps) {
+export default function WishlistForm({ value, onChange, media, placeId, hideImages }: WishlistFormProps) {
   const set = (patch: Partial<WishlistDraft>) => onChange({ ...value, ...patch });
 
   const toggleSeason = (s: Season) =>
@@ -169,12 +172,14 @@ export default function WishlistForm({ value, onChange, media, placeId }: Wishli
       </Field>
 
       <Field label="Images">
-        <MediaPicker
-          media={media}
-          placeId={placeId}
-          selectedIds={value.mediaIds}
-          onChange={(ids) => set({ mediaIds: ids })}
-        />
+        {hideImages ? null : (
+          <MediaPicker
+            media={media}
+            placeId={placeId}
+            selectedIds={value.mediaIds}
+            onChange={(ids) => set({ mediaIds: ids })}
+          />
+        )}
       </Field>
     </div>
   );

@@ -43,6 +43,10 @@ export interface TimelineNode {
   inspirations?: Inspiration[];
   priority?: number;
   visitType?: VisitType;
+  /** Visit record id when this node is a Visit (past/now nodes). Used by the
+   * Map ↔ Timeline synchronization (v1.3) to link a focused node back to its
+   * Visit for the multiple-Visit rule and route-segment emphasis. */
+  visitId?: string;
   mediaIds: string[];
   /** Visual weight of a past node (current > lived > trip > ... > transit). */
   depthRank: number;
@@ -129,6 +133,43 @@ function parseDate(str: string): Date | null {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3] ?? 15));
 }
 
+/** Fractional-year position of a date string ("YYYY-MM" or "YYYY-MM-DD"), or
+ * null when the string carries no parseable date. Day-precision maps to its
+ * exact day, month-precision to the 15th — the same mapping the Timeline
+ * uses — so residence periods and route matching stay on one shared axis. */
+export function dateTimeFromString(str?: string): number | null {
+  if (!str) return null;
+  const d = parseDate(str);
+  return d ? yearFraction(d) : null;
+}
+
+/** The Visit's own chronological position (start date, else end date), or
+ * null when it has no placeable date. This is the pure "when the Visit
+ * happened", used by the residence-based route layer (v1.3) and the
+ * residence-period bounds — without the Timeline's current-base anchoring. */
+export function visitDateTime(v: Visit): number | null {
+  return dateTimeFromString(v.startDate) ?? dateTimeFromString(v.endDate);
+}
+
+/** Fractional-year position of a Visit on the Timeline's temporal axis, or
+ * null when the visit carries no placeable date.
+ *
+ * This is the single chronological source of truth for the Journey Timeline:
+ * a current-base visit always sits at "now" (the Timeline's NOW anchor),
+ * otherwise the visit's own date wins (visitDateTime). Since v1.3 the route
+ * layer deliberately uses visitDateTime (not this function): routes express
+ * which residence a trip originated from, so the current-base anchoring that
+ * the Timeline needs would be wrong there.
+ */
+export function visitTimelineTime(
+  v: Visit,
+  currentId: string | null,
+  nowTime: number
+): number | null {
+  if (currentId != null && v.placeId === currentId) return nowTime;
+  return visitDateTime(v);
+}
+
 function formatMonthYear(str: string): string {
   const m = /^(\d{4})-(\d{2})/.exec(str);
   if (!m) return str;
@@ -180,13 +221,18 @@ export function getTimelineItems(
     const place = byId.get(v.placeId);
     if (!place) continue;
     const isNow = currentId != null && v.placeId === currentId;
+    // visitTimelineTime is the shared chronological source of truth (also used
+    // by the Hero Map route layer), so Timeline order can never diverge from
+    // route order. Visits without any date get a synthetic early position so
+    // they still appear ("Earlier") without pretending to a real date.
+    const t = visitTimelineTime(v, currentId, nowTime);
     const date = v.startDate ? parseDate(v.startDate) : v.endDate ? parseDate(v.endDate) : null;
     const season = date ? seasonFromMonth(date.getMonth() + 1) : null;
     nodes.push({
       id: "visit:" + v.id,
       kind: isNow ? "now" : "past",
       place,
-      time: isNow ? nowTime : date ? yearFraction(date) : nowTime - 20,
+      time: isNow ? nowTime : t ?? nowTime - 20,
       season: isNow ? nowSeason : season,
       dateLabel: isNow
         ? "Now"
@@ -200,6 +246,7 @@ export function getTimelineItems(
       highlights: v.highlights,
       reflection: v.reflection,
       visitType: v.visitType,
+      visitId: v.id,
       mediaIds: v.mediaIds ?? [],
       depthRank: isNow ? 6 : VISIT_RANK[v.visitType],
     });

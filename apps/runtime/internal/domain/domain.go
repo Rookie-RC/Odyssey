@@ -162,4 +162,5 @@ type Settings struct {
 	GeocodingProvider  string       `json:"geocodingProvider,omitempty"`
 	DefaultMapPosition *Coordinates `json:"defaultMapPosition,omitempty"`
 	LANSharing         bool         `json:"lanSharing,omitempty"`
+	ShowRoutes         bool         `json:"showRoutes,omitempty"`
 }

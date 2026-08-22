@@ -1,0 +1,72 @@
+[
+  {
+    "id": "m-bordeaux-bourse",
+    "type": "image",
+    "source": "local",
+    "path": "/media/bordeaux/bourse.jpg",
+    "caption": "Place de la Bourse and the miroir d'eau",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Place_de_la_Bourse_et_le_miroir_d%27eau_-_Bordeaux_02.jpg",
+    "author": "Javier Perez Montes",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-amsterdam-canal",
+    "type": "image",
+    "source": "local",
+    "path": "/media/amsterdam/canal.jpg",
+    "caption": "Canal houses at golden hour",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Colorful_canal_houses_at_golden_hour_in_Damrak_avenue_Amsterdam_the_Netherlands.jpg",
+    "author": "Basile Morin",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-lofoten-sakrisoy",
+    "type": "image",
+    "source": "local",
+    "path": "/media/lofoten/sakrisoy.jpg",
+    "caption": "Red cabins under the Lofoten wall",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Sakris%C3%B8y_village_and_mountains_Lofoten_Norway.jpg",
+    "author": "Smtunli",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-lisbon-tram28",
+    "type": "image",
+    "source": "local",
+    "path": "/media/lisbon/tram28.jpg",
+    "caption": "Tram 28 climbing the Alfama hills",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Tram_28_Lisbon_Portuguese.jpg",
+    "author": "Ввласенко",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-santorini-oia",
+    "type": "image",
+    "source": "local",
+    "path": "/media/santorini/oia.jpg",
+    "caption": "White streets above the caldera",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Village_Oia%2C_Santorini%2C_Gr%C3%A8ce%2C_2017.jpg",
+    "author": "Daphné Garneau",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-sardinia-costa",
+    "type": "image",
+    "source": "local",
+    "path": "/media/sardinia/costa-smeralda.jpg",
+    "caption": "Turquoise water and granite shore",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Costa_Smeralda.jpg",
+    "author": "Ökologix",
+    "license": "CC0"
+  },
+  {
+    "id": "m-dolomites-trecime",
+    "type": "image",
+    "source": "local",
+    "path": "/media/dolomites/tre-cime.jpg",
+    "caption": "Tre Cime under winter light",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Drei_Zinnen_Tre_Cime_di_Lavaredo_Dolomites.jpg",
+    "author": "Wolfgang Moroder",
+    "license": "CC BY-SA 3.0"
+  }
+]

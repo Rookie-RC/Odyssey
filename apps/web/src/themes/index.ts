@@ -30,6 +30,7 @@ export function applyTheme(theme: AtlasTheme): void {
     "--marker-visited-faint": theme.markers.visitedFaint,
     "--country-fill": theme.countries.fill,
     "--country-outline": theme.countries.outline,
+    "--route-line": theme.routes.line,
     "--season-spring": theme.seasons.spring,
     "--season-summer": theme.seasons.summer,
     "--season-autumn": theme.seasons.autumn,

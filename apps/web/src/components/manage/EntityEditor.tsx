@@ -10,7 +10,7 @@ import type { Visit, Wishlist } from "../../lib/types";
 import LocationPicker, { type ResolvedLocation } from "./LocationPicker";
 import VisitForm from "./VisitForm";
 import WishlistForm from "./WishlistForm";
-import { emptyVisitDraft, emptyWishlistDraft, type VisitDraft, type WishlistDraft } from "./drafts";
+import { emptyVisitDraft, emptyWishlistDraft, visitToDraft, wishlistToDraft, type VisitDraft, type WishlistDraft } from "./drafts";
 import { resolvePlaceId, visitFromDraft, wishlistFromDraft } from "./save";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, Field, Select, TextInput } from "./FormUI";
@@ -66,10 +66,10 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
 
   const [resolved, setResolved] = useState<ResolvedLocation | null>(initialLocation);
   const [visit, setVisit] = useState<VisitDraft>(() =>
-    existingVisit ? visitFromDraftToUi(existingVisit) : emptyVisitDraft()
+    existingVisit ? visitToDraft(existingVisit) : emptyVisitDraft()
   );
   const [wishlist, setWishlist] = useState<WishlistDraft>(() =>
-    existingWishlist ? wishlistFromDraftToUi(existingWishlist) : emptyWishlistDraft()
+    existingWishlist ? wishlistToDraft(existingWishlist) : emptyWishlistDraft()
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -276,38 +276,4 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
       </div>
     </div>
   );
-}
-
-// --- draft conversions (UI strings back to drafts for editing) ---
-
-function visitFromDraftToUi(v: Visit): VisitDraft {
-  return {
-    visitType: v.visitType,
-    startDate: v.startDate ?? "",
-    endDate: v.endDate ?? "",
-    withFriends: v.withFriends ?? false,
-    highlights: (v.highlights ?? []).map((h) => ({ name: h.name, note: h.note ?? "" })),
-    reflection: v.reflection ?? "",
-    mediaIds: v.mediaIds ?? [],
-  };
-}
-
-function wishlistFromDraftToUi(w: Wishlist): WishlistDraft {
-  return {
-    seasons: w.seasons ?? [],
-    targetYear: w.targetTime?.year != null ? String(w.targetTime.year) : "",
-    targetSeason: w.targetTime?.season ?? "",
-    priority: w.priority != null ? String(w.priority) : "",
-    why: w.why ?? "",
-    note: w.note ?? "",
-    inspirations: (w.inspirations ?? []).map((i) => ({
-      type: i.type,
-      title: i.title ?? "",
-      creator: i.creator ?? "",
-      platform: i.platform ?? "",
-      url: i.url ?? "",
-      note: i.note ?? "",
-    })),
-    mediaIds: w.mediaIds ?? [],
-  };
 }

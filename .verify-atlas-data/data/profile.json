@@ -1,0 +1,19 @@
+{
+  "name": "Yu",
+  "currentBase": {
+    "placeId": "julich-aachen"
+  },
+  "bio": "Mapping where life has moved through space, time and memory.",
+  "interests": [
+    "hiking",
+    "coastal towns",
+    "slow travel",
+    "analog photography"
+  ],
+  "links": [
+    {
+      "label": "Personal site",
+      "url": "https://example.com"
+    }
+  ]
+}

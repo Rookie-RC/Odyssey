@@ -346,6 +346,31 @@ html[data-theme="light"] .atlas-marker--trip .atlas-marker__dot {
   animation: atlas-pulse 2.4s ease-out infinite;
 }
 
+/* Home-base (residence) marker: a calm static ring around the lived dot, so
+   the map reads as travel radiating from home bases (v1.3). Deliberately
+   quieter than the current marker's animated ring and softer than the dot. */
+.atlas-marker__home {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--marker-visited);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Shared Map ↔ Timeline focus (v1.3): a clear but restrained accent ring
+   around the focused marker. A pseudo-element so it never conflicts with the
+   theme glow/shadows on the dot itself. */
+.atlas-marker--focused::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  border: 2px solid var(--accent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
 /* Night: a restrained warm glow on visited markers and a cool glow on the
    current marker echoes the reference's city-light atmosphere without neon. */
 html[data-theme="night"] .atlas-marker--lived .atlas-marker__dot,
@@ -529,6 +554,76 @@ html[data-theme="night"] .atlas-hero .maplibregl-ctrl-group .maplibregl-ctrl-ico
   opacity: 0.7;
 }
 
+/* --- Chronological route toggle (v1.2): a quiet Hero Map control ---
+   A small pill in the opposite corner of the zoom control, styled like the
+   map controls (surface + border + gentle shadow). It clearly communicates
+   Routes On / Off and never reads as a toolbar or legend. */
+.atlas-hero__routes {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.atlas-hero__routes:hover {
+  background: var(--surface-elevated);
+  border-color: var(--text-secondary);
+}
+
+.atlas-hero__routes:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.atlas-hero__routes-icon {
+  opacity: 0.85;
+}
+
+/* On state: the line turns accent, Off stays muted — the arc icon carries the
+   state without a heavy fill. */
+.atlas-hero__routes--on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.atlas-hero__routes--on .atlas-hero__routes-icon {
+  opacity: 1;
+}
+
+.atlas-hero__routes-label {
+  letter-spacing: 0.02em;
+}
+
+.atlas-hero__routes-state {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.9;
+}
+
+/* In the collapsed contextual strip the toggle, like the zoom control, has no
+   place: it fades out and never intercepts pointer events. */
+.atlas-map-clip--strip .atlas-hero__routes {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* --- Map (WebGL) error fallback --- */
 .atlas-map-error {
   position: absolute;
@@ -677,6 +772,13 @@ html[data-theme="night"] .atlas-hero .maplibregl-ctrl-group .maplibregl-ctrl-ico
 .atlas-timeline__track {
   position: relative;
   will-change: transform;
+}
+
+/* Smooth automatic scroll when the Map synchronizes to a Timeline item
+   (v1.3). The class is added for the duration of the move only; any manual
+   drag/wheel removes it immediately so manual control always wins. */
+.atlas-timeline__track--animate {
+  transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .atlas-timeline__svg {
@@ -888,6 +990,32 @@ html[data-theme="night"] .atlas-tl-node--active .atlas-tl-card {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
     0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Shared Map ↔ Timeline focus (v1.3): the focused node is clearly but
+   restrainedly highlighted — an accent ring on its marker and an accent card
+   border. Non-focused items stay at full readability (no aggressive dimming). */
+.atlas-tl-node--focused .atlas-tl-node__marker::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 2px solid var(--accent);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.atlas-tl-node--focused .atlas-tl-card {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="night"] .atlas-tl-node--focused .atlas-tl-card {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 8px 26px rgba(0, 0, 0, 0.42);
 }
 
 .atlas-tl-card__img {
@@ -1735,6 +1863,224 @@ html[data-theme="night"] .atlas-detail-sheet {
   font-size: 12px;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+/* --- Direct Edit (v1.1): the Detail Sheet editing in place --- */
+
+/* Subtle Edit entry point (top-right, to the left of the close button). */
+.atlas-detail__edit {
+  position: absolute;
+  top: 14px;
+  right: 58px;
+  z-index: 5;
+  height: 34px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.atlas-detail__edit:hover {
+  background: var(--surface-elevated);
+  border-color: var(--text-secondary);
+}
+
+.atlas-detail__edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The sheet stays recognizable while editing: hero remains, the body becomes
+   a restrained form. A small label marks the mode. */
+.atlas-detail__body--editing {
+  padding-top: 20px;
+}
+
+.atlas-detail__editing-label {
+  margin: 0 0 18px;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.atlas-direct__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.atlas-direct__group + .atlas-direct__group {
+  margin-top: 6px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.atlas-direct__group-title {
+  margin: 0 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.atlas-direct__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* Media rows inside Direct Edit: thumbnail + caption + lightweight actions. */
+.atlas-direct-media {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.atlas-direct-media__item {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.atlas-direct-media__item img {
+  width: 84px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  -webkit-user-drag: none;
+  border: 1px solid var(--border);
+}
+
+.atlas-direct-media__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.atlas-direct-media__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.atlas-direct-media__btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.atlas-direct-media__btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.atlas-direct-media__btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.atlas-direct-media__btn--cover {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.atlas-direct-media__btn--remove {
+  color: #b3261e;
+}
+
+html[data-theme="night"] .atlas-direct-media__btn--remove {
+  color: #ff8a80;
+}
+
+.atlas-direct-media__cover-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 0 4px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.atlas-direct-media__add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Lightweight discard confirmation: a small bar inside the sheet (no extra
+   modal stacked on top of the Detail Sheet). */
+.atlas-detail__discard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.12);
+  animation: atlas-discard-in 0.2s ease;
+}
+
+html[data-theme="night"] .atlas-detail__discard {
+  box-shadow: 0 -14px 36px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes atlas-discard-in {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.atlas-detail__discard-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.atlas-detail__discard-text span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.atlas-detail__discard-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
 }
 
 /* --- Profile Drawer: right side, subordinate to the Atlas --- */

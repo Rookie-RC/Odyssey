@@ -32,6 +32,12 @@ type Server struct {
 	provider string
 	port     int
 
+	// writable reports whether this runtime allows edits (PRODUCT_SPEC §26:
+	// editing functionality is only exposed in writable local mode). The
+	// frontend hides all editing UI when the runtime reports read-only, and
+	// mutating API requests are rejected outright below.
+	writable bool
+
 	// writeMu serializes every mutating request (CRUD create/update/delete,
 	// media upload, profile/settings save, and atlas export/import/new).
 	// Each CRUD handler is a load-mutate-save sequence over the same JSON
@@ -45,11 +51,14 @@ type Server struct {
 	writeMu sync.Mutex
 }
 
-func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int) *Server {
-	return &Server{store: store, geocoder: geocoder, dataDir: dataDir, port: port, provider: geocoder.ProviderID()}
+func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int, writable bool) *Server {
+	return &Server{store: store, geocoder: geocoder, dataDir: dataDir, port: port, provider: geocoder.ProviderID(), writable: writable}
 }
 
-// Handler returns the API mux. CORS is applied by the caller in main.
+// Handler returns the API mux. CORS is applied by the caller in main. In
+// read-only mode all mutating requests (POST/PUT/DELETE) are rejected before
+// they reach a handler, so a read-only runtime can never change data even if
+// the frontend is tricked into sending a write.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/runtime", s.handleRuntime)
@@ -86,6 +95,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/atlas/export", s.handleExportAtlas)
 	mux.HandleFunc("POST /api/atlas/import", s.handleImportAtlas)
 	mux.HandleFunc("POST /api/atlas/new", s.handleNewAtlas)
+
+	if !s.writable {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
+				writeError(w, http.StatusForbidden, "runtime is read-only")
+				return
+			}
+			mux.ServeHTTP(w, r)
+		})
+	}
 	return mux
 }
 
@@ -107,7 +126,7 @@ func decodeBody(r *http.Request, v any) error {
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mode":              "local",
-		"writable":          true,
+		"writable":          s.writable,
 		"port":              s.port,
 		"dataDir":           s.dataDir,
 		"geocodingProvider": s.provider,

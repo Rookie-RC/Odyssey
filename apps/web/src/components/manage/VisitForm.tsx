@@ -17,9 +17,12 @@ interface VisitFormProps {
   onChange: (d: VisitDraft) => void;
   media: Media[];
   placeId?: string | null;
+  /** Hide the built-in Photos picker (Direct Edit renders its own media
+   * section with cover/caption/reorder actions instead). */
+  hidePhotos?: boolean;
 }
 
-export default function VisitForm({ value, onChange, media, placeId }: VisitFormProps) {
+export default function VisitForm({ value, onChange, media, placeId, hidePhotos }: VisitFormProps) {
   const set = (patch: Partial<VisitDraft>) => onChange({ ...value, ...patch });
 
   return (
@@ -39,10 +42,19 @@ export default function VisitForm({ value, onChange, media, placeId }: VisitForm
 
       <div className="atlas-form-grid">
         <Field label="Start date">
-          <MonthInput value={value.startDate} onChange={(e) => set({ startDate: e.target.value })} />
+          {/* <input type="month"> only accepts YYYY-MM; the domain also allows
+              day precision (YYYY-MM-DD), so display month precision while the
+              draft keeps the raw value until the user actually changes it. */}
+          <MonthInput
+            value={value.startDate ? value.startDate.slice(0, 7) : ""}
+            onChange={(e) => set({ startDate: e.target.value })}
+          />
         </Field>
         <Field label="End date">
-          <MonthInput value={value.endDate} onChange={(e) => set({ endDate: e.target.value })} />
+          <MonthInput
+            value={value.endDate ? value.endDate.slice(0, 7) : ""}
+            onChange={(e) => set({ endDate: e.target.value })}
+          />
         </Field>
       </div>
 
@@ -110,12 +122,14 @@ export default function VisitForm({ value, onChange, media, placeId }: VisitForm
       </Field>
 
       <Field label="Photos">
-        <MediaPicker
-          media={media}
-          placeId={placeId}
-          selectedIds={value.mediaIds}
-          onChange={(ids) => set({ mediaIds: ids })}
-        />
+        {hidePhotos ? null : (
+          <MediaPicker
+            media={media}
+            placeId={placeId}
+            selectedIds={value.mediaIds}
+            onChange={(ids) => set({ mediaIds: ids })}
+          />
+        )}
       </Field>
     </div>
   );

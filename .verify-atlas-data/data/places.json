@@ -1,0 +1,134 @@
+[
+  {
+    "id": "julich-aachen",
+    "name": "Jülich / Aachen",
+    "country": "Germany",
+    "countryCode": "DE",
+    "type": "city",
+    "coordinates": {
+      "lat": 50.9215,
+      "lng": 6.3585
+    }
+  },
+  {
+    "id": "amsterdam",
+    "name": "Amsterdam",
+    "country": "Netherlands",
+    "countryCode": "NL",
+    "type": "city",
+    "coordinates": {
+      "lat": 52.3676,
+      "lng": 4.9041
+    }
+  },
+  {
+    "id": "barcelona",
+    "name": "Barcelona",
+    "country": "Spain",
+    "countryCode": "ES",
+    "type": "city",
+    "coordinates": {
+      "lat": 41.3874,
+      "lng": 2.1686
+    }
+  },
+  {
+    "id": "bordeaux",
+    "name": "Bordeaux",
+    "country": "France",
+    "countryCode": "FR",
+    "type": "city",
+    "coordinates": {
+      "lat": 44.8378,
+      "lng": -0.5792
+    }
+  },
+  {
+    "id": "london",
+    "name": "London",
+    "country": "United Kingdom",
+    "countryCode": "GB",
+    "type": "city",
+    "coordinates": {
+      "lat": 51.5074,
+      "lng": -0.1278
+    }
+  },
+  {
+    "id": "edinburgh",
+    "name": "Edinburgh",
+    "country": "United Kingdom",
+    "countryCode": "GB",
+    "type": "city",
+    "coordinates": {
+      "lat": 55.9533,
+      "lng": -3.1883
+    }
+  },
+  {
+    "id": "athens",
+    "name": "Athens",
+    "country": "Greece",
+    "countryCode": "GR",
+    "type": "city",
+    "coordinates": {
+      "lat": 37.9838,
+      "lng": 23.7275
+    }
+  },
+  {
+    "id": "lofoten",
+    "name": "Lofoten",
+    "country": "Norway",
+    "countryCode": "NO",
+    "type": "region",
+    "coordinates": {
+      "lat": 68,
+      "lng": 13.5
+    }
+  },
+  {
+    "id": "lisbon",
+    "name": "Lisbon",
+    "country": "Portugal",
+    "countryCode": "PT",
+    "type": "city",
+    "coordinates": {
+      "lat": 38.7223,
+      "lng": -9.1393
+    }
+  },
+  {
+    "id": "santorini",
+    "name": "Santorini",
+    "country": "Greece",
+    "countryCode": "GR",
+    "type": "island",
+    "coordinates": {
+      "lat": 36.3932,
+      "lng": 25.4615
+    }
+  },
+  {
+    "id": "sardinia",
+    "name": "Sardinia",
+    "country": "Italy",
+    "countryCode": "IT",
+    "type": "island",
+    "coordinates": {
+      "lat": 40.1209,
+      "lng": 9.0129
+    }
+  },
+  {
+    "id": "dolomites",
+    "name": "Dolomites",
+    "country": "Italy",
+    "countryCode": "IT",
+    "type": "natural_area",
+    "coordinates": {
+      "lat": 46.4,
+      "lng": 11.85
+    }
+  }
+]

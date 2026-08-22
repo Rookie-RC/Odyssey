@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type RuntimeInfo } from "../lib/api";
 import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
+import { HttpAtlasRepository } from "../lib/repository";
+import type { SyncFocus } from "../lib/sync";
+import type { TimelineNode } from "../lib/timeline";
 import HeroMap, { type CountryCollection } from "./HeroMap";
 import JourneyTimeline from "./JourneyTimeline";
 import WhereNext from "./WhereNext";
@@ -43,6 +46,13 @@ export default function AtlasApp() {
   const [writable, setWritable] = useState(false);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [view, setView] = useState<"atlas" | "manage">("atlas");
+  // Chronological route layer visibility (v1.2), persisted in Settings.
+  const [routesOn, setRoutesOn] = useState(false);
+
+  // Shared contextual focus for Map ↔ Timeline synchronization (v1.3).
+  // One state, two views; `source` records which side initiated it so the
+  // other side responds without echoing back (feedback-loop guard).
+  const [syncFocus, setSyncFocus] = useState<SyncFocus | null>(null);
 
   // Where Next season + global overlay (single overlay state). Initial state
   // matches the server render (no hydration mismatch); the URL is applied once
@@ -52,6 +62,9 @@ export default function AtlasApp() {
   const [closingOverlay, setClosingOverlay] = useState(false);
 
   const theme = themes[themeId];
+
+  // Shared repository used by Manage Atlas and Direct Edit (the Detail Sheet).
+  const repo = useMemo(() => new HttpAtlasRepository(), []);
 
   // --- data load / reload (reload keeps the main Atlas in sync with Manage
   // Atlas edits without a page refresh) ---
@@ -72,6 +85,7 @@ export default function AtlasApp() {
       setMedia(m);
       setSettings(s);
       if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
+      setRoutesOn(s.showRoutes ?? false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -97,6 +111,7 @@ export default function AtlasApp() {
         setMedia(m);
         setSettings(s);
         if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
+        setRoutesOn(s.showRoutes ?? false);
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
       }
@@ -172,6 +187,15 @@ export default function AtlasApp() {
     api.saveSettings({ ...base, theme: next }).catch(() => {});
   }, [themeId, settings]);
 
+  // Chronological route layer toggle (v1.2). Persisted through the existing
+  // local settings system — no new persistence mechanism.
+  const toggleRoutes = useCallback(() => {
+    const next = !routesOn;
+    setRoutesOn(next);
+    const base = settings ?? {};
+    api.saveSettings({ ...base, showRoutes: next }).catch(() => {});
+  }, [routesOn, settings]);
+
   // --- overlay lifecycle (single source; animated close) ---
   const closeOverlay = useCallback(() => {
     if (!overlay || closingOverlay) return;
@@ -182,8 +206,76 @@ export default function AtlasApp() {
     }, 260);
   }, [overlay, closingOverlay]);
 
-  const openPlace = useCallback((id: string) => setOverlay({ type: "place", id }), []);
-  const openProfile = useCallback(() => setOverlay({ type: "profile" }), []);
+  // An overlay supersedes contextual focus: opening the Detail Sheet or the
+  // Profile drawer clears the Map ↔ Timeline selection.
+  const openPlace = useCallback((id: string) => {
+    setSyncFocus(null);
+    setOverlay({ type: "place", id });
+  }, []);
+  const openProfile = useCallback(() => {
+    setSyncFocus(null);
+    setOverlay({ type: "profile" });
+  }, []);
+
+  // --- Map ↔ Timeline synchronization (v1.3) ---
+  // Multiple-Visit rule (documented): when a Place has several Visits, the
+  // focused Visit is
+  //   1. the Visit already in context, when it belongs to this Place
+  //      (the selection persists rather than silently switching);
+  //   2. otherwise the current-base Visit when the Place is the current base
+  //      (that Visit is the Timeline's NOW anchor — the "living here" node);
+  //   3. otherwise the most recent Visit by date (start date, else end date),
+  //      tie-broken by stable id.
+  // If no Visit resolves, there is nothing to synchronize (returns null).
+  const resolveVisitId = useCallback(
+    (placeId: string, inContext?: string): string | undefined => {
+      const candidates = visits.filter((v) => v.placeId === placeId);
+      if (candidates.length === 0) return undefined;
+      if (inContext && candidates.some((v) => v.id === inContext)) return inContext;
+      const currentId = profile?.currentBase?.placeId ?? null;
+      if (currentId === placeId) {
+        const base = candidates.find((v) => v.visitType === "lived") ?? candidates[0];
+        return base.id;
+      }
+      return [...candidates].sort(
+        (a, b) =>
+          (b.startDate ?? b.endDate ?? "").localeCompare(a.startDate ?? a.endDate ?? "") ||
+          a.id.localeCompare(b.id)
+      )[0].id;
+    },
+    [visits, profile]
+  );
+
+  // Timeline → Map: a Timeline node was clicked/selected. The map responds by
+  // emphasizing the Place's marker (and camera only when needed).
+  const handleTimelineSelect = useCallback((node: TimelineNode) => {
+    setSyncFocus({
+      placeId: node.place.id,
+      nodeId: node.id,
+      visitId: node.visitId,
+      source: "timeline",
+    });
+  }, []);
+
+  // Map → Timeline: a map marker was clicked/selected. Resolve the relevant
+  // Visit (multiple-Visit rule above), then the Timeline responds by bringing
+  // that node into view.
+  const handleMapFocus = useCallback(
+    (placeId: string) => {
+      setSyncFocus((prev) => {
+        const inContext = prev?.placeId === placeId ? prev.visitId : undefined;
+        const visitId = resolveVisitId(placeId, inContext);
+        if (!visitId) return null;
+        return { placeId, nodeId: "visit:" + visitId, visitId, source: "map" };
+      });
+    },
+    [resolveVisitId]
+  );
+
+  // Stable handler (map background click clears the selection). Kept in a
+  // useCallback so HeroMap's map-creation effect never re-runs from a new
+  // inline identity.
+  const clearSyncFocus = useCallback(() => setSyncFocus(null), []);
 
   // Escape collapses the active overlay (spec: single-page, no stacked overlays).
   useEffect(() => {
@@ -264,6 +356,11 @@ export default function AtlasApp() {
             theme={theme}
             media={media}
             overlayOpen={overlay != null || closingOverlay}
+            routesOn={routesOn}
+            onToggleRoutes={toggleRoutes}
+            focus={syncFocus}
+            onFocusPlace={handleMapFocus}
+            onClearFocus={clearSyncFocus}
             onOpenPlace={openPlace}
             initialCenter={defaultMapPosition}
           />
@@ -280,6 +377,8 @@ export default function AtlasApp() {
           theme={theme}
           emphasizedSeason={season}
           overlayOpen={overlay != null || closingOverlay}
+          focus={syncFocus}
+          onSelectNode={handleTimelineSelect}
           onOpenPlace={openPlace}
         />
         <WhereNext
@@ -312,6 +411,7 @@ export default function AtlasApp() {
 
       {overlay?.type === "place" && placeOverlayExists ? (
         <PlaceDetailSheet
+          key={overlay.id}
           placeId={overlay.id}
           places={places}
           visits={visits}
@@ -320,6 +420,9 @@ export default function AtlasApp() {
           media={media}
           theme={theme}
           closing={closingOverlay}
+          writable={writable}
+          repo={repo}
+          onSaved={loadData}
           onClose={closeOverlay}
         />
       ) : null}

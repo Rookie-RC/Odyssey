@@ -35,6 +35,11 @@ export const lightTheme: AtlasTheme = {
     fill: "rgba(64, 90, 140, 0.05)",
     outline: "rgba(64, 90, 140, 0.0)",
   },
+  routes: {
+    // A restrained warm umber — an atlas-pencil trajectory against the
+    // parchment geography. Clearly weaker than the charcoal visited markers.
+    line: "rgba(158, 124, 84, 0.5)",
+  },
   seasons: {
     // VISUAL_SPEC §20 starting palette (light): soft, natural, low saturation.
     spring: "#8FC89B",

@@ -14,9 +14,12 @@ interface MediaPickerProps {
   placeId?: string | null;
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  /** Called for every successfully uploaded Media (Direct Edit uses it to
+   * extend its media library without waiting for a full reload). */
+  onUploaded?: (m: Media) => void;
 }
 
-export default function MediaPicker({ media, placeId, selectedIds, onChange }: MediaPickerProps) {
+export default function MediaPicker({ media, placeId, selectedIds, onChange, onUploaded }: MediaPickerProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -37,6 +40,7 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange }: M
       try {
         const m = await api.uploadMedia({ file, placeId: placeId ?? undefined });
         added.push(m.id);
+        onUploaded?.(m);
       } catch (e) {
         failed = e instanceof Error ? e.message : String(e);
         break; // stop on first failure, but keep what already succeeded

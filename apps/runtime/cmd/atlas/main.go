@@ -34,6 +34,7 @@ func main() {
 		port        = flag.Int("port", 4317, "preferred HTTP port (falls back to a free port)")
 		host        = flag.String("host", "127.0.0.1", "bind address")
 		openBrowser = flag.Bool("open-browser", true, "open the default browser on startup")
+		readonly    = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
 	)
 	flag.Parse()
 
@@ -60,7 +61,7 @@ func main() {
 	}
 	actualPort := ln.Addr().(*net.TCPAddr).Port
 
-	srv := api.NewServer(repo, geocoder, dir, actualPort)
+	srv := api.NewServer(repo, geocoder, dir, actualPort, !*readonly)
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", srv.Handler())
@@ -74,6 +75,9 @@ func main() {
 		log.Printf("Yu's Atlas runtime listening on %s", url)
 		log.Printf("data directory: %s", dir)
 		log.Printf("geocoding provider: %s", geocoder.ProviderID())
+		if *readonly {
+			log.Printf("read-only mode: all API writes rejected")
+		}
 		if err := httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}

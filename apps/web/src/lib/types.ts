@@ -105,4 +105,6 @@ export interface Settings {
   geocodingProvider?: string;
   defaultMapPosition?: { lat: number; lng: number };
   lanSharing?: boolean;
+  /** Chronological route layer visibility on the Hero Map (v1.2). */
+  showRoutes?: boolean;
 }

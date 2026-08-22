@@ -9,6 +9,7 @@ import {
   timeFraction,
   type TimelineNode,
 } from "../lib/timeline";
+import type { SyncFocus } from "../lib/sync";
 import type { AtlasTheme } from "../themes";
 
 interface JourneyTimelineProps {
@@ -23,6 +24,12 @@ interface JourneyTimelineProps {
   emphasizedSeason?: Season | null;
   /** True while an overlay (place detail / profile) is open or closing. */
   overlayOpen: boolean;
+  /** Shared Map ↔ Timeline focus (v1.3). The Timeline responds when the map
+   * initiated (`source === "map"`): it brings the focused node into view and
+   * keeps it emphasized. Timeline-initiated focus is purely visual here. */
+  focus?: SyncFocus | null;
+  /** Emitted when the user clicks/selects a node (Timeline → Map sync). */
+  onSelectNode?: (node: TimelineNode) => void;
   onOpenPlace?: (placeId: string) => void;
 }
 
@@ -159,6 +166,8 @@ export default function JourneyTimeline({
   theme,
   emphasizedSeason = null,
   overlayOpen,
+  focus = null,
+  onSelectNode,
   onOpenPlace,
 }: JourneyTimelineProps) {
   const now = useMemo(() => new Date(), []);
@@ -169,6 +178,7 @@ export default function JourneyTimeline({
   const nowTime = useMemo(() => timeFraction(now), [now]);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const trackRef = useRef<HTMLDivElement | null>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [translateX, setTranslateX] = useState(0);
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -298,6 +308,46 @@ export default function JourneyTimeline({
     }
   }, [layout]);
 
+  // --- Map → Timeline auto-scroll (v1.3) ---
+  // Only a map-initiated focus moves the Timeline. The move is smooth (a
+  // temporary transform transition on the track) and brings the node toward
+  // the centre of the viewport. Any manual input — pointer down, wheel — is
+  // the user taking over: the transition is cancelled immediately so manual
+  // control always wins.
+  const autoScrollTimerRef = useRef<number | null>(null);
+  const translateXRef = useRef(0);
+  translateXRef.current = translateX;
+  const cancelAutoScroll = useCallback(() => {
+    if (autoScrollTimerRef.current != null) {
+      window.clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+    trackRef.current?.classList.remove("atlas-timeline__track--animate");
+  }, []);
+
+  useEffect(() => {
+    cancelAutoScroll();
+    if (!focus || focus.source !== "map" || !layout) return;
+    const p = layout.positions.find((x) => x.node.id === focus.nodeId);
+    if (!p) return;
+    const target = clamp(
+      viewportWidth / 2 - p.x,
+      layout.minTranslate,
+      layout.maxTranslate
+    );
+    // Skip when the node is already comfortably central (tolerance ~10% of
+    // the viewport) — no needless movement. Reads the live position via a
+    // ref so this effect only ever fires on a focus/layout change, never on
+    // every translateX update (which would fight manual dragging).
+    if (Math.abs(translateXRef.current - target) < viewportWidth * 0.1) return;
+    trackRef.current?.classList.add("atlas-timeline__track--animate");
+    setTranslateX(target);
+    autoScrollTimerRef.current = window.setTimeout(() => {
+      trackRef.current?.classList.remove("atlas-timeline__track--animate");
+      autoScrollTimerRef.current = null;
+    }, 620);
+  }, [focus, layout, viewportWidth, cancelAutoScroll]);
+
   const panBy = useCallback(
     (delta: number) => {
       if (!layout) return;
@@ -315,6 +365,9 @@ export default function JourneyTimeline({
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!layout || e.button !== 0) return;
+      // The user is taking over: cancel any in-flight auto-scroll animation
+      // immediately (v1.3 sync).
+      cancelAutoScroll();
       dragRef.current = {
         pointerId: e.pointerId,
         startClientX: e.clientX,
@@ -360,7 +413,7 @@ export default function JourneyTimeline({
       window.addEventListener("pointerup", end);
       window.addEventListener("pointercancel", end);
     },
-    [layout, translateX, closeNow]
+    [layout, translateX, closeNow, cancelAutoScroll]
   );
 
   // Horizontal wheel (trackpad / shift+wheel) pans the timeline; a dominant
@@ -373,12 +426,13 @@ export default function JourneyTimeline({
       if (!layout) return;
       e.preventDefault();
       userDraggedRef.current = true;
+      cancelAutoScroll(); // manual control takes precedence
       closeNow();
       panBy(-e.deltaX);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, [layout, panBy, closeNow]);
+  }, [layout, panBy, closeNow, cancelAutoScroll]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -431,6 +485,9 @@ export default function JourneyTimeline({
     [layout]
   );
 
+  // The node in shared Map ↔ Timeline focus (v1.3).
+  const focusedNodeId = focus?.nodeId ?? null;
+
   if (nodes.length === 0) {
     return (
       <section className="atlas-journey">
@@ -474,6 +531,7 @@ export default function JourneyTimeline({
         >
           {layout ? (
             <div
+              ref={trackRef}
               className="atlas-timeline__track"
               style={{
                 width: layout.trackWidth,
@@ -557,9 +615,11 @@ export default function JourneyTimeline({
                   theme={theme}
                   media={media}
                   active={previewId === p.node.id}
+                  focused={focusedNodeId === p.node.id}
                   emphasizedSeason={emphasizedSeason}
                   onShow={(el) => showPreview(p.node.id, el)}
                   onHide={hidePreview}
+                  onSelect={onSelectNode}
                 />
               ))}
             </div>
@@ -588,9 +648,12 @@ interface NodeColumnProps {
   theme: AtlasTheme;
   media: Media[];
   active: boolean;
+  /** Shared Map ↔ Timeline focus (v1.3): a clear but restrained highlight. */
+  focused: boolean;
   emphasizedSeason?: Season | null;
   onShow: (el: HTMLElement) => void;
   onHide: () => void;
+  onSelect?: (node: TimelineNode) => void;
 }
 
 function NodeColumn({
@@ -598,9 +661,11 @@ function NodeColumn({
   theme,
   media,
   active,
+  focused,
   emphasizedSeason = null,
   onShow,
   onHide,
+  onSelect,
 }: NodeColumnProps) {
   const { node, x, lane } = positioned;
   const seasonColor = node.season ? theme.seasons[node.season] : null;
@@ -621,6 +686,7 @@ function NodeColumn({
         "atlas-tl-node" +
         " atlas-tl-node--lane-" + lane +
         (active ? " atlas-tl-node--active" : "") +
+        (focused ? " atlas-tl-node--focused" : "") +
         (seasonEmphasis ? " atlas-tl-node--season-emphasis" : "")
       }
       style={{ left: x, top: LINE_Y, "--tl-node-season": seasonColor ?? undefined } as React.CSSProperties}
@@ -629,7 +695,10 @@ function NodeColumn({
       onMouseLeave={onHide}
       onFocus={(e) => onShow(e.currentTarget)}
       onBlur={onHide}
-      onClick={(e) => onShow(e.currentTarget)}
+      onClick={(e) => {
+        onShow(e.currentTarget);
+        onSelect?.(node);
+      }}
     >
       <span className="atlas-tl-node__stem" aria-hidden="true" />
       <span

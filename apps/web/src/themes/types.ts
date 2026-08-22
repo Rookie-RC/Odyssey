@@ -33,6 +33,12 @@ export interface AtlasTheme {
     fill: string;
     outline: string;
   };
+  // Chronological route layer (v1.2). One semantic token per theme: thin,
+  // restrained trajectory lines that must stay visually weaker than every
+  // location marker (VISUAL_SPEC hierarchy: markers > route > country fill).
+  routes: {
+    line: string;
+  };
   // Seasonal palette for the Journey Timeline line. Semantic meaning is
   // stable across themes; only luminance/saturation may shift (VISUAL_SPEC §20).
   seasons: SeasonColors;

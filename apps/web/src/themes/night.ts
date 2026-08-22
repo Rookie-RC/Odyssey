@@ -36,6 +36,11 @@ export const nightTheme: AtlasTheme = {
     fill: "rgba(110, 140, 190, 0.07)",
     outline: "rgba(126, 152, 196, 0.0)",
   },
+  routes: {
+    // A quiet steel-blue trajectory over the deep navy — elegant, never neon.
+    // Clearly weaker than the warm visited markers.
+    line: "rgba(146, 172, 204, 0.42)",
+  },
   seasons: {
     // VISUAL_SPEC §20 starting palette (night): slightly deeper, more luminous.
     spring: "#70C58B",
