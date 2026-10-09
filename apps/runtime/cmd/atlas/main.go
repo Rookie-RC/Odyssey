@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -46,6 +47,7 @@ func main() {
 		trustProxy   = flag.Bool("trust-proxy", false, "cloud: trust X-Forwarded-For/-Proto from a reverse proxy on this machine")
 	)
 	flag.Parse()
+	configureDNS(os.Getenv("ATLAS_DNS"))
 
 	switch *mode {
 	case "local":
@@ -281,4 +283,43 @@ func openBrowserURL(url string) {
 	if err := cmd.Start(); err != nil {
 		log.Printf("could not open browser: %v", err)
 	}
+}
+
+// parseDNSServers turns "1.1.1.1, [2001:db8::1], 9.9.9.9:5353" into dialable
+// host:port addresses (port 53 unless given).
+func parseDNSServers(list string) []string {
+	var out []string
+	for _, s := range strings.Split(list, ",") {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(s); err != nil {
+			s = net.JoinHostPort(strings.Trim(s, "[]"), "53")
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// configureDNS points Go's resolver at explicit name servers. Android has no
+// /etc/resolv.conf, so the pure-Go resolver would ask 127.0.0.1:53 and every
+// lookup (place search) would fail; the Android app (apps/android) passes the
+// active network's DNS servers in ATLAS_DNS. Each dial goes to the next
+// server, so the resolver's retries walk the whole list.
+func configureDNS(list string) {
+	servers := parseDNSServers(list)
+	if len(servers) == 0 {
+		return
+	}
+	var next atomic.Uint32
+	d := net.Dialer{Timeout: 3 * time.Second}
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			i := int(next.Add(1)-1) % len(servers)
+			return d.DialContext(ctx, network, servers[i])
+		},
+	}
+	log.Printf("DNS servers: %s", strings.Join(servers, ", "))
 }
