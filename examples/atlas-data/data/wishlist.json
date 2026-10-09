@@ -9,16 +9,22 @@
       "season": "summer"
     },
     "priority": 5,
-    "why": "Midnight sun, dramatic mountains and hiking.",
+    "why": "Midnight sun over jagged peaks, and long hikes that end above the sea.",
     "inspirations": [
       {
         "type": "photo",
         "title": "Lofoten at midnight",
         "platform": "flickr"
+      },
+      {
+        "type": "video",
+        "title": "15 things to do in Lofoten",
+        "platform": "YouTube"
       }
     ],
     "mediaIds": [
-      "m-lofoten-sakrisoy"
+      "m-lofoten-sakrisoy",
+      "m-lofoten-reine"
     ],
     "note": "Maybe 2027 or 2028. Could go with friends. Need to check whether renting a car is necessary."
   },
@@ -30,7 +36,7 @@
       "autumn"
     ],
     "priority": 4,
-    "why": "Coastal light, tilework and long evenings.",
+    "why": "Coastal light on tiled facades, and long evenings above the Tagus.",
     "inspirations": [
       {
         "type": "book",
@@ -53,7 +59,7 @@
       "season": "summer"
     },
     "priority": 3,
-    "why": "Caldera views and a slow island week.",
+    "why": "Caldera views at sunset and a slow island week.",
     "inspirations": [
       {
         "type": "friend",
@@ -87,7 +93,7 @@
       "winter"
     ],
     "priority": 1,
-    "why": "Winter hikes and quiet mountain villages.",
+    "why": "Winter hikes under pale peaks, and quiet mountain villages.",
     "inspirations": [
       {
         "type": "article",

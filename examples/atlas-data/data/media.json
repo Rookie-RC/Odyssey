@@ -68,5 +68,85 @@
     "sourceUrl": "https://commons.wikimedia.org/wiki/File:Drei_Zinnen_Tre_Cime_di_Lavaredo_Dolomites.jpg",
     "author": "Wolfgang Moroder",
     "license": "CC BY-SA 3.0"
+  },
+  {
+    "id": "m-bordeaux-pont-de-pierre",
+    "type": "image",
+    "source": "local",
+    "path": "/media/bordeaux/pont-de-pierre.jpg",
+    "caption": "Pont de pierre as the lamps come on",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pont_de_pierre_Bordeaux33.jpg",
+    "author": "Arnaudin Jérémy",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-amsterdam-rijksmuseum",
+    "type": "image",
+    "source": "local",
+    "path": "/media/amsterdam/rijksmuseum.jpg",
+    "caption": "Lazy hours on Museumplein below the Rijksmuseum",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Rijksmuseum_from_Museumplein_2523.jpg",
+    "author": "C messier",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-lofoten-reine",
+    "type": "image",
+    "source": "local",
+    "path": "/media/lofoten/reine.jpg",
+    "caption": "Reine glowing on a June night",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Houses_of_Reine_by_Gravdalsbukta,_Moskenes,_Nordland,_Norway,_2022_June.jpg",
+    "author": "Ximonic (Simo Räsänen)",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-julich-aachen-cathedral",
+    "type": "image",
+    "source": "local",
+    "path": "/media/julich-aachen/aachen-cathedral.jpg",
+    "caption": "Aachen Cathedral in the evening sun",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Aachen_Cathedral_North_View_at_Evening.jpg",
+    "author": "א (Aleph)",
+    "license": "CC BY-SA 2.5"
+  },
+  {
+    "id": "m-barcelona-sagrada",
+    "type": "image",
+    "source": "local",
+    "path": "/media/barcelona/sagrada-familia.jpg",
+    "caption": "Sagrada Família above the rooftops, the sea beyond",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Barcelona_11_-_panoramio.jpg",
+    "author": "Mickey Løgitmark",
+    "license": "CC BY 3.0"
+  },
+  {
+    "id": "m-london-stpauls",
+    "type": "image",
+    "source": "local",
+    "path": "/media/london/st-pauls.jpg",
+    "caption": "St Paul's from the Millennium Bridge at dusk",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:2014,_St._Paul%27s_from_Millenium_Bridge_-_panoramio.jpg",
+    "author": "Chris English",
+    "license": "CC BY-SA 3.0"
+  },
+  {
+    "id": "m-edinburgh-arthurs-seat",
+    "type": "image",
+    "source": "local",
+    "path": "/media/edinburgh/arthurs-seat.jpg",
+    "caption": "The castle framed by the crags of Arthur's Seat",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Edinburgh_Arthur%27s_Seat-20110904-RM-121450.jpg",
+    "author": "Ermell",
+    "license": "CC BY-SA 4.0"
+  },
+  {
+    "id": "m-athens-acropolis",
+    "type": "image",
+    "source": "local",
+    "path": "/media/athens/acropolis.jpg",
+    "caption": "The Acropolis from Philopappos Hill",
+    "sourceUrl": "https://commons.wikimedia.org/wiki/File:Attica_06-13_Athens_50_View_from_Philopappos_-_Acropolis_Hill.jpg",
+    "author": "A.Savin",
+    "license": "CC BY-SA 3.0"
   }
 ]

@@ -4,47 +4,81 @@
     "placeId": "julich-aachen",
     "visitType": "lived",
     "startDate": "2020-08-01",
-    "reflection": "Current base in Germany."
+    "highlights": [
+      {
+        "name": "Aachen Cathedral",
+        "note": "Saturday mornings in the old town"
+      },
+      {
+        "name": "Rur cycle path",
+        "note": "Slow rides out past the fields"
+      }
+    ],
+    "mediaIds": [
+      "m-julich-aachen-cathedral"
+    ],
+    "reflection": "Not a trip, just where everyday life happens. Train rides into Aachen, bike paths along the Rur, and a cathedral I somehow never get tired of."
   },
   {
     "id": "v-amsterdam",
     "placeId": "amsterdam",
     "visitType": "trip",
+    "transport": "car",
     "startDate": "2021-05-14",
     "endDate": "2021-05-17",
     "withFriends": true,
     "highlights": [
       {
-        "name": "Rijksmuseum"
+        "name": "Rijksmuseum",
+        "note": "A whole morning in the Gallery of Honour"
       },
       {
         "name": "Canal walk",
         "note": "Golden hour along the canals"
+      },
+      {
+        "name": "Jordaan",
+        "note": "Apple pie on a quiet side street"
       }
     ],
     "mediaIds": [
-      "m-amsterdam-canal"
-    ]
+      "m-amsterdam-canal",
+      "m-amsterdam-rijksmuseum"
+    ],
+    "reflection": "Three days of bikes, bridges and slow canal light. We walked far more than we planned and still left half the list for next time."
   },
   {
     "id": "v-barcelona",
     "placeId": "barcelona",
     "visitType": "trip",
+    "transport": "plane",
     "startDate": "2022-09-02",
     "endDate": "2022-09-08",
+    "withFriends": true,
     "highlights": [
       {
-        "name": "Sagrada Família"
+        "name": "Sagrada Família",
+        "note": "Late-afternoon light through the stained glass"
       },
       {
-        "name": "Gothic Quarter"
+        "name": "Gothic Quarter",
+        "note": "Getting lost on purpose"
+      },
+      {
+        "name": "Bunkers del Carmel",
+        "note": "The whole city turning gold at sunset"
       }
-    ]
+    ],
+    "mediaIds": [
+      "m-barcelona-sagrada"
+    ],
+    "reflection": "A week of late dinners and early swims. The Sagrada Família was even stranger and lovelier inside than I had imagined."
   },
   {
     "id": "v-bordeaux",
     "placeId": "bordeaux",
     "visitType": "trip",
+    "transport": "bus",
     "startDate": "2025-11-10",
     "endDate": "2025-11-15",
     "withFriends": true,
@@ -55,9 +89,14 @@
       {
         "name": "Along the Garonne",
         "note": "Long evening walks on the quays"
+      },
+      {
+        "name": "Marché des Capucins",
+        "note": "Oysters and white wine on a Saturday morning"
       }
     ],
     "mediaIds": [
+      "m-bordeaux-pont-de-pierre",
       "m-bordeaux-bourse"
     ],
     "reflection": "Quiet city, long walks along the Garonne. The light in November sat low and golden on the stone facades."
@@ -66,35 +105,74 @@
     "id": "v-london",
     "placeId": "london",
     "visitType": "trip",
+    "transport": "train",
     "startDate": "2023-06-01",
     "endDate": "2023-06-05",
-    "withFriends": false
+    "withFriends": false,
+    "highlights": [
+      {
+        "name": "Tate Modern",
+        "note": "The Turbine Hall, then the view from the top floor"
+      },
+      {
+        "name": "South Bank",
+        "note": "Walking the river to the Millennium Bridge at dusk"
+      },
+      {
+        "name": "Borough Market"
+      }
+    ],
+    "mediaIds": [
+      "m-london-stpauls"
+    ],
+    "reflection": "A solo trip with no real plan. I walked the river most evenings and let the city decide the rest."
   },
   {
     "id": "v-edinburgh",
     "placeId": "edinburgh",
     "visitType": "day_trip",
+    "transport": "plane",
     "startDate": "2023-06-03",
     "withFriends": true,
     "highlights": [
       {
-        "name": "Arthur's Seat"
+        "name": "Arthur's Seat",
+        "note": "Windy summit, the whole city below"
+      },
+      {
+        "name": "Royal Mile",
+        "note": "Closes and courtyards off the main street"
       }
-    ]
+    ],
+    "mediaIds": [
+      "m-edinburgh-arthurs-seat"
+    ],
+    "reflection": "One long day carved out of the London week. Climbing Arthur's Seat with friends in the wind was worth every hour on the train."
   },
   {
     "id": "v-athens",
     "placeId": "athens",
     "visitType": "trip",
+    "transport": "plane",
     "startDate": "2024-04-12",
     "endDate": "2024-04-19",
     "highlights": [
       {
-        "name": "Acropolis"
+        "name": "Acropolis",
+        "note": "Up early, before the crowds and the heat"
       },
       {
-        "name": "Plaka"
+        "name": "Plaka",
+        "note": "Evenings in the lanes under the hill"
+      },
+      {
+        "name": "Philopappos Hill",
+        "note": "Sunset with the Parthenon across the way"
       }
-    ]
+    ],
+    "mediaIds": [
+      "m-athens-acropolis"
+    ],
+    "reflection": "Orange blossom in the streets and warm stone underfoot. The Acropolis felt less like a monument than a hill the whole city shares."
   }
 ]
