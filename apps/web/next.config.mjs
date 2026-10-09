@@ -17,7 +17,12 @@ const nextConfig = {
   ...(isDev
     ? {
         async rewrites() {
-          const target = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:4317";
+          // ATLAS_RUNTIME moves only the proxy target (the browser keeps
+          // calling its own origin, so cloud-mode session cookies work).
+          // NEXT_PUBLIC_API_BASE instead makes the browser call the runtime
+          // directly, cross-origin — fine for local mode only.
+          const target =
+            process.env.ATLAS_RUNTIME ?? process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:4317";
           return [
             { source: "/api/:path*", destination: `${target}/api/:path*` },
             // Local media lives in atlas-data/media and is served by the Go

@@ -118,8 +118,11 @@ cd apps/web
 pnpm dev
 ```
 
-`NEXT_PUBLIC_API_BASE` still works as an override of the proxy target if the
-runtime is on a non-default port.
+If the runtime is on a non-default port, point the proxy at it with
+`ATLAS_RUNTIME=http://127.0.0.1:<port> pnpm dev`. (`NEXT_PUBLIC_API_BASE`
+also works, but it makes the browser call the runtime directly,
+cross-origin, so cloud-mode sign-in cookies are not kept — use it for local
+mode only.)
 
 ### Tests
 
