@@ -23,10 +23,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface RuntimeInfo {
   mode: string;
+  /** False for read-only runtimes and for every request arriving over LAN. */
   writable: boolean;
   port: number;
   dataDir: string;
   geocodingProvider: string;
+  /** True when this browser reaches the runtime over the local network. */
+  remote?: boolean;
+  /** Read-only LAN sharing (PRODUCT_SPEC §4). */
+  lan?: { enabled: boolean; urls: string[]; error?: string };
+}
+
+export interface BackupInfo {
+  name: string;
+  size: number;
+  createdAt: string;
 }
 
 export const api = {
@@ -146,4 +157,21 @@ export const api = {
     return JSON.parse(text) as { imported: boolean; backup: string };
   },
   newAtlas: () => request<{ created: boolean; backup: string }>("/api/atlas/new", { method: "POST" }),
+
+  // --- automatic backups ---
+  listBackups: () => request<BackupInfo[]>("/api/atlas/backups"),
+  restoreBackup: (name: string) =>
+    request<{ restored: boolean; backup: string }>(
+      "/api/atlas/backups/" + encodeURIComponent(name) + "/restore",
+      { method: "POST" }
+    ),
+  deleteBackup: (name: string) =>
+    request<{ deleted: string }>("/api/atlas/backups/" + encodeURIComponent(name), { method: "DELETE" }),
 };
+
+/** Downscaled variant of a local media path (served by the runtime's
+ * thumbnail cache). Web (remote URL) media is returned unchanged. */
+export function mediaSrc(m: { path: string; source?: string }, width?: 160 | 320 | 640 | 960 | 1280 | 1920): string {
+  if (!width || m.source === "web" || !m.path.startsWith("/media/")) return m.path;
+  return m.path + (m.path.includes("?") ? "&" : "?") + "w=" + width;
+}

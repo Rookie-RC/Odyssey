@@ -27,6 +27,9 @@ export interface VisitHighlight {
   note?: string;
 }
 
+/** How a trip was travelled (lib/transport.ts); unset means plane. */
+export type Transport = "plane" | "train" | "bus" | "car";
+
 export interface Visit {
   id: string;
   placeId: string;
@@ -34,6 +37,7 @@ export interface Visit {
   startDate?: string;
   endDate?: string;
   withFriends?: boolean;
+  transport?: Transport;
   highlights?: VisitHighlight[];
   mediaIds?: string[];
   reflection?: string;
@@ -101,10 +105,18 @@ export interface Profile {
 }
 
 export interface Settings {
+  /** Theme preference: "auto" | "light" | "night" | "journal" | "minimal" | "film". */
   theme?: string;
   geocodingProvider?: string;
   defaultMapPosition?: { lat: number; lng: number };
   lanSharing?: boolean;
   /** Chronological route layer visibility on the Hero Map (v1.2). */
   showRoutes?: boolean;
+  /** Wishlist pins on the Hero Map (off by default: VISUAL_SPEC §3 keeps
+   * future places off the default hero). */
+  showWishlist?: boolean;
+  /** Hide the visited-country fill. */
+  hideCountries?: boolean;
+  /** Interface language preference: "auto" | "en" | "zh". */
+  language?: string;
 }

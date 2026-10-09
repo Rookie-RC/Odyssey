@@ -21,6 +21,7 @@ import type {
   VisitType,
   Wishlist,
 } from "./types";
+import { monthYear, t } from "./i18n";
 
 export type TimelineNodeKind = "past" | "now" | "future";
 
@@ -68,14 +69,9 @@ const VISIT_TYPE_LABEL: Record<VisitType, string> = {
   transit: "Transit",
 };
 
-export function visitTypeLabel(t: VisitType): string {
-  return VISIT_TYPE_LABEL[t] ?? t;
+export function visitTypeLabel(v: VisitType): string {
+  return VISIT_TYPE_LABEL[v] ? t(VISIT_TYPE_LABEL[v]) : v;
 }
-
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
 
 const SEASON_LABEL: Record<Season, string> = {
   spring: "Spring",
@@ -85,7 +81,7 @@ const SEASON_LABEL: Record<Season, string> = {
 };
 
 export function seasonLabel(s: Season): string {
-  return SEASON_LABEL[s];
+  return t(SEASON_LABEL[s]);
 }
 
 // Mid-month index (1-12) used to position a season on the temporal axis.
@@ -170,11 +166,11 @@ export function visitTimelineTime(
   return visitDateTime(v);
 }
 
-function formatMonthYear(str: string): string {
+/** "Jun 2023" / "2023年6月" from "YYYY-MM[-DD]". */
+export function formatMonthYear(str: string): string {
   const m = /^(\d{4})-(\d{2})/.exec(str);
   if (!m) return str;
-  const month = Number(m[2]);
-  return (month >= 1 && month <= 12 ? MONTHS[month - 1] + " " : "") + m[1];
+  return monthYear(m[1], Number(m[2]));
 }
 
 function resolveFutureTiming(
@@ -184,18 +180,18 @@ function resolveFutureTiming(
   if (tt.year != null && tt.season != null) {
     return {
       time: seasonTime(tt.year, tt.season),
-      dateLabel: `${SEASON_LABEL[tt.season]} ${tt.year}`,
+      dateLabel: t("{season} {year}", { season: seasonLabel(tt.season), year: tt.year }),
       season: tt.season,
     };
   }
   if (tt.year != null) {
-    return { time: tt.year + 0.5, dateLabel: String(tt.year), season: null };
+    return { time: tt.year + 0.5, dateLabel: t("{year}", { year: tt.year }), season: null };
   }
   // Season only ("Summer, year unknown"): place at the next occurrence.
   const season = tt.season as Season;
   return {
     time: nextSeasonTime(nowTime, season),
-    dateLabel: SEASON_LABEL[season],
+    dateLabel: seasonLabel(season),
     season,
   };
 }
@@ -225,23 +221,23 @@ export function getTimelineItems(
     // by the Hero Map route layer), so Timeline order can never diverge from
     // route order. Visits without any date get a synthetic early position so
     // they still appear ("Earlier") without pretending to a real date.
-    const t = visitTimelineTime(v, currentId, nowTime);
+    const vt = visitTimelineTime(v, currentId, nowTime);
     const date = v.startDate ? parseDate(v.startDate) : v.endDate ? parseDate(v.endDate) : null;
     const season = date ? seasonFromMonth(date.getMonth() + 1) : null;
     nodes.push({
       id: "visit:" + v.id,
       kind: isNow ? "now" : "past",
       place,
-      time: isNow ? nowTime : t ?? nowTime - 20,
+      time: isNow ? nowTime : vt ?? nowTime - 20,
       season: isNow ? nowSeason : season,
       dateLabel: isNow
-        ? "Now"
+        ? t("Now")
         : v.startDate
           ? formatMonthYear(v.startDate)
           : v.endDate
             ? formatMonthYear(v.endDate)
-            : "Earlier",
-      metaLabel: isNow ? "Living here" : visitTypeLabel(v.visitType),
+            : t("Earlier"),
+      metaLabel: isNow ? t("Living here") : visitTypeLabel(v.visitType),
       withFriends: v.withFriends,
       highlights: v.highlights,
       reflection: v.reflection,
@@ -262,8 +258,8 @@ export function getTimelineItems(
         place,
         time: nowTime,
         season: nowSeason,
-        dateLabel: "Now",
-        metaLabel: "Current base",
+        dateLabel: t("Now"),
+        metaLabel: t("Current base"),
         mediaIds: [],
         depthRank: 6,
       });
@@ -284,7 +280,7 @@ export function getTimelineItems(
       time,
       season,
       dateLabel,
-      metaLabel: "Wishlist",
+      metaLabel: t("Wishlist"),
       why: w.why,
       inspirations: w.inspirations,
       priority: w.priority,

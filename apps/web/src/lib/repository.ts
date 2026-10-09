@@ -2,7 +2,7 @@
 // implementation (HttpAtlasRepository -> local runtime) can later be swapped
 // for SupabaseRepository or RemoteApiRepository without UI changes.
 import type { Media, Place, Profile, Visit, Wishlist } from "./types";
-import { api } from "./api";
+import { api, type BackupInfo } from "./api";
 
 export interface AtlasRepository {
   getProfile(): Promise<Profile>;
@@ -42,6 +42,11 @@ export interface AtlasRepository {
   importAtlas(file: File): Promise<{ imported: boolean; backup: string }>;
   /** Replaces the current Atlas with a blank one (backup created first). */
   newAtlas(): Promise<{ created: boolean; backup: string }>;
+  /** Automatic .atlas backups kept by the runtime, newest first. */
+  listBackups(): Promise<BackupInfo[]>;
+  /** Restores a backup (the current Atlas is backed up first). */
+  restoreBackup(name: string): Promise<{ restored: boolean; backup: string }>;
+  deleteBackup(name: string): Promise<{ deleted: string }>;
 }
 
 export class HttpAtlasRepository implements AtlasRepository {
@@ -114,5 +119,14 @@ export class HttpAtlasRepository implements AtlasRepository {
   }
   newAtlas(): Promise<{ created: boolean; backup: string }> {
     return api.newAtlas();
+  }
+  listBackups(): Promise<BackupInfo[]> {
+    return api.listBackups();
+  }
+  restoreBackup(name: string): Promise<{ restored: boolean; backup: string }> {
+    return api.restoreBackup(name);
+  }
+  deleteBackup(name: string): Promise<{ deleted: string }> {
+    return api.deleteBackup(name);
   }
 }

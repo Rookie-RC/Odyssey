@@ -22,18 +22,7 @@ import type {
   Wishlist,
 } from "./types";
 import { VISIT_RANK, seasonLabel, visitTypeLabel } from "./timeline";
-
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-const SEASON_LABEL: Record<Season, string> = {
-  spring: "Spring",
-  summer: "Summer",
-  autumn: "Autumn",
-  winter: "Winter",
-};
+import { getLocale, monthName, t, tn } from "./i18n";
 
 const INSPIRATION_LABEL: Record<InspirationType, string> = {
   book: "Book",
@@ -172,18 +161,20 @@ export function getPrimaryMediaForPlace(
 
 // --- formatting helpers ---
 
-function fmtDate(dateStr: string): { y: string; mo: string; d: string | null } | null {
+function fmtDate(dateStr: string): { y: string; m: number; mo: string; d: string | null } | null {
   const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(dateStr);
   if (!m) return null;
   const month = Number(m[2]);
   return {
     y: m[1],
-    mo: month >= 1 && month <= 12 ? MONTHS[month - 1] : m[2],
+    m: month,
+    mo: monthName(month),
     d: m[3] ? String(Number(m[3])) : null,
   };
 }
 
 /** "Nov 10 – 15, 2025", "Jul – Aug 2025", "May 2021", "" when unknown.
+ * In Chinese: "2025年11月10日–15日", "2025年7月–8月", "2021年5月".
  *
  * Both day-precision (`2025-11-10`) and month-precision (`2025-07`) inputs are
  * supported — the Visit form uses month inputs, so month precision is the
@@ -193,15 +184,17 @@ export function formatDateRange(start?: string, end?: string): string {
   const s = start ? fmtDate(start) : null;
   const e = end ? fmtDate(end) : null;
   if (!s) return "";
+  return getLocale() === "zh" ? rangeZh(s, e) : rangeEn(s, e);
+}
 
+type DateParts = NonNullable<ReturnType<typeof fmtDate>>;
+
+function rangeEn(s: DateParts, e: DateParts | null): string {
   // "Nov 10, 2025" / "May 2021"
-  const single = (p: NonNullable<ReturnType<typeof fmtDate>>) =>
-    p.d ? `${p.mo} ${p.d}, ${p.y}` : `${p.mo} ${p.y}`;
-
+  const single = (p: DateParts) => (p.d ? `${p.mo} ${p.d}, ${p.y}` : `${p.mo} ${p.y}`);
   if (!e) return single(s);
-
   if (s.y === e.y) {
-    if (s.mo === e.mo) {
+    if (s.m === e.m) {
       // Same month: "Nov 10 – 15, 2025" with days, else just "Jul 2025".
       if (s.d && e.d) return s.d === e.d ? single(s) : `${s.mo} ${s.d} – ${e.d}, ${s.y}`;
       return `${s.mo} ${s.y}`;
@@ -210,22 +203,34 @@ export function formatDateRange(start?: string, end?: string): string {
     if (s.d && e.d) return `${s.mo} ${s.d} – ${e.mo} ${e.d}, ${s.y}`;
     return `${s.mo} – ${e.mo} ${s.y}`;
   }
-
   // Different years: each side carries its own year.
+  return `${single(s)} – ${single(e)}`;
+}
+
+function rangeZh(s: DateParts, e: DateParts | null): string {
+  const single = (p: DateParts) => `${p.y}年${p.m}月` + (p.d ? `${p.d}日` : "");
+  if (!e) return single(s);
+  if (s.y === e.y) {
+    if (s.m === e.m) {
+      if (s.d && e.d) return s.d === e.d ? single(s) : `${s.y}年${s.m}月${s.d}日–${e.d}日`;
+      return `${s.y}年${s.m}月`;
+    }
+    if (s.d && e.d) return `${s.y}年${s.m}月${s.d}日 – ${e.m}月${e.d}日`;
+    return `${s.y}年${s.m}月–${e.m}月`;
+  }
   return `${single(s)} – ${single(e)}`;
 }
 
 /** "Summer 2027", "Summer", "2028", "Sometime". */
 export function targetTimeLabel(tt?: TargetTime): string {
-  if (!tt || (tt.year == null && tt.season == null)) return "Sometime";
-  const parts: string[] = [];
-  if (tt.season) parts.push(SEASON_LABEL[tt.season]);
-  if (tt.year != null) parts.push(String(tt.year));
-  return parts.join(" ") || "Sometime";
+  if (!tt || (tt.year == null && tt.season == null)) return t("Sometime");
+  if (tt.season && tt.year != null) return t("{season} {year}", { season: seasonLabel(tt.season), year: tt.year });
+  if (tt.season) return seasonLabel(tt.season);
+  return t("{year}", { year: tt.year as number });
 }
 
-export function inspirationTypeLabel(t: InspirationType): string {
-  return INSPIRATION_LABEL[t] ?? "Other";
+export function inspirationTypeLabel(type: InspirationType): string {
+  return t(INSPIRATION_LABEL[type] ?? "Other");
 }
 
 /** Best single-line description of an inspiration source. */
@@ -245,6 +250,47 @@ export function flagEmoji(countryCode?: string): string {
   if (!/^[A-Z]{2}$/.test(cc)) return "";
   const A = 0x1f1e6;
   return String.fromCodePoint(A + (cc.charCodeAt(0) - 65), A + (cc.charCodeAt(1) - 65));
+}
+
+export interface AtlasFacts {
+  since: number | null;
+  places: number;
+  countries: string[];
+  wishes: number;
+}
+
+/** A quiet colophon for the atlas — when it begins, how many places and
+ * countries it holds, how many wishes wait. Not a scorecard (VISUAL_SPEC §29). */
+export function atlasFacts(places: Place[], visits: Visit[], wishlist: Wishlist[]): AtlasFacts {
+  const visitedIds = new Set(visits.map((v) => v.placeId));
+  const visitedPlaces = places.filter((p) => visitedIds.has(p.id));
+  const countries = Array.from(new Set(visitedPlaces.map((p) => p.countryCode).filter(Boolean)));
+  const years = visits.map((v) => Number((v.startDate ?? v.endDate ?? "").slice(0, 4))).filter((y) => y > 1900);
+  return {
+    since: years.length ? Math.min(...years) : null,
+    places: visitedPlaces.length,
+    countries,
+    wishes: wishlist.length,
+  };
+}
+
+/** "Since 2020 · 7 places · 6 countries · 5 wishes" (localized). */
+export function atlasFactsLine(f: AtlasFacts, withWishes = true): string {
+  return [
+    f.since ? t("Since {year}", { year: f.since }) : null,
+    tn(f.places, "{n} place", "{n} places"),
+    tn(f.countries.length, "{n} country", "{n} countries"),
+    withWishes && f.wishes > 0 ? tn(f.wishes, "{n} wish", "{n} wishes") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** "Yu" → "Yu’s Atlas", "James" → "James’ Atlas", no name → "My Atlas". */
+export function atlasWordmark(name?: string): string {
+  const first = (name ?? "").trim().split(/\s+/)[0];
+  if (!first) return t("My Atlas");
+  return t(/s$/i.test(first) ? "{name}’ Atlas" : "{name}’s Atlas", { name: first });
 }
 
 export { seasonLabel, visitTypeLabel };
