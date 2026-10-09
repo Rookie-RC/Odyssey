@@ -30,6 +30,25 @@ export interface VisitHighlight {
 /** How a trip was travelled (lib/transport.ts); unset means plane. */
 export type Transport = "plane" | "train" | "bus" | "car";
 
+/** What a trip was for (lib/activity.ts). The first is the primary one. */
+export type Activity =
+  | "sightseeing"
+  | "citywalk"
+  | "museum"
+  | "food"
+  | "shopping"
+  | "concert"
+  | "themepark"
+  | "hiking"
+  | "ski"
+  | "surf"
+  | "beach"
+  | "picnic"
+  | "aurora"
+  | "backpacking"
+  | "study"
+  | "visiting";
+
 export interface Visit {
   id: string;
   placeId: string;
@@ -38,6 +57,9 @@ export interface Visit {
   endDate?: string;
   withFriends?: boolean;
   transport?: Transport;
+  /** What the trip was for, primary first. Known ids are `Activity`s
+   * (lib/activity.ts); ids from a newer app version are kept as they are. */
+  activities?: string[];
   highlights?: VisitHighlight[];
   mediaIds?: string[];
   reflection?: string;

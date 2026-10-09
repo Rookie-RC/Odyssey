@@ -5,8 +5,9 @@
 //   - only visited places (those referenced by a Visit) receive markers
 //   - Wishlist-only places are excluded from the default Hero Map
 //   - countries are derived from visited Place.countryCode and are metadata only
-import type { Place, Profile, Visit, VisitType } from "./types";
-import { VISIT_RANK, formatMonthYear } from "./timeline";
+import type { Activity, Place, Profile, Visit, VisitType } from "./types";
+import { VISIT_RANK, formatMonthYear, visitDateTime } from "./timeline";
+import { primaryActivity } from "./activity";
 import { t } from "./i18n";
 
 export interface MapMarker {
@@ -16,6 +17,35 @@ export interface MapMarker {
   dateLabel: string;
   withFriends: boolean;
   rank: number; // higher = stronger visual weight
+  /** The icon in the pin: what the trip there was for, or "overnight" for a
+   * stopover without one. Null keeps the plain dot (homes, transits). */
+  activity: Activity | "overnight" | null;
+}
+
+/** Radius in px of the pin's own disc (label offsets and collisions). */
+export function markerRadius(m: Pick<MapMarker, "isCurrent" | "activity">): number {
+  if (m.isCurrent) return 9;
+  if (m.activity === "overnight") return 9;
+  return m.activity ? 11 : 5;
+}
+
+/** The pin icon for a place: the primary activity of its strongest visit,
+ * else of its most recent visit that names one; a bare stopover is a night in
+ * passing. Homes (lived, current) and transits keep their plain marks. */
+function markerActivity(
+  strongest: Visit,
+  placeVisits: Visit[],
+  isCurrent: boolean
+): MapMarker["activity"] {
+  if (isCurrent || strongest.visitType === "lived" || strongest.visitType === "transit") return null;
+  const own = primaryActivity(strongest);
+  if (own) return own;
+  const byRecency = [...placeVisits].sort((a, b) => (visitDateTime(b) ?? -Infinity) - (visitDateTime(a) ?? -Infinity));
+  for (const v of byRecency) {
+    const a = primaryActivity(v);
+    if (a) return a;
+  }
+  return strongest.visitType === "stopover" ? "overnight" : null;
 }
 
 /** Whether a visited marker plants a country flag: not the current base (it
@@ -36,7 +66,11 @@ export function buildMapMarkers(
   profile: Profile | null
 ): MapMarker[] {
   const strongest = new Map<string, Visit>();
+  const byPlace = new Map<string, Visit[]>();
   for (const v of visits) {
+    const list = byPlace.get(v.placeId);
+    if (list) list.push(v);
+    else byPlace.set(v.placeId, [v]);
     const prev = strongest.get(v.placeId);
     if (!prev || VISIT_RANK[v.visitType] > VISIT_RANK[prev.visitType]) {
       strongest.set(v.placeId, v);
@@ -56,6 +90,7 @@ export function buildMapMarkers(
       dateLabel: formatDateLabel(visit),
       withFriends: visit.withFriends ?? false,
       rank: isCurrent ? 6 : VISIT_RANK[visit.visitType],
+      activity: markerActivity(visit, byPlace.get(place.id) ?? [], isCurrent),
     });
   }
   markers.sort((a, b) => b.rank - a.rank);

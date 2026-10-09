@@ -458,6 +458,105 @@ html[data-theme="film"] .atlas-date {
   opacity: 1;
 }
 
+/* Activity picker: icon chips in three small groups; the primary one (drawn
+   on the map pin) carries a dot. */
+.atlas-activity-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.atlas-activity-picker__group {
+  display: grid;
+  gap: 6px;
+}
+
+.atlas-activity-picker__group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.atlas-activity-picker__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.atlas-activity-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.atlas-activity-chip svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.atlas-activity-chip:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.atlas-activity-chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.atlas-activity-chip.is-active svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.atlas-activity-chip.is-primary::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.atlas-activity-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Activity chips in read-only places (Place Detail, memory card). */
+.atlas-activity-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.atlas-activity-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.atlas-activity-tag svg {
+  flex: none;
+  color: var(--accent);
+}
+
 /* Chinese text: no artificial tracking on uppercase-style labels, slightly
    taller lines for CJK glyphs. */
 html[lang="zh-CN"] .atlas-eyebrow,

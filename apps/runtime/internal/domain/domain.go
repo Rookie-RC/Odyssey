@@ -79,6 +79,41 @@ func ValidTransport(t string) bool {
 	}
 }
 
+// Activities say what a trip was for ("ski", "citywalk", "picnic" …); the
+// first is the primary one, drawn on the place's pin. The vocabulary lives in
+// the frontend (apps/web/src/lib/activity.ts) so it can grow without a runtime
+// change: the runtime only checks the shape — short lowercase slugs, no
+// duplicates, at most MaxActivities.
+const MaxActivities = 8
+
+func ValidActivities(list []string) bool {
+	if len(list) > MaxActivities {
+		return false
+	}
+	seen := make(map[string]bool, len(list))
+	for _, a := range list {
+		if !validSlug(a) || seen[a] {
+			return false
+		}
+		seen[a] = true
+	}
+	return true
+}
+
+// validSlug: 1–32 characters of a–z, 0–9, '_' or '-', starting with a letter.
+func validSlug(s string) bool {
+	if len(s) == 0 || len(s) > 32 || s[0] < 'a' || s[0] > 'z' {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
 type VisitHighlight struct {
 	Name string `json:"name"`
 	Note string `json:"note,omitempty"`
@@ -92,6 +127,7 @@ type Visit struct {
 	EndDate     string           `json:"endDate,omitempty"`
 	WithFriends bool             `json:"withFriends,omitempty"`
 	Transport   Transport        `json:"transport,omitempty"`
+	Activities  []string         `json:"activities,omitempty"`
 	Highlights  []VisitHighlight `json:"highlights,omitempty"`
 	MediaIDs    []string         `json:"mediaIds,omitempty"`
 	Reflection  string           `json:"reflection,omitempty"`

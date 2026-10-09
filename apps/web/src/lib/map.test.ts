@@ -1,6 +1,15 @@
 import { describe, expect, test } from "vitest";
 import type { StyleSpecification } from "maplibre-gl";
-import { buildMapMarkers, buildWishMarkers, placesBounds, visitedCountryCodes, wishlistCountryCodes } from "./map-data";
+import {
+  buildMapMarkers,
+  buildWishMarkers,
+  markerRadius,
+  placesBounds,
+  visitedCountryCodes,
+  wishlistCountryCodes,
+} from "./map-data";
+import { ACTIVITIES, ACTIVITY_GLYPH, activitiesOf, primaryActivity } from "./activity";
+import type { Visit } from "./types";
 import { getRouteTrajectory, mercatorBearing } from "./routes";
 import { LAYER_BEFORE, adaptBaseStyle } from "./map-style";
 import { themes } from "../themes";
@@ -31,6 +40,43 @@ describe("map data", () => {
   test("placesBounds", () => {
     expect(placesBounds([])).toBeNull();
     expect(placesBounds(places)).toEqual([[-9.1, 30.3], [135.8, 68.2]]);
+  });
+});
+
+describe("activities", () => {
+  const markerFor = (vs: Visit[], id: string) => buildMapMarkers(places, vs, profile).find((m) => m.place.id === id)!;
+  const withActivities = (id: string, activities: string[]) =>
+    visits.map((v) => (v.id === id ? { ...v, activities } : v));
+
+  test("every activity has a glyph", () => {
+    for (const a of ACTIVITIES) expect(ACTIVITY_GLYPH[a]).toMatch(/^<(path|circle|rect)/);
+  });
+
+  test("unknown ids are skipped, duplicates collapse, order is kept", () => {
+    const v = { activities: ["wine_tasting", "ski", "food", "ski"] };
+    expect(activitiesOf(v)).toEqual(["ski", "food"]);
+    expect(primaryActivity(v)).toBe("ski");
+    expect(primaryActivity({})).toBeNull();
+  });
+
+  test("a pin shows the primary activity of the place's strongest visit", () => {
+    const m = markerFor(withActivities("v-paris", ["citywalk", "museum"]), "paris");
+    expect(m.activity).toBe("citywalk");
+    expect(markerRadius(m)).toBe(11);
+  });
+
+  test("else the most recent visit that names one", () => {
+    // Paris: the trip (strongest) has none, the later stopover has one.
+    expect(markerFor(withActivities("v-paris2", ["food"]), "paris").activity).toBe("food");
+  });
+
+  test("a bare stopover is a night in passing; homes and plain trips keep dots", () => {
+    const vs: Visit[] = [...visits, { id: "v-lis", placeId: "lisbon", visitType: "stopover" }];
+    expect(markerFor(vs, "lisbon").activity).toBe("overnight");
+    expect(markerFor(visits, "kyoto").activity).toBeNull();
+    expect(markerRadius(markerFor(visits, "kyoto"))).toBe(5);
+    // The current base never carries an activity badge, even when tagged.
+    expect(markerFor(withActivities("v-home", ["study"]), "home").activity).toBeNull();
   });
 });
 

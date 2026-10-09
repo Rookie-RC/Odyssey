@@ -1,8 +1,9 @@
 // Small line-icon set (1.5px strokes on a 20px grid, currentColor) so the
 // Atlas carries one consistent, quiet icon language across every theme —
 // never emoji, never a generic tourism icon pack (VISUAL_SPEC §29).
-import type { InspirationType, Season, Transport } from "../lib/types";
+import type { Activity, InspirationType, Season, Transport } from "../lib/types";
 import { TRANSPORT_GLYPH } from "../lib/transport";
+import { ACTIVITY_GLYPH, OVERNIGHT_GLYPH } from "../lib/activity";
 
 type IconProps = { size?: number; className?: string; title?: string; strokeWidth?: number };
 
@@ -375,5 +376,16 @@ export function TransportIcon({ mode, size = 16, className }: { mode: Transport 
     <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden="true">
       <path fill="currentColor" fillRule="evenodd" d={TRANSPORT_GLYPH[mode]} />
     </svg>
+  );
+}
+
+/** What a trip was for (lib/activity.ts): the same glyph as on its map pin. */
+export function ActivityIcon({ activity, ...p }: IconProps & { activity: Activity | "overnight" }) {
+  const glyph = activity === "overnight" ? OVERNIGHT_GLYPH : ACTIVITY_GLYPH[activity];
+  return (
+    <Svg {...p}>
+      {/* A static constant from lib/activity.ts, never user content. */}
+      <g dangerouslySetInnerHTML={{ __html: glyph }} />
+    </Svg>
   );
 }

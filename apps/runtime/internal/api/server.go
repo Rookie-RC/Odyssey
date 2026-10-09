@@ -501,6 +501,9 @@ func validateVisit(v domain.Visit) error {
 	if !domain.ValidTransport(string(v.Transport)) {
 		return errors.New("invalid transport")
 	}
+	if !domain.ValidActivities(v.Activities) {
+		return errors.New("invalid activities: up to 8 distinct lowercase ids")
+	}
 	return nil
 }
 

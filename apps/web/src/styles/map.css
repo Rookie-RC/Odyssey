@@ -206,6 +206,72 @@ html.atlas-collapsed .atlas-marker__flag {
   height: 12px;
 }
 
+/* What the trip was for: the pin becomes a small badge holding the activity's
+   line glyph (lib/activity.ts). A stopover without one shows a moon — a night
+   in passing — in the stopover's inverted colours. */
+.atlas-marker.atlas-marker--activity .atlas-marker__dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  background: var(--marker-visited);
+  border: 2px solid var(--marker-visited-stroke);
+  color: var(--marker-visited-stroke);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 10px 2px var(--marker-visited-glow);
+}
+
+.atlas-marker--activity .atlas-marker__dot svg {
+  display: block;
+  transition: transform 0.25s var(--ease-out);
+}
+
+.atlas-marker.atlas-marker--overnight .atlas-marker__dot {
+  width: 18px;
+  height: 18px;
+  background: var(--marker-visited-stroke);
+  border-color: var(--marker-visited);
+  color: var(--marker-visited);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.atlas-marker--activity .atlas-marker__flag {
+  bottom: 10px;
+  height: 16px;
+}
+
+.atlas-marker--overnight .atlas-marker__flag {
+  bottom: 8px;
+}
+
+.atlas-marker--activity .atlas-marker__label {
+  left: 17px;
+}
+
+.atlas-marker--activity.atlas-marker--label-left .atlas-marker__label {
+  left: auto;
+  right: 17px;
+}
+
+.atlas-marker--overnight .atlas-marker__label {
+  left: 15px;
+}
+
+.atlas-marker--overnight.atlas-marker--label-left .atlas-marker__label {
+  left: auto;
+  right: 15px;
+}
+
+/* The collapsed strip stays calm: badges shrink back towards dots. */
+html.atlas-collapsed .atlas-marker.atlas-marker--activity .atlas-marker__dot {
+  width: 15px;
+  height: 15px;
+  border-width: 1.5px;
+}
+
+html.atlas-collapsed .atlas-marker--activity .atlas-marker__dot svg {
+  transform: scale(0.7);
+}
+
 /* Past residence: calm static ring (never animated like the current base). */
 .atlas-marker__home {
   position: absolute;
@@ -583,8 +649,9 @@ html.atlas-collapsed .atlas-wishpin__dot {
 
 .atlas-memory-card__sub {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 7px;
+  gap: 4px 7px;
   margin: 7px 0 13px;
   font-size: 12.5px;
   color: var(--text-secondary);

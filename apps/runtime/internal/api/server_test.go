@@ -207,6 +207,17 @@ func TestVisitsCRUD(t *testing.T) {
 	wantStatus(t, do(t, h, "POST", "/api/visits", domain.Visit{PlaceID: "ghost", VisitType: domain.VisitTypeTrip}), http.StatusBadRequest)
 	wantStatus(t, do(t, h, "POST", "/api/visits", domain.Visit{PlaceID: place.ID, VisitType: "cruise"}), http.StatusBadRequest)
 	wantStatus(t, do(t, h, "POST", "/api/visits", domain.Visit{PlaceID: place.ID, VisitType: domain.VisitTypeTrip, Transport: "zeppelin"}), http.StatusBadRequest)
+	// Activities: short lowercase slugs, distinct, at most eight.
+	for _, bad := range [][]string{
+		{"ski", "ski"},
+		{"Ski"},
+		{""},
+		{"<script>"},
+		{"a", "b", "c", "d", "e", "f", "g", "h", "i"},
+	} {
+		w := do(t, h, "POST", "/api/visits", domain.Visit{PlaceID: place.ID, VisitType: domain.VisitTypeTrip, Activities: bad})
+		wantStatus(t, w, http.StatusBadRequest)
+	}
 
 	w := do(t, h, "POST", "/api/visits", domain.Visit{PlaceID: place.ID, VisitType: domain.VisitTypeLived, StartDate: "2023-09"})
 	wantStatus(t, w, http.StatusCreated)
@@ -214,9 +225,12 @@ func TestVisitsCRUD(t *testing.T) {
 
 	v.Reflection = "golden stone"
 	v.Transport = domain.TransportTrain
+	// Unknown-but-well-formed ids are kept: the vocabulary lives in the frontend.
+	v.Activities = []string{"citywalk", "food", "wine_tasting"}
 	wantStatus(t, do(t, h, "PUT", "/api/visits/"+v.ID, v), http.StatusOK)
 	list := decode[[]domain.Visit](t, do(t, h, "GET", "/api/visits", nil))
-	if len(list) != 1 || list[0].Reflection != "golden stone" || list[0].Transport != domain.TransportTrain {
+	if len(list) != 1 || list[0].Reflection != "golden stone" || list[0].Transport != domain.TransportTrain ||
+		!reflect.DeepEqual(list[0].Activities, []string{"citywalk", "food", "wine_tasting"}) {
 		t.Fatalf("list = %+v", list)
 	}
 

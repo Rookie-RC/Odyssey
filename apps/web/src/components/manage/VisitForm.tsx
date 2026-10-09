@@ -6,7 +6,8 @@
 import type { Media } from "../../lib/types";
 import type { VisitType } from "../../lib/types";
 import { TRANSPORTS, transportLabel } from "../../lib/transport";
-import { TransportIcon } from "../Icons";
+import { ACTIVITY_GROUPS, activityLabel, isActivity } from "../../lib/activity";
+import { ActivityIcon, TransportIcon } from "../Icons";
 import { visitTypeLabel } from "../../lib/timeline";
 import type { VisitDraft } from "./drafts";
 import MediaPicker from "./MediaPicker";
@@ -27,6 +28,14 @@ interface VisitFormProps {
 
 export default function VisitForm({ value, onChange, media, placeId, hidePhotos }: VisitFormProps) {
   const set = (patch: Partial<VisitDraft>) => onChange({ ...value, ...patch });
+  const toggleActivity = (a: string) =>
+    set({
+      activities: value.activities.includes(a)
+        ? value.activities.filter((x) => x !== a)
+        : [...value.activities, a],
+    });
+  // The pin shows the first activity the visit knows (lib/activity.ts).
+  const primary = value.activities.find(isActivity) ?? null;
 
   return (
     <div className="atlas-entity-form">
@@ -58,6 +67,44 @@ export default function VisitForm({ value, onChange, media, placeId, hidePhotos 
                 <TransportIcon mode={mode} size={15} />
                 {transportLabel(mode)}
               </button>
+            ))}
+          </div>
+        </Field>
+      ) : null}
+
+      {value.visitType !== "lived" ? (
+        <Field
+          label={t("What did you do?")}
+          hint={t("Pick any that fit. The first one becomes this place's icon on the map.")}
+        >
+          <div className="atlas-activity-picker">
+            {ACTIVITY_GROUPS.map((g) => (
+              <div key={g.id} className="atlas-activity-picker__group" role="group" aria-label={t(g.label)}>
+                <span className="atlas-activity-picker__group-label">{t(g.label)}</span>
+                <div className="atlas-activity-picker__chips">
+                  {g.items.map((a) => {
+                    const on = value.activities.includes(a);
+                    return (
+                      <button
+                        key={a}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={on}
+                        className={
+                          "atlas-activity-chip" +
+                          (on ? " is-active" : "") +
+                          (a === primary ? " is-primary" : "")
+                        }
+                        title={a === primary ? t("Shown on the map") : undefined}
+                        onClick={() => toggleActivity(a)}
+                      >
+                        <ActivityIcon activity={a} size={15} />
+                        {activityLabel(a)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </div>
         </Field>

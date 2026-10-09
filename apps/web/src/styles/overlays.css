@@ -374,6 +374,16 @@ body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
   border: 1.5px solid var(--text-secondary);
 }
 
+/* A visit's activities wrap onto their own line under its date and type. */
+.atlas-detail__visits li {
+  flex-wrap: wrap;
+}
+
+.atlas-detail__visits .atlas-activity-tags {
+  flex-basis: 100%;
+  font-size: 12.5px;
+}
+
 .atlas-detail__why {
   margin: 0;
   font-family: var(--font-display);

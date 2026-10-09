@@ -16,6 +16,9 @@ export interface VisitDraft {
   withFriends: boolean;
   /** How the trip was travelled (styles its route); ignored for lived. */
   transport: Transport;
+  /** What the trip was for, primary first; ignored for lived. Unknown ids
+   * (from a newer app version) are carried through untouched. */
+  activities: string[];
   highlights: { name: string; note: string }[];
   reflection: string;
   mediaIds: string[];
@@ -28,6 +31,7 @@ export function emptyVisitDraft(): VisitDraft {
     endDate: "",
     withFriends: false,
     transport: DEFAULT_TRANSPORT,
+    activities: [],
     highlights: [],
     reflection: "",
     mediaIds: [],
@@ -42,6 +46,7 @@ export function visitToDraft(v: Visit): VisitDraft {
     endDate: v.endDate ?? "",
     withFriends: v.withFriends ?? false,
     transport: transportOf(v),
+    activities: v.activities ?? [],
     highlights: (v.highlights ?? []).map((h) => ({ name: h.name, note: h.note ?? "" })),
     reflection: v.reflection ?? "",
     mediaIds: v.mediaIds ?? [],
@@ -119,6 +124,7 @@ export function visitDraftEquals(a: VisitDraft, b: VisitDraft): boolean {
     a.endDate === b.endDate &&
     a.withFriends === b.withFriends &&
     a.transport === b.transport &&
+    arraysEqual(a.activities, b.activities) &&
     a.reflection === b.reflection &&
     arraysEqual(a.mediaIds, b.mediaIds) &&
     a.highlights.length === b.highlights.length &&

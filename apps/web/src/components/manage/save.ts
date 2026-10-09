@@ -37,6 +37,7 @@ export function visitFromDraft(draft: VisitDraft, placeId: string, existing?: Vi
     withFriends: draft.withFriends || undefined,
     // A residence is an origin, not a journey: it has no transport.
     transport: draft.visitType === "lived" ? undefined : draft.transport,
+    activities: draft.visitType === "lived" || draft.activities.length === 0 ? undefined : draft.activities,
     highlights: draft.highlights
       .filter((h) => h.name.trim())
       .map((h) => ({

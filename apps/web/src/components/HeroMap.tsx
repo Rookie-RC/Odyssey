@@ -11,6 +11,7 @@ import {
   visitedCountryCodes,
   wishlistCountryCodes,
   markerHasFlag,
+  markerRadius,
   type MapMarker,
   type WishMarker,
 } from "../lib/map-data";
@@ -18,6 +19,7 @@ import { getRouteTrajectory } from "../lib/routes";
 import { visitTypeLabel } from "../lib/timeline";
 import { formatDateRange, getPlaceStory } from "../lib/domain";
 import { TRANSPORTS, TRANSPORT_GLYPH, transportLabel, transportOf } from "../lib/transport";
+import { ACTIVITY_GLYPH, OVERNIGHT_GLYPH, activityLabel, glyphSvg, primaryActivity } from "../lib/activity";
 import { LAYER_BEFORE, baseStyleUrl, loadThemeStyle } from "../lib/map-style";
 import { mediaSrc } from "../lib/api";
 import { getLocale, t, useLocale } from "../lib/i18n";
@@ -37,6 +39,7 @@ import {
   HomeIcon,
   ImageIcon,
   TransportIcon,
+  ActivityIcon,
 } from "./Icons";
 
 const EUROPE_CENTER: [number, number] = [10, 50];
@@ -115,6 +118,8 @@ interface MarkerEntry {
   rank: number;
   isCurrent: boolean;
   hasFlag: boolean;
+  /** The pin disc's radius (an activity badge is larger than a dot). */
+  radius: number;
 }
 
 function webglAvailable(): boolean {
@@ -288,12 +293,12 @@ export default function HeroMap({
     const pts = entries.map((e) => ({ e, p: map.project(e.lngLat) }));
     type Rect = { x: number; y: number; w: number; h: number };
     const taken: Rect[] = pts.map(({ p, e }) => {
-      const r = e.isCurrent ? 9 : 5;
+      const r = e.radius;
       return { x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
     });
     // A planted flag rises above its pin (pole + 13×9 flag).
     for (const { p, e } of pts) {
-      if (e.hasFlag) taken.push({ x: p.x - 1, y: p.y - 24, w: 16, h: 13 });
+      if (e.hasFlag) taken.push({ x: p.x - 1, y: p.y - e.radius - 19, w: 16, h: 13 });
     }
     const wishes = wishEntriesRef.current.map((w) => ({ w, p: map.project(w.lngLat) }));
     // Vehicle badges on the routes (only those drawn at this zoom).
@@ -327,7 +332,7 @@ export default function HeroMap({
         e.labelSize = { w: e.label.offsetWidth, h: e.label.offsetHeight };
       }
       const { w, h } = e.labelSize;
-      const off = e.isCurrent ? 18 : 11;
+      const off = e.isCurrent ? 18 : e.radius + 6;
       const right: Rect = { x: p.x + off, y: p.y - h / 2, w, h };
       const left: Rect = { x: p.x - off - w, y: p.y - h / 2, w, h };
       const inView = (r: Rect) => r.x >= 4 && r.x + r.w <= W - 4 && r.y >= 4 && r.y + r.h <= H - 4;
@@ -678,6 +683,7 @@ export default function HeroMap({
         rank: m.rank,
         isCurrent: m.isCurrent,
         hasFlag: markerHasFlag(m),
+        radius: markerRadius(m),
       });
     }
     scheduleLabels();
@@ -1215,6 +1221,12 @@ function MemoryCard({
             · <TransportIcon mode={transportOf(primaryVisit)} size={13} /> {transportLabel(transportOf(primaryVisit))}
           </span>
         ) : null}
+        {!marker.isCurrent && primaryVisit && primaryVisit.visitType !== "lived" && primaryActivity(primaryVisit) ? (
+          <span className="atlas-memory-card__transport">
+            · <ActivityIcon activity={primaryActivity(primaryVisit)!} size={13} />{" "}
+            {activityLabel(primaryActivity(primaryVisit)!)}
+          </span>
+        ) : null}
       </div>
       {photos.length > 0 ? (
         <div className={"atlas-memory-card__photos atlas-memory-card__photos--" + photos.length}>
@@ -1375,7 +1387,11 @@ function hatchImage(color: string): ImageData {
 function makeMarkerElement(m: MapMarker): { el: HTMLDivElement; label: HTMLSpanElement | null } {
   const el = document.createElement("div");
   el.className =
-    "atlas-marker atlas-marker--" + m.visitType + (m.isCurrent ? " atlas-marker--current" : "");
+    "atlas-marker atlas-marker--" +
+    m.visitType +
+    (m.isCurrent ? " atlas-marker--current" : "") +
+    (m.activity ? " atlas-marker--activity" : "") +
+    (m.activity === "overnight" ? " atlas-marker--overnight" : "");
   el.setAttribute("role", "button");
   if (m.isCurrent) {
     for (const cls of ["atlas-marker__pulse", "atlas-marker__ring"]) {
@@ -1407,6 +1423,11 @@ function makeMarkerElement(m: MapMarker): { el: HTMLDivElement; label: HTMLSpanE
   }
   const dot = document.createElement("span");
   dot.className = "atlas-marker__dot";
+  // What the trip was for, drawn inside the pin (static glyph constants).
+  if (m.activity) {
+    const glyph = m.activity === "overnight" ? OVERNIGHT_GLYPH : ACTIVITY_GLYPH[m.activity];
+    dot.innerHTML = glyphSvg(glyph, m.activity === "overnight" ? 10 : 13, 1.9);
+  }
   el.appendChild(dot);
 
   const label = document.createElement("span");

@@ -19,7 +19,9 @@ import type { AtlasTheme } from "../themes";
 import DirectEdit from "./edit/DirectEdit";
 import Lightbox from "./Lightbox";
 import { Btn } from "./manage/FormUI";
+import { activitiesOf, activityLabel } from "../lib/activity";
 import {
+  ActivityIcon,
   CalendarIcon,
   ChevronLeft,
   ChevronRight,
@@ -333,6 +335,14 @@ export default function PlaceDetailSheet({
                         {transportLabel(transportOf(primaryVisit))}
                       </span>
                     ) : null}
+                    {primaryVisit.visitType !== "lived"
+                      ? activitiesOf(primaryVisit).map((a) => (
+                          <span key={a} className="atlas-detail__fact atlas-detail__fact--activity">
+                            <ActivityIcon activity={a} size={14} />
+                            {activityLabel(a)}
+                          </span>
+                        ))
+                      : null}
                     {primaryVisit.withFriends ? (
                       <span className="atlas-detail__fact">
                         <PeopleIcon size={14} /> {t("With friends")}
@@ -391,6 +401,16 @@ export default function PlaceDetailSheet({
                             <li key={v.id}>
                               <span className="atlas-date">{formatDateRange(v.startDate, v.endDate) || t("Earlier")}</span>
                               <span>{visitTypeLabel(v.visitType)}</span>
+                              {v.visitType !== "lived" && activitiesOf(v).length > 0 ? (
+                                <span className="atlas-activity-tags">
+                                  {activitiesOf(v).map((a) => (
+                                    <span key={a} className="atlas-activity-tag">
+                                      <ActivityIcon activity={a} size={13} />
+                                      {activityLabel(a)}
+                                    </span>
+                                  ))}
+                                </span>
+                              ) : null}
                             </li>
                           ))}
                       </ol>
