@@ -13,7 +13,7 @@
 - 数据在 App 的私有目录 `files/atlas-data/`，和桌面版的 `atlas-data/` 结构一样。
 - **卸载 App 会删除所有数据。** 请定期在「管理地图集 → 导入 / 导出」导出 `.atlas` 文件，文件会保存到手机的 `下载/Odyssey/`。这个文件可以导入桌面版，也可以导入以后的网站版。
 - 安卓自带的云备份只包含文字记录（地点、到访、心愿、个人资料），不包括照片，因为它每个 App 最多只能备份 25 MB。
-- 签名密钥在开发机的 `~/.android/odyssey.jks`。**换了密钥打的包无法覆盖安装**，只能先卸载（数据会丢），所以请备份这个文件。
+- 签名密钥在开发机的 `~/.android/odyssey.jks`（Windows 上是 `%USERPROFILE%\.android\odyssey.jks`）。**换了密钥打的包无法覆盖安装**，只能先卸载（数据会丢），所以请备份这个文件。
 
 ## App 补上的 WebView 缺失功能
 
@@ -27,7 +27,7 @@
 
 ## 构建
 
-需要 JDK 17 和 Android SDK（`platforms;android-34`、`build-tools;34.0.0`），默认使用仓库 `.tools/` 下的副本：
+需要 JDK 17 和 Android SDK（`platforms;android-34`、`build-tools;34.0.0`），默认使用仓库 `.tools/` 下的副本。`build.sh` 在 Linux 和 Windows 的 Git Bash 里都能运行：
 
 ```bash
 # 一次性安装工具（放在 .tools/，已被 gitignore）
@@ -41,6 +41,18 @@ JAVA_HOME=$PWD/.tools/jdk17 .tools/android-sdk/cmdline-tools/latest/bin/sdkmanag
 
 apps/android/build.sh                 # 前端 + Go 服务 + APK → apps/android/dist/odyssey.apk
 SKIP_FRONTEND=1 apps/android/build.sh # 复用已经嵌入的前端
+```
+
+Windows 上在 Git Bash 里改用 Windows 版的 JDK 和命令行工具，构建命令不变：
+
+```bash
+curl -L -o /tmp/jdk17.zip "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jdk/hotspot/normal/eclipse"
+unzip -q /tmp/jdk17.zip -d /tmp/jdk17 && mkdir -p .tools && mv /tmp/jdk17/jdk-17* .tools/jdk17
+curl -L -o /tmp/cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip
+mkdir -p .tools/android-sdk/cmdline-tools && unzip -q /tmp/cmdline-tools.zip -d .tools/android-sdk/cmdline-tools \
+  && mv .tools/android-sdk/cmdline-tools/cmdline-tools .tools/android-sdk/cmdline-tools/latest
+JAVA_HOME=$PWD/.tools/jdk17 .tools/android-sdk/cmdline-tools/latest/bin/sdkmanager.bat --sdk_root=$PWD/.tools/android-sdk \
+  "platforms;android-34" "build-tools;34.0.0"
 ```
 
 不使用 Gradle：App 只有几个 Java 类和少量资源，直接用 SDK 里的 aapt2、javac、d8、zipalign、apksigner 打包。Go 服务以 `lib/<abi>/libodyssey.so` 的名字放进 APK，因为安卓只允许执行 App 原生库目录里的文件。arm64 用 `GOOS=android` 编译，32 位 ARM 用静态 linux 程序。安卓没有 `/etc/resolv.conf`，App 会把当前网络的 DNS 通过 `ATLAS_DNS` 传给 Go 服务，系统证书目录通过 `SSL_CERT_DIR` 传入。

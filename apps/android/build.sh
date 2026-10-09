@@ -2,12 +2,13 @@
 # Builds the Odyssey Android app: apps/android/dist/odyssey.apk.
 #
 # No Gradle: the app is two Java classes and a few resources, so the SDK's own
-# tools are enough — aapt2 (resources + manifest), javac, d8 (dex), zipalign,
-# apksigner. The Go runtime (with the frontend embedded) goes in as
-# lib/<abi>/libodyssey.so.
+# tools are enough — aapt2 (resources + manifest), javac, d8 (dex), jar (adds
+# the dex and libs), zipalign, apksigner. The Go runtime (with the frontend
+# embedded) goes in as lib/<abi>/libodyssey.so.
 #
 # Needs a JDK 17 and an Android SDK with platforms;android-34 and
 # build-tools;34.0.0 — by default the copies in .tools/ (see README.md).
+# Runs on Linux and on Windows in Git Bash.
 #
 #   apps/android/build.sh                 # frontend + runtime + apk
 #   SKIP_FRONTEND=1 apps/android/build.sh # reuse apps/runtime/assets/web
@@ -20,6 +21,11 @@ export JAVA_HOME="${JAVA_HOME:-$ROOT/.tools/jdk17}"
 ANDROID_HOME="${ANDROID_HOME:-$ROOT/.tools/android-sdk}"
 BT="$ANDROID_HOME/build-tools/34.0.0"
 ANDROID_JAR="$ANDROID_HOME/platforms/android-34/android.jar"
+# The Windows SDK ships d8 and apksigner as .bat files (Git Bash finds the
+# .exe tools — aapt2, zipalign, javac — without the extension).
+D8="$BT/d8"
+APKSIGNER="$BT/apksigner"
+if [ -f "$BT/d8.bat" ]; then D8="$BT/d8.bat"; APKSIGNER="$BT/apksigner.bat"; fi
 ABIS="${ABIS:-arm64-v8a armeabi-v7a}"
 GO="${GO:-go}"
 OUT="$HERE/build"
@@ -30,7 +36,7 @@ DIST="$HERE/dist"
 KEYSTORE="${ODYSSEY_KEYSTORE:-$HOME/.android/odyssey.jks}"
 KEYPASS="${ODYSSEY_KEYPASS:-odyssey}"
 
-for tool in "$JAVA_HOME/bin/javac" "$BT/aapt2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$ANDROID_JAR"; do
+for tool in "$JAVA_HOME/bin/javac" "$JAVA_HOME/bin/jar" "$BT/aapt2" "$D8" "$BT/zipalign" "$APKSIGNER" "$ANDROID_JAR"; do
   [ -e "$tool" ] || { echo "missing: $tool (see apps/android/README.md)" >&2; exit 1; }
 done
 export PATH="$JAVA_HOME/bin:$PATH"
@@ -78,12 +84,12 @@ echo "==> Java → dex"
 javac -nowarn -Xlint:-options -source 8 -target 8 -encoding UTF-8 \
   -bootclasspath "$ANDROID_JAR:$BT/core-lambda-stubs.jar" -classpath "$ANDROID_JAR" -d "$OUT/classes" \
   $(find "$HERE/src" "$OUT/gen" -name '*.java')
-"$BT/d8" --release --min-api 24 --lib "$ANDROID_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+"$D8" --release --min-api 24 --lib "$ANDROID_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 
 echo "==> Package, align, sign"
 cp "$OUT/base.apk" "$OUT/unsigned.apk"
-(cd "$OUT/dex" && zip -q -j "$OUT/unsigned.apk" classes.dex)
-(cd "$OUT/apk" && zip -q -r "$OUT/unsigned.apk" lib)
+# jar from the JDK rather than zip, which Git for Windows does not have.
+jar --update --no-manifest --file "$OUT/unsigned.apk" -C "$OUT/dex" classes.dex -C "$OUT/apk" lib
 "$BT/zipalign" -f -p 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
 if [ ! -f "$KEYSTORE" ]; then
   echo "    creating signing key $KEYSTORE (keep a copy: updates need the same key)"
@@ -91,8 +97,8 @@ if [ ! -f "$KEYSTORE" ]; then
   keytool -genkeypair -keystore "$KEYSTORE" -alias odyssey -keyalg RSA -keysize 2048 -validity 10000 \
     -storepass "$KEYPASS" -keypass "$KEYPASS" -dname "CN=Odyssey" >/dev/null
 fi
-"$BT/apksigner" sign --ks "$KEYSTORE" --ks-key-alias odyssey --ks-pass "pass:$KEYPASS" --key-pass "pass:$KEYPASS" \
+"$APKSIGNER" sign --ks "$KEYSTORE" --ks-key-alias odyssey --ks-pass "pass:$KEYPASS" --key-pass "pass:$KEYPASS" \
   --out "$DIST/odyssey.apk" "$OUT/aligned.apk"
-"$BT/apksigner" verify "$DIST/odyssey.apk"
+"$APKSIGNER" verify "$DIST/odyssey.apk"
 
 echo "==> Done: $DIST/odyssey.apk ($(du -h "$DIST/odyssey.apk" | cut -f1), version $VERSION_NAME)"
