@@ -28,14 +28,14 @@ import "../styles/manage.css";
 import "../styles/auth.css";
 
 export const metadata: Metadata = {
-  title: "Yu's Atlas",
+  title: "Odyssey",
   description: "A local-first personal travel atlas — space, time, memory and where next.",
-  applicationName: "Yu's Atlas",
+  applicationName: "Odyssey",
   // Installable from the browser ("Add to Home Screen"): opens full screen
   // like an app, no app store needed.
   manifest: "/manifest.webmanifest",
   icons: { apple: "/icons/apple-touch-icon.png" },
-  appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Odyssey", statusBarStyle: "default" },
   formatDetection: { telephone: false },
 };
 

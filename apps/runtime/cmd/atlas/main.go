@@ -119,7 +119,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("Yu's Atlas runtime listening on %s", url)
+		log.Printf("Odyssey runtime listening on %s", url)
 		log.Printf("data directory: %s", dir)
 		log.Printf("geocoding provider: %s", geocoder.ProviderID())
 		log.Printf("thumbnail cache: %s", thumbDir)

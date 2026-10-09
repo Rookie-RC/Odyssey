@@ -83,7 +83,7 @@ func runCloud(o cloudOptions) {
 		IdleTimeout:       120 * time.Second,
 	}
 	go func() {
-		log.Printf("Atlas cloud service listening on http://%s", addr)
+		log.Printf("Odyssey cloud service listening on http://%s", addr)
 		log.Printf("data root: %s (%d accounts)", root, svc.Users().Count())
 		log.Printf("public origins: %v; sign-up %s; quota %d MB per user", origins, map[bool]string{true: "open", false: "closed"}[o.allowSignup], o.quotaMB)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

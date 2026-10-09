@@ -1,6 +1,6 @@
-# Yu's Atlas
+# Odyssey
 
-A local-first personal travel atlas centered on **space, time, memory, and future
+*(formerly Yu's Atlas)* A personal travel atlas centered on **space, time, memory, and future
 travel inspiration** — one continuous page that opens on a full-screen map of
 where life has happened, collapses into a seasonal **Journey Timeline**, and
 ends on **Where Next**, a photographic shelf of places still to come.
@@ -45,7 +45,7 @@ as one portable `.atlas` file.
 
 ## 中文简介
 
-Yu's Atlas 是一个本地优先的个人旅行地图集：打开即是一张全屏地图，标出生活与旅行过的地方；向下滚动，地图收成顶部的一条，下面依次是按季节着色的**旅程时间线**和**下一站**心愿墙。数据是你自己文件夹里的 JSON 与照片，可以整体导出为一个 `.atlas` 文件。程序只有一个可执行文件（Windows 下为 `Atlas.exe`），双击即用，无需安装。
+Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一张全屏地图，标出生活与旅行过的地方；向下滚动，地图收成顶部的一条，下面依次是按季节着色的**旅程时间线**和**下一站**心愿墙。数据是你自己文件夹里的 JSON 与照片，可以整体导出为一个 `.atlas` 文件。程序只有一个可执行文件（Windows 下为 `Atlas.exe`），双击即用，无需安装。
 
 - **五套主题 + 自动**：浅色、夜间（城市灯火）、手账（米色纸与墨迹）、极简（生成色与朱印）、胶片（颗粒与日期印记）。主题会改变配色、字体、纹理、地图风格与照片处理，但不改变数据。
 - **地图**：去过的地点插一面小国旗，去过的国家实心着色、想去的国家斜线标出；每次旅行可选交通方式（飞机为默认、火车、大巴、自驾），路线分别画成虚线航线、铁轨、公路，中点显示对应的交通工具。

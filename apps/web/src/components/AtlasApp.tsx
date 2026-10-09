@@ -266,7 +266,7 @@ export default function AtlasApp() {
 
   const wordmark = atlasWordmark(profile?.name);
   useEffect(() => {
-    document.title = wordmark;
+    document.title = wordmark + " · Odyssey";
   }, [wordmark]);
 
   // --- scroll-driven map collapse ---

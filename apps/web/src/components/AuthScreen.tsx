@@ -113,7 +113,7 @@ export default function AuthScreen({
         <div className="atlas-auth__brand">
           <CompassRose size={30} className="atlas-auth__rose" />
           <h1 id={ids + "title"} className="atlas-wordmark">
-            {t("My Atlas")}
+            Odyssey
           </h1>
         </div>
         <p className="atlas-auth__tagline">
