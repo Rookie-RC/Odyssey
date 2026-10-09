@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -240,7 +241,9 @@ func TestLoadSecretPersists(t *testing.T) {
 		t.Fatalf("secret not stable: %x %x %v", a, b, err)
 	}
 	info, _ := os.Stat(filepath.Join(root, "secret.key"))
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no POSIX permission bits (os.Stat reports 0666 for any
+	// writable file), so the mode is only checked elsewhere.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("secret.key mode = %v", info.Mode().Perm())
 	}
 	t.Setenv("ATLAS_SESSION_SECRET", "short")
