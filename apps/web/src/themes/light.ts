@@ -1,50 +1,108 @@
 import type { AtlasTheme } from "./types";
+import { FONT, TEXTURE } from "./shared";
 
+// Light — airy, warm, cartographic (VISUAL_SPEC §18). Pale relief-shaded
+// geography, forest-green memory pins and a green NOW, after the Claude Design
+// reference composition.
 export const lightTheme: AtlasTheme = {
   id: "light",
   label: "Light",
+  description: "Airy parchment and soft relief",
+  mode: "light",
   colors: {
-    bg: "#F7F6F2",
+    bg: "#F7F6F1",
+    bgAlt: "#EEEDE6",
     surface: "#FFFFFF",
     surfaceElevated: "#FCFBF8",
-    textPrimary: "#1E1E1C",
-    textSecondary: "#6F726E",
-    border: "#E4E2DC",
+    surfaceSunken: "#F2F1EB",
+    textPrimary: "#1C1D1A",
+    textSecondary: "#676A65",
+    textTertiary: "#9A9C96",
+    border: "#E5E3DC",
+    borderStrong: "#D2CFC6",
     accent: "#2563EB",
+    accentSoft: "rgba(37, 99, 235, 0.09)",
+    onAccent: "#FFFFFF",
+    now: "#2F7A45",
+    nowSoft: "#DCEFE1",
+    scrim: "rgba(28, 26, 20, 0.26)",
+    danger: "#B42318",
+    dateInk: "#676A65",
   },
+  fonts: {
+    display: FONT.newsreader,
+    body: FONT.inter,
+    ui: FONT.inter,
+    mono: FONT.mono,
+    date: FONT.inter,
+    displayWeight: 500,
+    labelTracking: "0.18em",
+  },
+  shape: { radiusSm: "8px", radiusMd: "12px", radiusLg: "16px", radiusXl: "22px" },
+  shadows: {
+    sm: "0 1px 2px rgba(30, 28, 20, 0.06), 0 1px 1px rgba(30, 28, 20, 0.04)",
+    md: "0 10px 28px rgba(30, 28, 20, 0.08), 0 2px 6px rgba(30, 28, 20, 0.05)",
+    lg: "0 26px 64px rgba(30, 28, 20, 0.14), 0 6px 16px rgba(30, 28, 20, 0.06)",
+  },
+  texture: { paper: TEXTURE.paper, paperOpacity: 0.035, grain: TEXTURE.none, grainOpacity: 0 },
+  glass: {
+    tint: "rgba(255, 255, 255, 0.5)",
+    tintHover: "rgba(255, 255, 255, 0.7)",
+    blur: 7,
+    saturate: 1.7,
+    highlight: "rgba(255, 255, 255, 0.9)",
+    edge: "rgba(255, 255, 255, 0.3)",
+    refraction: 9,
+  },
+  image: { filter: "none", frame: "none" },
   map: {
-    // Carto Positron, adapted at runtime (see lib/map-style.ts) toward warm
-    // parchment land and pale blue water. The tint adds a light warm wash plus
-    // a gentle vignette; the wash stays weak enough that markers stay crisp.
-    styleUrl: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-    tint: [
-      "linear-gradient(rgba(239, 231, 214, 0.12), rgba(239, 231, 214, 0.12))",
-      "radial-gradient(125% 100% at 50% 35%, rgba(246, 242, 232, 0) 58%, rgba(206, 192, 164, 0.28) 100%)",
-    ].join(", "),
+    base: "light",
+    palette: {
+      background: "#ECEAE2",
+      land: "#E3E6D9",
+      park: "#E0E4D5",
+      residential: "rgba(221, 218, 207, 0.55)",
+      water: "#D2DFE5",
+      waterway: "#BACFD9",
+      building: "#E5E2D8",
+      border: "#BFB5A2",
+      borderWidth: 0.9,
+      borderState: "#DDD5C6",
+      borderCounty: "#E5DED1",
+      road: "#FFFFFF",
+      roadCase: "#E0DCD0",
+      labelWater: "#7C93A0",
+      labelCountry: "#8A9198",
+      labelCity: "#4E5860",
+      labelTown: "#68727A",
+      labelMinor: "#8A939A",
+      labelRoad: "#8F999E",
+      labelHalo: "#F3F1EA",
+    },
+    hillshade: {
+      shadow: "#6B6250",
+      highlight: "#FFFFFF",
+      accent: "#8A806C",
+      exaggeration: 0.32,
+    },
+    cityLights: null,
+    tint: "radial-gradient(130% 100% at 50% 38%, rgba(247, 246, 241, 0) 58%, rgba(206, 196, 174, 0.32) 100%)",
+    tintBlend: "normal",
   },
   markers: {
-    current: "#2563EB",
-    currentRing: "rgba(37, 99, 235, 0.24)",
-    visited: "#1E1E1C",
-    visitedFaint: "rgba(30, 30, 28, 0.42)",
+    current: "#2F7A45",
+    currentRing: "rgba(47, 122, 69, 0.34)",
+    currentGlow: "rgba(47, 122, 69, 0.16)",
+    visited: "#2C5B38",
+    visitedStroke: "#FFFFFF",
+    visitedFaint: "rgba(44, 91, 56, 0.45)",
+    visitedGlow: "transparent",
+    wish: "#2563EB",
+    label: "#1C1D1A",
+    labelHalo: "rgba(247, 246, 241, 0.92)",
   },
-  countries: {
-    // Very subtle fill only (no outline): the external Natural Earth polygons
-    // are coarser than the basemap, so a fill avoids the misaligned-outline
-    // artifact. Clearly weaker than every location marker.
-    fill: "rgba(64, 90, 140, 0.05)",
-    outline: "rgba(64, 90, 140, 0.0)",
-  },
-  routes: {
-    // A restrained warm umber — an atlas-pencil trajectory against the
-    // parchment geography. Clearly weaker than the charcoal visited markers.
-    line: "rgba(158, 124, 84, 0.5)",
-  },
-  seasons: {
-    // VISUAL_SPEC §20 starting palette (light): soft, natural, low saturation.
-    spring: "#8FC89B",
-    summer: "#F4C95D",
-    autumn: "#E98A4A",
-    winter: "#80A9D4",
-  },
+  countries: { fill: "rgba(62, 132, 82, 0.17)", outline: "transparent", wish: "rgba(37, 99, 235, 0.34)" },
+  routes: { line: "rgba(44, 91, 56, 0.5)" },
+  seasons: { spring: "#8FC89B", summer: "#F2C14E", autumn: "#E98A4A", winter: "#80A9D4" },
+  seasonInk: { spring: "#3E8452", summer: "#A26F0C", autumn: "#BC5A20", winter: "#3E6EA2" },
 };

@@ -1,51 +1,107 @@
 import type { AtlasTheme } from "./types";
+import { FONT, TEXTURE } from "./shared";
 
+// Night — cinematic, deep navy, city lights (VISUAL_SPEC §19). Warm amber
+// memories against a cool blue current position; tonal separation over shadow.
 export const nightTheme: AtlasTheme = {
   id: "night",
   label: "Night",
+  description: "Deep navy and city lights",
+  mode: "dark",
   colors: {
     bg: "#08121F",
-    surface: "#111827",
-    surfaceElevated: "#151E2D",
+    bgAlt: "#0B1727",
+    surface: "#101A2A",
+    surfaceElevated: "#152031",
+    surfaceSunken: "#0B1522",
     textPrimary: "#F2F0E9",
-    textSecondary: "#94A3B8",
-    border: "#243244",
-    accent: "#38BDF8",
+    textSecondary: "#98A6B8",
+    textTertiary: "#65768B",
+    border: "#212F40",
+    borderStrong: "#32445A",
+    accent: "#5BA8F5",
+    accentSoft: "rgba(91, 168, 245, 0.14)",
+    onAccent: "#06101C",
+    now: "#4FA6FF",
+    nowSoft: "rgba(79, 166, 255, 0.16)",
+    scrim: "rgba(2, 6, 14, 0.55)",
+    danger: "#F97066",
+    dateInk: "#98A6B8",
   },
+  fonts: {
+    display: FONT.newsreader,
+    body: FONT.inter,
+    ui: FONT.inter,
+    mono: FONT.mono,
+    date: FONT.inter,
+    displayWeight: 500,
+    labelTracking: "0.18em",
+  },
+  shape: { radiusSm: "8px", radiusMd: "12px", radiusLg: "16px", radiusXl: "22px" },
+  shadows: {
+    sm: "0 1px 2px rgba(0, 0, 0, 0.4)",
+    md: "0 12px 32px rgba(0, 0, 0, 0.42)",
+    lg: "0 28px 72px rgba(0, 0, 0, 0.55)",
+  },
+  texture: { paper: TEXTURE.none, paperOpacity: 0, grain: TEXTURE.grain, grainOpacity: 0.035 },
+  glass: {
+    tint: "rgba(16, 26, 42, 0.52)",
+    tintHover: "rgba(24, 37, 58, 0.7)",
+    blur: 9,
+    saturate: 1.5,
+    highlight: "rgba(255, 255, 255, 0.26)",
+    edge: "rgba(255, 255, 255, 0.08)",
+    refraction: 9,
+  },
+  image: { filter: "saturate(0.95)", frame: "none" },
   map: {
-    // Carto Dark Matter, adapted at runtime (see lib/map-style.ts) off pure
-    // black into a deep-navy cinematic family (water #0A1729, land #172940).
-    // The tint is a restrained vignette that deepens the edges without neon.
-    styleUrl: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-    tint: [
-      "linear-gradient(rgba(6, 12, 24, 0.18), rgba(6, 12, 24, 0) 28%)",
-      "radial-gradient(130% 110% at 50% 40%, rgba(6, 12, 24, 0) 65%, rgba(4, 9, 20, 0.35) 100%)",
-    ].join(", "),
+    base: "dark",
+    palette: {
+      background: "#0C192A",
+      land: "#0E1C2D",
+      park: "#0F1E2F",
+      residential: "rgba(22, 34, 52, 0.6)",
+      water: "#06101C",
+      waterway: "#12253A",
+      building: "rgba(22, 34, 52, 0.9)",
+      border: "rgba(120, 148, 180, 0.42)",
+      borderWidth: 0.8,
+      borderState: "rgba(64, 82, 104, 0.24)",
+      borderCounty: "rgba(58, 74, 94, 0.14)",
+      road: "#172A40",
+      roadCase: "#0E1B2E",
+      labelWater: "#4F6E8F",
+      labelCountry: "#687F9A",
+      labelCity: "#A7B9CD",
+      labelTown: "#7D90A6",
+      labelMinor: "#64778D",
+      labelRoad: "#6A7C91",
+      labelHalo: "#07111E",
+    },
+    hillshade: {
+      shadow: "#01050C",
+      highlight: "rgba(140, 170, 210, 0.22)",
+      accent: "#0A1626",
+      exaggeration: 0.45,
+    },
+    cityLights: { color: "rgba(255, 190, 105, 0.55)", core: "#FFE2A8", opacity: 0.9 },
+    tint: "radial-gradient(120% 95% at 50% 40%, rgba(8, 18, 31, 0) 55%, rgba(3, 8, 16, 0.55) 100%)",
+    tintBlend: "normal",
   },
   markers: {
-    // Cool current marker, warm visited markers (VISUAL_SPEC §19).
-    current: "#38BDF8",
-    currentRing: "rgba(56, 189, 248, 0.3)",
-    visited: "#E7B36A",
-    visitedFaint: "rgba(231, 179, 106, 0.5)",
+    current: "#4FA6FF",
+    currentRing: "rgba(79, 166, 255, 0.42)",
+    currentGlow: "rgba(79, 166, 255, 0.24)",
+    visited: "#F4B342",
+    visitedStroke: "#0B1220",
+    visitedFaint: "rgba(244, 179, 66, 0.5)",
+    visitedGlow: "rgba(244, 179, 66, 0.42)",
+    wish: "#9CC8F5",
+    label: "#E9EDF3",
+    labelHalo: "rgba(6, 14, 26, 0.85)",
   },
-  countries: {
-    // Slightly elevated navy fill only (no outline). Always weaker than every
-    // location marker; the outline is omitted because the external polygons
-    // don't match the basemap geometry exactly.
-    fill: "rgba(110, 140, 190, 0.07)",
-    outline: "rgba(126, 152, 196, 0.0)",
-  },
-  routes: {
-    // A quiet steel-blue trajectory over the deep navy — elegant, never neon.
-    // Clearly weaker than the warm visited markers.
-    line: "rgba(146, 172, 204, 0.42)",
-  },
-  seasons: {
-    // VISUAL_SPEC §20 starting palette (night): slightly deeper, more luminous.
-    spring: "#70C58B",
-    summer: "#F1B83A",
-    autumn: "#F08A3C",
-    winter: "#6FA8E7",
-  },
+  countries: { fill: "rgba(244, 179, 66, 0.12)", outline: "transparent", wish: "rgba(141, 187, 240, 0.36)" },
+  routes: { line: "rgba(244, 179, 66, 0.42)" },
+  seasons: { spring: "#70C58B", summer: "#F1B83A", autumn: "#F08A3C", winter: "#6FA8E7" },
+  seasonInk: { spring: "#86D39E", summer: "#F4C45A", autumn: "#F59A55", winter: "#8DBBF0" },
 };
