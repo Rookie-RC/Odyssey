@@ -69,10 +69,10 @@ func defaultData(name string) []byte {
 
 func newManifest() map[string]any {
 	return map[string]any{
-		"format":       Format,
+		"format":        Format,
 		"schemaVersion": SchemaVersion,
-		"appVersion":   AppVersion,
-		"exportedAt":   time.Now().Format(time.RFC3339),
+		"appVersion":    AppVersion,
+		"exportedAt":    time.Now().Format(time.RFC3339),
 	}
 }
 
@@ -169,19 +169,42 @@ func addTreeEntries(zw *zip.Writer, root, prefix string) error {
 
 // Backup writes the current Atlas (same package format) into
 // <dataDir>/backups/backup-<timestamp>.atlas and returns the relative path.
+//
+// The name is reserved with O_EXCL and gets a -2, -3, … suffix when a backup
+// from the same second already exists. Timestamps only have one-second
+// resolution, and two backups in one second are realistic (import followed
+// by New Atlas, or restoring a backup made a moment ago — where plain
+// os.Create would truncate the very backup being restored).
 func Backup(dataDir string) (string, error) {
 	backupDir := filepath.Join(dataDir, "backups")
 	if err := os.MkdirAll(backupDir, 0o755); err != nil {
 		return "", err
 	}
-	name := "backup-" + time.Now().Format("20060102-150405") + ".atlas"
-	p := filepath.Join(backupDir, name)
-	f, err := os.Create(p)
-	if err != nil {
-		return "", err
+	base := "backup-" + time.Now().Format("20060102-150405")
+	var (
+		f    *os.File
+		name string
+		err  error
+	)
+	for i := 1; ; i++ {
+		name = base + ".atlas"
+		if i > 1 {
+			name = fmt.Sprintf("%s-%d.atlas", base, i)
+		}
+		f, err = os.OpenFile(filepath.Join(backupDir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err == nil {
+			break
+		}
+		if !os.IsExist(err) || i >= 100 {
+			return "", err
+		}
 	}
-	defer f.Close()
-	if err := Export(dataDir, f); err != nil {
+	p := filepath.Join(backupDir, name)
+	err = Export(dataDir, f)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
 		_ = os.Remove(p)
 		return "", err
 	}
@@ -192,21 +215,21 @@ func Backup(dataDir string) (string, error) {
 
 // Manifest is the validated package manifest.
 type Manifest struct {
-	Format       string `json:"format"`
+	Format        string `json:"format"`
 	SchemaVersion int    `json:"schemaVersion"`
-	AppVersion   string `json:"appVersion"`
-	ExportedAt   string `json:"exportedAt"`
+	AppVersion    string `json:"appVersion"`
+	ExportedAt    string `json:"exportedAt"`
 }
 
 // Staged is a fully validated package extracted to a staging directory,
 // ready to replace the current Atlas.
 type Staged struct {
-	Manifest      Manifest
-	DataFiles     map[string][]byte
-	MediaFiles    []string // relative media paths ("folder/file")
-	StagingDir    string
-	MediaRoot     string // extracted media dir inside staging
-	dataDir       string
+	Manifest   Manifest
+	DataFiles  map[string][]byte
+	MediaFiles []string // relative media paths ("folder/file")
+	StagingDir string
+	MediaRoot  string // extracted media dir inside staging
+	dataDir    string
 }
 
 // cleanEntry normalizes a zip entry name and rejects path traversal
@@ -486,16 +509,35 @@ func writeFileAtomic(p string, content []byte) error {
 }
 
 // NewAtlas replaces the current Atlas with a minimal blank one. A backup is
-// created first; the theme preference is kept so a new Atlas still starts in
-// the user's preferred appearance.
-func NewAtlas(dataDir string, keepTheme string) (string, error) {
+// created first.
+//
+// Appearance and machine-behaviour preferences from prev (the current
+// settings) carry over so a new Atlas still looks and behaves the way the
+// user set this computer up: the theme (any theme id, kept verbatim), the
+// interface language, the geocoding provider, the map display toggles (routes, wishlist pins,
+// country fill) and LAN sharing (which the runtime is currently applying
+// live; resetting only the stored flag would desynchronize the two). The
+// default map position is content — it frames the old Atlas's places — and is
+// reset with the rest of the data.
+func NewAtlas(dataDir string, prev domain.Settings) (string, error) {
 	backupRel, err := Backup(dataDir)
 	if err != nil {
 		return "", fmt.Errorf("backup failed, new-atlas aborted: %w", err)
 	}
-	settings := domain.Settings{Theme: "light", GeocodingProvider: "photon"}
-	if keepTheme == "night" {
-		settings.Theme = "night"
+	settings := domain.Settings{
+		Theme:             prev.Theme,
+		GeocodingProvider: prev.GeocodingProvider,
+		LANSharing:        prev.LANSharing,
+		ShowRoutes:        prev.ShowRoutes,
+		ShowWishlist:      prev.ShowWishlist,
+		HideCountries:     prev.HideCountries,
+		Language:          prev.Language,
+	}
+	if settings.Theme == "" {
+		settings.Theme = "light"
+	}
+	if settings.GeocodingProvider == "" {
+		settings.GeocodingProvider = "photon"
 	}
 	files := map[string]any{
 		"profile.json":  domain.Profile{},

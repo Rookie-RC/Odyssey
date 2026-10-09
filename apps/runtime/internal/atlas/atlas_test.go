@@ -3,9 +3,12 @@ package atlas
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yuatlas/runtime/internal/domain"
 )
 
 // helper: build a minimal atlas-data tree with data + media.
@@ -216,10 +219,19 @@ func TestBadManifestRejected(t *testing.T) {
 	}
 }
 
-// TestNewAtlas produces a blank, complete Atlas and a backup.
+// TestNewAtlas produces a blank, complete Atlas and a backup, keeping the
+// appearance preferences (any theme id, map display toggles).
 func TestNewAtlas(t *testing.T) {
 	src := buildFixture(t)
-	backupRel, err := NewAtlas(src, "night")
+	on := true
+	prev := domain.Settings{
+		Theme:              "night",
+		ShowWishlist:       &on,
+		HideCountries:      true,
+		Language:           "zh",
+		DefaultMapPosition: &domain.Coordinates{Lat: 44.8, Lng: -0.6},
+	}
+	backupRel, err := NewAtlas(src, prev)
 	if err != nil {
 		t.Fatalf("new atlas: %v", err)
 	}
@@ -234,7 +246,44 @@ func TestNewAtlas(t *testing.T) {
 		t.Errorf("media not cleared: %v", entries)
 	}
 	settings, _ := os.ReadFile(filepath.Join(src, "data", "settings.json"))
-	if !bytes.Contains(settings, []byte(`"night"`)) {
-		t.Errorf("theme preference not kept: %s", settings)
+	var got domain.Settings
+	if err := json.Unmarshal(settings, &got); err != nil {
+		t.Fatalf("settings.json: %v", err)
+	}
+	if got.Theme != "night" || got.ShowWishlist == nil || !*got.ShowWishlist || !got.HideCountries || got.Language != "zh" {
+		t.Errorf("preferences not kept: %s", settings)
+	}
+	if got.DefaultMapPosition != nil {
+		t.Errorf("default map position should reset with the content: %s", settings)
+	}
+
+	// Theme ids are free-form: any value the frontend stores is kept verbatim.
+	if _, err := NewAtlas(src, domain.Settings{Theme: "journal"}); err != nil {
+		t.Fatal(err)
+	}
+	settings, _ = os.ReadFile(filepath.Join(src, "data", "settings.json"))
+	if !bytes.Contains(settings, []byte(`"theme": "journal"`)) {
+		t.Errorf("custom theme id not kept: %s", settings)
+	}
+}
+
+// TestBackupNamesAreUnique: several backups within the same second never
+// overwrite each other.
+func TestBackupNamesAreUnique(t *testing.T) {
+	src := buildFixture(t)
+	seen := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		rel, err := Backup(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[rel] {
+			t.Fatalf("backup name reused: %s", rel)
+		}
+		seen[rel] = true
+	}
+	entries, _ := os.ReadDir(filepath.Join(src, "backups"))
+	if len(entries) != 3 {
+		t.Errorf("want 3 backup files, got %d", len(entries))
 	}
 }

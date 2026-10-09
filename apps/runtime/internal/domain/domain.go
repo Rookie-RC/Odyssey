@@ -59,6 +59,26 @@ func ValidVisitType(t string) bool {
 	}
 }
 
+// Transport is how a trip was travelled; the Hero Map draws the route to it
+// in that style (flight arc, rail, road). Empty means plane, the default.
+type Transport string
+
+const (
+	TransportPlane Transport = "plane"
+	TransportTrain Transport = "train"
+	TransportBus   Transport = "bus"
+	TransportCar   Transport = "car"
+)
+
+func ValidTransport(t string) bool {
+	switch Transport(t) {
+	case "", TransportPlane, TransportTrain, TransportBus, TransportCar:
+		return true
+	default:
+		return false
+	}
+}
+
 type VisitHighlight struct {
 	Name string `json:"name"`
 	Note string `json:"note,omitempty"`
@@ -71,6 +91,7 @@ type Visit struct {
 	StartDate   string           `json:"startDate,omitempty"`
 	EndDate     string           `json:"endDate,omitempty"`
 	WithFriends bool             `json:"withFriends,omitempty"`
+	Transport   Transport        `json:"transport,omitempty"`
 	Highlights  []VisitHighlight `json:"highlights,omitempty"`
 	MediaIDs    []string         `json:"mediaIds,omitempty"`
 	Reflection  string           `json:"reflection,omitempty"`
@@ -157,10 +178,27 @@ type Profile struct {
 	} `json:"links,omitempty"`
 }
 
+// Settings are the portable user preferences (PRODUCT_SPEC §34), stored in
+// data/settings.json and included in .atlas packages.
+//
+// Theme is a free-form theme id chosen by the frontend ("auto", "light",
+// "night", "journal", "minimal", "film", …); the runtime stores and preserves
+// it verbatim and never restricts it to a fixed list, so new themes need no
+// runtime change (PRODUCT_SPEC §35).
 type Settings struct {
 	Theme              string       `json:"theme,omitempty"`
 	GeocodingProvider  string       `json:"geocodingProvider,omitempty"`
 	DefaultMapPosition *Coordinates `json:"defaultMapPosition,omitempty"`
-	LANSharing         bool         `json:"lanSharing,omitempty"`
-	ShowRoutes         bool         `json:"showRoutes,omitempty"`
+	// LANSharing switches read-only sharing on the local network (PRODUCT_SPEC
+	// §4). The runtime applies changes live when PUT /api/settings flips it.
+	LANSharing bool `json:"lanSharing,omitempty"`
+	ShowRoutes bool `json:"showRoutes,omitempty"`
+	// ShowWishlist shows Wishlist pins and hatched wishlist countries on the
+	// hero map. Unset means shown (the default); an explicit false is kept.
+	ShowWishlist *bool `json:"showWishlist,omitempty"`
+	// HideCountries hides the visited-country fill on the hero map.
+	HideCountries bool `json:"hideCountries,omitempty"`
+	// Language is the interface language preference ("auto", "en", "zh");
+	// stored verbatim like Theme.
+	Language string `json:"language,omitempty"`
 }

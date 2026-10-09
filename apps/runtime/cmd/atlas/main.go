@@ -11,7 +11,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -25,6 +24,8 @@ import (
 	"github.com/yuatlas/runtime/internal/api"
 	"github.com/yuatlas/runtime/internal/config"
 	"github.com/yuatlas/runtime/internal/geocode"
+	"github.com/yuatlas/runtime/internal/lan"
+	"github.com/yuatlas/runtime/internal/media"
 	"github.com/yuatlas/runtime/internal/storage"
 )
 
@@ -35,6 +36,7 @@ func main() {
 		host        = flag.String("host", "127.0.0.1", "bind address")
 		openBrowser = flag.Bool("open-browser", true, "open the default browser on startup")
 		readonly    = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
+		lanShare    = flag.Bool("lan", false, "share read-only on the local network at startup, regardless of the lanSharing setting")
 	)
 	flag.Parse()
 
@@ -63,18 +65,40 @@ func main() {
 
 	srv := api.NewServer(repo, geocoder, dir, actualPort, !*readonly)
 
+	// Thumbnails are cached outside atlas-data (it is exported/backed up).
+	thumbDir := media.DefaultCacheDir(dir)
+
 	mux := http.NewServeMux()
 	mux.Handle("/api/", srv.Handler())
-	mux.Handle("/media/", mediaHandler(dir))
+	mux.Handle("/media/", media.NewHandler(dir, media.NewThumbnailer(thumbDir)))
 	mux.Handle("/", staticHandler())
 
+	// One handler tree for every listener. api.Protect applies the Host
+	// (DNS-rebinding), Origin (CSRF) and CORS rules for local clients and the
+	// read-only policy for LAN clients — whether a request is local or
+	// remote is decided per request from the connection's addresses, so the
+	// loopback and LAN listeners can share it.
+	root := api.Protect(mux)
+
 	url := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
-	httpServer := &http.Server{Handler: corsMiddleware(mux)}
+	httpServer := &http.Server{Handler: root}
+
+	// LAN sharing (PRODUCT_SPEC §4): extra listeners on this computer's
+	// private IPv4 addresses, same port, same handler. On at startup when
+	// the stored setting says so or -lan forces it; toggled live afterwards
+	// by PUT /api/settings. Bind failures are recorded, never fatal.
+	lanMgr := lan.NewManager(actualPort, root)
+	srv.SetLAN(lanMgr)
+	startLAN := *lanShare
+	if settings, err := repo.LoadSettings(); err == nil && settings.LANSharing {
+		startLAN = true
+	}
 
 	go func() {
 		log.Printf("Yu's Atlas runtime listening on %s", url)
 		log.Printf("data directory: %s", dir)
 		log.Printf("geocoding provider: %s", geocoder.ProviderID())
+		log.Printf("thumbnail cache: %s", thumbDir)
 		if *readonly {
 			log.Printf("read-only mode: all API writes rejected")
 		}
@@ -82,6 +106,10 @@ func main() {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
+
+	if startLAN {
+		lanMgr.SetEnabled(true) // logs the LAN URLs or the bind error
+	}
 
 	if *openBrowser {
 		openBrowserURL(url)
@@ -94,6 +122,7 @@ func main() {
 	log.Println("shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	_ = lanMgr.Shutdown(ctx)
 	_ = httpServer.Shutdown(ctx)
 }
 
@@ -211,68 +240,6 @@ func staticHandler() http.Handler {
 		}
 		http.ServeFileFS(w, r, sub, p)
 	})
-}
-
-// mediaHandler serves the user's media files from <dataDir>/media so the
-// frontend can reference local images by stable /media/<place>/<file> paths
-// (PRODUCT_SPEC §10 storage layout). It is a read-only, traversal-safe file
-// server: only GET/HEAD, only existing regular files, no directory listings.
-func mediaHandler(dataDir string) http.Handler {
-	mediaRoot := filepath.Join(dataDir, "media")
-	fsys := os.DirFS(mediaRoot)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		name := strings.TrimPrefix(r.URL.Path, "/media/")
-		if name == "" || strings.Contains(name, "..") {
-			http.NotFound(w, r)
-			return
-		}
-		info, err := fs.Stat(fsys, name)
-		if err != nil || info.IsDir() {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFileFS(w, r, fsys, name)
-	})
-}
-
-// corsMiddleware exists only so the Next.js dev server (a different origin,
-// e.g. http://localhost:3000) can call the API directly when
-// NEXT_PUBLIC_API_BASE bypasses its rewrite proxy. The production app is
-// always same-origin (the Go runtime serves the frontend itself), so this
-// never needs to allow the open internet: a wildcard here would let any page
-// open in the user's browser read Atlas data or issue writes/deletes against
-// the local server (PRODUCT_SPEC §43 — "editing must only be available from
-// localhost"). Only reflect back an Origin that is itself loopback.
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if origin := r.Header.Get("Origin"); origin != "" && isLoopbackOrigin(origin) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-// isLoopbackOrigin reports whether origin is http(s)://127.0.0.1[:port],
-// http(s)://localhost[:port], or http(s)://[::1][:port] — the only origins a
-// legitimate local Atlas client (the dev server or the app itself) can have.
-func isLoopbackOrigin(origin string) bool {
-	u, err := url.Parse(origin)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 func openBrowserURL(url string) {

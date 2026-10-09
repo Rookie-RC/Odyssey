@@ -22,6 +22,7 @@ import (
 	"github.com/yuatlas/runtime/internal/atlas"
 	"github.com/yuatlas/runtime/internal/domain"
 	"github.com/yuatlas/runtime/internal/geocode"
+	"github.com/yuatlas/runtime/internal/lan"
 	"github.com/yuatlas/runtime/internal/storage"
 )
 
@@ -49,16 +50,41 @@ type Server struct {
 	// from interleaving with atlas import/new, which used to be guarded by a
 	// separate mutex and so could still race with unrelated CRUD requests.
 	writeMu sync.Mutex
+
+	// lan controls the optional LAN-sharing listeners (nil when the runtime
+	// has none, e.g. in tests). Set once via SetLAN before serving.
+	lan LANController
+}
+
+// LANController is what the API needs from the LAN-sharing listeners
+// (implemented by *lan.Manager): report their state for GET /api/runtime and
+// switch them when PUT /api/settings flips lanSharing.
+type LANController interface {
+	SetEnabled(on bool) lan.Status
+	Status() lan.Status
 }
 
 func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int, writable bool) *Server {
 	return &Server{store: store, geocoder: geocoder, dataDir: dataDir, port: port, provider: geocoder.ProviderID(), writable: writable}
 }
 
-// Handler returns the API mux. CORS is applied by the caller in main. In
-// read-only mode all mutating requests (POST/PUT/DELETE) are rejected before
-// they reach a handler, so a read-only runtime can never change data even if
-// the frontend is tricked into sending a write.
+// SetLAN attaches the LAN-sharing controller. The controller serves the full
+// handler tree (which includes this API), so it can only be created after the
+// Server; call SetLAN before the first request is served.
+func (s *Server) SetLAN(c LANController) { s.lan = c }
+
+// Handler returns the API mux. Host/Origin/CORS checks are applied around
+// the whole runtime by Protect (see access.go), wired in main.
+//
+// Two gates run before any handler:
+//
+//   - Remote (LAN) clients may only read: every POST/PUT/DELETE and every
+//     /api/geocode/* and /api/atlas/* call gets 403 with remoteReadOnlyMsg.
+//     Protect enforces the same rule; repeating it here means the API can
+//     never be mounted without it.
+//   - In read-only mode (-readonly) all mutating requests are rejected, so a
+//     read-only runtime can never change data even if the frontend is tricked
+//     into sending a write.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/runtime", s.handleRuntime)
@@ -96,16 +122,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/atlas/import", s.handleImportAtlas)
 	mux.HandleFunc("POST /api/atlas/new", s.handleNewAtlas)
 
-	if !s.writable {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
-				writeError(w, http.StatusForbidden, "runtime is read-only")
-				return
-			}
-			mux.ServeHTTP(w, r)
-		})
-	}
-	return mux
+	mux.HandleFunc("GET /api/atlas/backups", s.handleListBackups)
+	mux.HandleFunc("POST /api/atlas/backups/{name}/restore", s.handleRestoreBackup)
+	mux.HandleFunc("DELETE /api/atlas/backups/{name}", s.handleDeleteBackup)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if IsRemote(r) && !remoteAllowed(r) {
+			writeError(w, http.StatusForbidden, remoteReadOnlyMsg)
+			return
+		}
+		if !s.writable && isWriteMethod(r.Method) {
+			writeError(w, http.StatusForbidden, "runtime is read-only")
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -123,14 +154,35 @@ func decodeBody(r *http.Request, v any) error {
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
+// handleRuntime reports how this runtime is serving *this request*:
+//
+//   - remote: the request came from another device via LAN sharing;
+//   - writable: editing is possible for this client — false for remote
+//     clients and in -readonly mode, so the frontend hides all editing UI;
+//   - lan: the LAN-sharing state ({enabled, urls, error}), so the owner can
+//     see (and show, e.g. as text or a QR code) the URLs guests should open.
+//
+// dataDir — an absolute path on the owner's computer, typically containing
+// their user name — is only reported to local clients; a LAN guest has no
+// use for it.
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	remote := IsRemote(r)
+	lanStatus := lan.Status{URLs: []string{}}
+	if s.lan != nil {
+		lanStatus = s.lan.Status()
+	}
+	resp := map[string]any{
 		"mode":              "local",
-		"writable":          s.writable,
+		"writable":          s.writable && !remote,
+		"remote":            remote,
 		"port":              s.port,
-		"dataDir":           s.dataDir,
 		"geocodingProvider": s.provider,
-	})
+		"lan":               lanStatus,
+	}
+	if !remote {
+		resp["dataDir"] = s.dataDir
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleGetProfile(w http.ResponseWriter, r *http.Request) {
@@ -445,6 +497,9 @@ func validateVisit(v domain.Visit) error {
 	}
 	if !domain.ValidVisitType(string(v.VisitType)) {
 		return errors.New("invalid visitType")
+	}
+	if !domain.ValidTransport(string(v.Transport)) {
+		return errors.New("invalid transport")
 	}
 	return nil
 }
@@ -903,9 +958,20 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
+	// The previously stored value decides whether lanSharing was flipped
+	// (an unreadable file counts as all-defaults, i.e. sharing off).
+	prev, _ := s.store.LoadSettings()
 	if err := s.store.SaveSettings(settings); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// LAN sharing follows the setting live, but only when this request
+	// actually changes the stored value. The frontend saves the whole
+	// settings object for every preference (theme, routes …); comparing
+	// against the live listener state instead would let an unrelated theme
+	// change switch off sharing that was forced on with -lan.
+	if s.lan != nil && settings.LANSharing != prev.LANSharing {
+		s.lan.SetEnabled(settings.LANSharing)
 	}
 	writeJSON(w, http.StatusOK, settings)
 }
@@ -954,7 +1020,8 @@ func (s *Server) handleGeocodeReverse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-func (s *Server) placeExists(placeID string) bool {	places, err := s.store.LoadPlaces()
+func (s *Server) placeExists(placeID string) bool {
+	places, err := s.store.LoadPlaces()
 	if err != nil {
 		return false
 	}
@@ -1055,8 +1122,8 @@ func (s *Server) handleImportAtlas(w http.ResponseWriter, r *http.Request) {
 	st.Cleanup()
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"imported": true,
-		"backup":   backupRel,
+		"imported":      true,
+		"backup":        backupRel,
 		"schemaVersion": st.Manifest.SchemaVersion,
 	})
 }
@@ -1065,16 +1132,98 @@ func (s *Server) handleNewAtlas(w http.ResponseWriter, r *http.Request) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	keepTheme := ""
-	if settings, err := s.store.LoadSettings(); err == nil {
-		keepTheme = settings.Theme
-	}
-	backupRel, err := atlas.NewAtlas(s.dataDir, keepTheme)
+	// Preferences (theme, map toggles, LAN sharing …) carry over to the new
+	// Atlas; an unreadable settings file simply means defaults.
+	prev, _ := s.store.LoadSettings()
+	backupRel, err := atlas.NewAtlas(s.dataDir, prev)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"created": true, "backup": backupRel})
+}
+
+// --- Backups (list / restore / delete) ---
+// Like the other /api/atlas endpoints these are localhost-only (remote
+// clients are refused by the gate in Handler) and writable-only: restore and
+// delete are writes (refused in -readonly mode by the same gate), and the
+// listing is refused explicitly below, since backups are a management
+// feature with nothing to show a read-only viewer.
+
+// handleListBackups: GET /api/atlas/backups →
+// [{"name","size","createdAt"}], newest first.
+func (s *Server) handleListBackups(w http.ResponseWriter, r *http.Request) {
+	if !s.writable {
+		writeError(w, http.StatusForbidden, "runtime is read-only")
+		return
+	}
+	list, err := atlas.ListBackups(s.dataDir)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// handleRestoreBackup: POST /api/atlas/backups/{name}/restore. It goes
+// through exactly the same path as an import — validate and stage the
+// package, then Staged.Replace, which first backs up the current Atlas and
+// swaps data/ and media/ atomically — and returns the name of that
+// pre-restore backup, so a restore is itself undoable.
+func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	name := r.PathValue("name")
+	path, err := atlas.BackupFile(s.dataDir, name)
+	if err != nil {
+		writeBackupLookupError(w, err)
+		return
+	}
+	st, err := atlas.StageFile(s.dataDir, path)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "backup is not a valid atlas package: "+err.Error())
+		return
+	}
+	defer st.Cleanup()
+
+	preRel, err := st.Replace()
+	pre := ""
+	if preRel != "" {
+		pre = filepath.Base(preRel)
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":  err.Error(),
+			"backup": pre,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"restored": true, "backup": pre})
+}
+
+// handleDeleteBackup: DELETE /api/atlas/backups/{name} → {"deleted": name}.
+func (s *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	name := r.PathValue("name")
+	if err := atlas.DeleteBackup(s.dataDir, name); err != nil {
+		writeBackupLookupError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": name})
+}
+
+func writeBackupLookupError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, atlas.ErrInvalidBackupName):
+		writeError(w, http.StatusBadRequest, "invalid backup name: expected a file name ending in .atlas")
+	case errors.Is(err, atlas.ErrBackupNotFound):
+		writeError(w, http.StatusNotFound, "backup not found")
+	default:
+		writeError(w, http.StatusInternalServerError, err.Error())
+	}
 }
 
 // reportError logs a server-side failure (used where headers are already
