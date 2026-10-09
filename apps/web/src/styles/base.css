@@ -1,0 +1,472 @@
+/* Base layer: token fallbacks (Light), typography, page texture, focus,
+   motion. Theme values are written onto :root by applyTheme() (themes/index.ts)
+   and restored pre-paint by the boot script in app/layout.tsx. */
+
+:root {
+  --bg: #f7f6f1;
+  --bg-alt: #eeede6;
+  --surface: #ffffff;
+  --surface-elevated: #fcfbf8;
+  --surface-sunken: #f2f1eb;
+  --text-primary: #1c1d1a;
+  --text-secondary: #676a65;
+  --text-tertiary: #9a9c96;
+  --border: #e5e3dc;
+  --border-strong: #d2cfc6;
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, 0.09);
+  --on-accent: #ffffff;
+  --now: #2f7a45;
+  --now-soft: #dcefe1;
+  --scrim: rgba(28, 26, 20, 0.26);
+  --danger: #b42318;
+  --date-ink: #676a65;
+
+  --font-display: "Newsreader Variable", Georgia, serif;
+  --font-body: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-ui: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-date: var(--font-ui);
+  --display-weight: 500;
+  --label-tracking: 0.18em;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --shadow-sm: 0 1px 2px rgba(30, 28, 20, 0.06);
+  --shadow-md: 0 10px 28px rgba(30, 28, 20, 0.08);
+  --shadow-lg: 0 26px 64px rgba(30, 28, 20, 0.14);
+
+  --paper: none;
+  --paper-opacity: 0;
+  --grain: none;
+  --grain-opacity: 0;
+  --glass-tint: rgba(255, 255, 255, 0.5);
+  --glass-tint-hover: rgba(255, 255, 255, 0.7);
+  --glass-blur: 7px;
+  --glass-saturate: 1.7;
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-edge: rgba(255, 255, 255, 0.3);
+  --image-filter: none;
+  --image-frame: none;
+
+  --marker-current: #2f7a45;
+  --marker-current-ring: rgba(47, 122, 69, 0.34);
+  --marker-current-glow: rgba(47, 122, 69, 0.16);
+  --marker-visited: #2c5b38;
+  --marker-visited-stroke: #ffffff;
+  --marker-visited-faint: rgba(44, 91, 56, 0.45);
+  --marker-visited-glow: transparent;
+  --marker-wish: #2563eb;
+  --marker-label: #1c1d1a;
+  --marker-label-halo: rgba(247, 246, 241, 0.92);
+
+  --season-spring: #8fc89b;
+  --season-summer: #f2c14e;
+  --season-autumn: #e98a4a;
+  --season-winter: #80a9d4;
+  --season-spring-ink: #3e8452;
+  --season-summer-ink: #a26f0c;
+  --season-autumn-ink: #bc5a20;
+  --season-winter-ink: #3e6ea2;
+
+  /* Layout rhythm (VISUAL_SPEC §22) */
+  --gutter: clamp(20px, 3.4vw, 48px);
+  --content-max: 1360px;
+  --ease-out: cubic-bezier(0.22, 0.8, 0.26, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: auto;
+  transition: background-color 0.35s ease;
+}
+
+/* The ground is painted by <html> only: an opaque body background would sit
+   above the z-index:-1 paper layer and hide it. */
+body {
+  position: relative;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+  transition: color 0.35s ease;
+}
+
+/* Paper: lies under content, so only the page ground carries it. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--paper);
+  background-size: 220px 220px;
+  opacity: var(--paper-opacity);
+  mix-blend-mode: multiply;
+}
+
+html[data-mode="dark"] body::before {
+  mix-blend-mode: screen;
+}
+
+/* Grain: lies over everything, photographs included (Film, Night). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -50%;
+  z-index: 200;
+  pointer-events: none;
+  background-image: var(--grain);
+  background-size: 220px 220px;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: multiply;
+}
+
+html[data-mode="dark"] body::after {
+  mix-blend-mode: screen;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+/* Photographs carry the theme's image treatment (Film warms and softens,
+   Journal sepias slightly, Night desaturates a touch). */
+.atlas-photo {
+  filter: var(--image-filter);
+}
+
+/* Shared typography roles ------------------------------------------------- */
+
+.atlas-display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.atlas-eyebrow {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.atlas-date {
+  font-family: var(--font-date);
+  color: var(--date-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme="film"] .atlas-date {
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  text-shadow: 0 0 6px rgba(240, 120, 40, 0.35);
+}
+
+.atlas-season-ink--spring { color: var(--season-spring-ink); }
+.atlas-season-ink--summer { color: var(--season-summer-ink); }
+.atlas-season-ink--autumn { color: var(--season-autumn-ink); }
+.atlas-season-ink--winter { color: var(--season-winter-ink); }
+
+.atlas-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* User-supplied names can be one very long token; break only when needed. */
+.atlas-break {
+  overflow-wrap: break-word;
+}
+
+/* Keyboard hint chips (⌘K, /, ?) */
+.atlas-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Round icon button used across the Atlas (arrows, close, map controls). */
+.atlas-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s var(--ease-out),
+    box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.atlas-icon-btn:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.atlas-icon-btn:active {
+  transform: scale(0.96);
+}
+
+.atlas-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  box-shadow: none;
+}
+
+.atlas-icon-btn--sm {
+  width: 30px;
+  height: 30px;
+}
+
+/* Error banner */
+.atlas-error {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 90;
+  max-width: min(560px, 92vw);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* Toast (theme switched, copied link…) */
+.atlas-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 95;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--text-primary);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  animation: atlas-toast-in 0.28s var(--ease-out);
+  pointer-events: none;
+}
+
+@keyframes atlas-toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Footer colophon */
+.atlas-footer {
+  padding: 28px var(--gutter) calc(48px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.atlas-footer__heart {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin: 0 3px;
+  color: #e0524a;
+}
+
+.atlas-footer__meta {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.atlas-footer__meta button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.atlas-footer__meta button:hover {
+  color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Country flags (SVG; Windows has no flag emoji). */
+.atlas-flag {
+  display: inline-block;
+  flex: none;
+  object-fit: cover;
+  border-radius: 2px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+  vertical-align: -0.1em;
+}
+
+/* Cards built as <button> flex columns: make children span the full width
+   (Chromium does not reliably stretch flex items inside a button). */
+.atlas-wn-secondary,
+.atlas-idea,
+.atlas-theme-option {
+  align-items: stretch;
+}
+
+.atlas-wn-secondary > *,
+.atlas-idea > *,
+.atlas-theme-option > * {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Dialog shells receive focus on open (not their close button, which would
+   draw a focus ring nobody asked for); keyboard users Tab onwards. */
+.atlas-sheet:focus,
+.atlas-dialog:focus,
+.atlas-palette:focus {
+  outline: none;
+}
+
+/* Segmented control (language) */
+.atlas-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  gap: 2px;
+}
+
+.atlas-segmented__item {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.atlas-segmented__item:hover {
+  color: var(--text-primary);
+}
+
+.atlas-segmented__item.is-active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Transport picker: a vehicle beside each label. */
+.atlas-segmented--transport {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.atlas-segmented--transport .atlas-segmented__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px 6px 10px;
+}
+
+.atlas-segmented--transport .atlas-segmented__item svg {
+  flex: none;
+  opacity: 0.8;
+}
+
+.atlas-segmented--transport .atlas-segmented__item.is-active svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* Chinese text: no artificial tracking on uppercase-style labels, slightly
+   taller lines for CJK glyphs. */
+html[lang="zh-CN"] .atlas-eyebrow,
+html[lang="zh-CN"] .atlas-detail__label,
+html[lang="zh-CN"] .atlas-profile__label,
+html[lang="zh-CN"] .atlas-map-layers__title {
+  letter-spacing: 0.12em;
+}
+
+html[lang="zh-CN"] body {
+  line-height: 1.6;
+}

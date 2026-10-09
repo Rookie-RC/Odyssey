@@ -1,0 +1,79 @@
+/* Liquid glass (themes/types.ts → glass).
+   Reserved for chrome that floats over the world — the top-bar pills, the map
+   controls and their menus, actions laid over photographs. Content stays on
+   paper. Everywhere: a frosted, tinted pane with a specular rim. Where the
+   engine supports it, lib/liquid-glass.ts also bends the backdrop at the rim
+   (--glass-filter, set per element). */
+
+.atlas-glass {
+  --glass-frost: blur(var(--glass-blur, 8px)) saturate(var(--glass-saturate, 1.5));
+  --glass-sheen: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--glass-highlight) 22%, transparent) 0%,
+    transparent 55%
+  );
+  --glass-shadow: inset 0 1px 0 0 var(--glass-highlight), inset 0 -1px 1px 0 var(--glass-edge),
+    0 10px 28px -12px rgba(20, 16, 10, 0.32), 0 2px 6px -2px rgba(20, 16, 10, 0.12);
+  background: var(--glass-sheen), var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-frost);
+  backdrop-filter: var(--glass-filter, var(--glass-frost));
+  border-color: color-mix(in srgb, var(--glass-highlight) 45%, transparent);
+  box-shadow: var(--glass-shadow);
+}
+
+html[data-mode="dark"] .atlas-glass {
+  --glass-shadow: inset 0 1px 0 0 var(--glass-highlight), inset 0 -1px 1px 0 var(--glass-edge),
+    0 12px 32px -12px rgba(0, 0, 0, 0.65), 0 2px 6px -2px rgba(0, 0, 0, 0.35);
+}
+
+/* Pressable glass brightens under the pointer and while its menu is open. */
+button.atlas-glass:hover,
+button.atlas-glass[aria-expanded="true"],
+button.atlas-glass.is-open {
+  background: var(--glass-sheen), var(--glass-tint-hover);
+  border-color: color-mix(in srgb, var(--glass-highlight) 65%, transparent);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Menus hold more text than a pill: a denser, more frosted pane. */
+.atlas-glass--menu {
+  --glass-tint: var(--glass-tint-hover);
+  --glass-frost: blur(calc(var(--glass-blur, 8px) * 2)) saturate(var(--glass-saturate, 1.5));
+}
+
+/* Over photographs the backdrop can be anything, from snow to night sky:
+   a denser tint keeps the label legible on all of it. */
+.atlas-glass--over-photo {
+  --glass-tint: var(--glass-tint-hover);
+}
+
+/* Grouped controls (zoom in / out / reset) share one pane. */
+.atlas-map-controls__group.atlas-glass button {
+  background: transparent;
+}
+
+.atlas-map-controls__group.atlas-glass button:hover {
+  background: color-mix(in srgb, var(--glass-tint-hover) 80%, transparent);
+}
+
+.atlas-map-controls__group.atlas-glass button + button {
+  border-top-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .atlas-glass,
+  button.atlas-glass:hover {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: var(--border);
+  }
+}
+
+@media (forced-colors: active) {
+  .atlas-glass {
+    background: Canvas;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+}

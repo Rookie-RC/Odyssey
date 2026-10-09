@@ -1,0 +1,728 @@
+/* Journey Timeline (VISUAL_SPEC §7–10). A thin season-coloured line through
+   time: seasons named above it, memory fragments hanging below it, NOW near
+   the centre, the open future dashed to the right. */
+
+.atlas-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.atlas-section-head__title {
+  font-size: 13px;
+  letter-spacing: calc(var(--label-tracking) + 0.06em);
+}
+
+.atlas-journey {
+  position: relative;
+  padding: 64px 0 28px;
+}
+
+.atlas-journey__head {
+  padding: 0 var(--gutter);
+  margin-bottom: 30px;
+}
+
+.atlas-journey__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.atlas-journey__hint svg {
+  color: var(--text-tertiary);
+}
+
+.atlas-journey__hint-mid {
+  color: var(--text-secondary);
+}
+
+.atlas-timeline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 calc(var(--gutter) - 22px);
+}
+
+.atlas-timeline__arrow {
+  margin-top: 40px;
+  box-shadow: var(--shadow-sm);
+}
+
+.atlas-timeline__viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: var(--radius-md);
+  /* soft fade at both ends: time continues beyond the frame */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 36px, #000 calc(100% - 36px), transparent 100%);
+}
+
+.atlas-timeline__viewport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.atlas-timeline__viewport--dragging {
+  cursor: grabbing;
+}
+
+.atlas-timeline__viewport--dragging .atlas-tl-node {
+  pointer-events: none;
+}
+
+.atlas-timeline__track {
+  position: relative;
+  will-change: transform;
+}
+
+.atlas-timeline__track--animate {
+  transition: transform 0.6s var(--ease-out);
+}
+
+.atlas-timeline__svg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.atlas-timeline__skeleton {
+  height: 330px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.atlas-timeline__skeleton span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  margin-top: 96px;
+  background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
+  background-size: 200% 100%;
+  animation: atlas-shimmer 1.6s linear infinite;
+}
+
+@keyframes atlas-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+/* --- Season header marks (above the line) --- */
+.atlas-tl-season {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 20px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.atlas-tl-season svg {
+  margin-bottom: 3px;
+}
+
+.atlas-tl-season__name {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.atlas-tl-season__year {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- NOW pill + dashed rule --- */
+.atlas-tl-now {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.atlas-tl-now__pill {
+  position: absolute;
+  left: 0;
+  top: -58px;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--now-soft);
+  /* a shade deeper than the NOW colour so the small caps clear AA on the pill */
+  color: color-mix(in srgb, var(--now) 82%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+html[data-mode="dark"] .atlas-tl-now__pill {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--now) 45%, transparent);
+}
+
+.atlas-tl-now__rule {
+  position: absolute;
+  left: 0;
+  top: -30px;
+  height: 62px;
+  border-left: 1px dashed color-mix(in srgb, var(--now) 60%, transparent);
+}
+
+/* --- Nodes ---
+   The button is a zero-size anchor on the line: the dot sits on it, a short
+   stem drops to the card hanging below. */
+.atlas-tl-node {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+  --tl-season: var(--border-strong);
+  --tl-season-ink: var(--text-secondary);
+}
+
+.atlas-tl-node--spring { --tl-season: var(--season-spring); --tl-season-ink: var(--season-spring-ink); }
+.atlas-tl-node--summer { --tl-season: var(--season-summer); --tl-season-ink: var(--season-summer-ink); }
+.atlas-tl-node--autumn { --tl-season: var(--season-autumn); --tl-season-ink: var(--season-autumn-ink); }
+.atlas-tl-node--winter { --tl-season: var(--season-winter); --tl-season-ink: var(--season-winter-ink); }
+
+.atlas-tl-node:focus {
+  outline: none;
+}
+
+.atlas-tl-node__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 11px;
+  height: 11px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--tl-season);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tl-season) 60%, transparent);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
+}
+
+.atlas-tl-node--mid .atlas-tl-node__dot {
+  width: 9px;
+  height: 9px;
+}
+
+.atlas-tl-node--faint .atlas-tl-node__dot {
+  width: 8px;
+  height: 8px;
+  background: var(--bg);
+  border: 2px solid var(--tl-season);
+  box-shadow: none;
+}
+
+.atlas-tl-node--future .atlas-tl-node__dot {
+  width: 12px;
+  height: 12px;
+  background: var(--bg);
+  border: 2px solid var(--tl-season);
+  box-shadow: none;
+}
+
+.atlas-tl-node--now .atlas-tl-node__dot {
+  width: 16px;
+  height: 16px;
+  background: var(--now);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--now) 40%, transparent),
+    0 0 0 9px color-mix(in srgb, var(--now) 12%, transparent);
+}
+
+html[data-mode="dark"] .atlas-tl-node--now .atlas-tl-node__dot {
+  background: var(--bg);
+  border: 3.5px solid var(--now);
+  box-shadow: 0 0 12px 2px color-mix(in srgb, var(--now) 40%, transparent);
+}
+
+.atlas-tl-node__stem {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  height: 17px;
+  border-left: 1px solid var(--border-strong);
+  opacity: 0.8;
+}
+
+.atlas-tl-node--future .atlas-tl-node__stem {
+  border-left-style: dashed;
+}
+
+.atlas-tl-card {
+  position: absolute;
+  left: -75px;
+  top: 28px;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.25s var(--ease-out);
+}
+
+.atlas-tl-card__media {
+  display: block;
+  width: 100%;
+  height: 100px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border: var(--image-frame);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, outline-color 0.2s ease;
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+}
+
+html[data-theme="journal"] .atlas-tl-card__media {
+  box-shadow: 0 2px 6px rgba(60, 40, 20, 0.16);
+}
+
+.atlas-tl-card__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s var(--ease-out);
+}
+
+.atlas-tl-card__placeholder {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(120% 90% at 30% 20%, color-mix(in srgb, var(--tl-season) 26%, transparent), transparent 70%),
+    var(--surface-sunken);
+}
+
+.atlas-tl-card__initial {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 40px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text-primary) 55%, transparent);
+}
+
+.atlas-tl-card__flag {
+  position: absolute;
+  right: 9px;
+  bottom: 8px;
+}
+
+.atlas-tl-node--future .atlas-tl-card__media {
+  outline: 1.5px dashed color-mix(in srgb, var(--tl-season) 80%, transparent);
+  outline-offset: 3px;
+}
+
+.atlas-tl-node--future .atlas-tl-card__img {
+  opacity: 0.92;
+}
+
+.atlas-tl-card__date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 11px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.atlas-tl-card__season-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tl-season);
+}
+
+.atlas-tl-node--now .atlas-tl-card__season-dot {
+  background: var(--now);
+}
+
+.atlas-tl-card__name {
+  margin-top: 3px;
+  font-size: 14.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+html[data-theme="journal"] .atlas-tl-card__name,
+html[data-theme="minimal"] .atlas-tl-card__name,
+html[data-theme="film"] .atlas-tl-card__name {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 17px;
+}
+
+.atlas-tl-card__meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.atlas-tl-node--now .atlas-tl-card__meta,
+.atlas-tl-node--now .atlas-tl-card__date .atlas-date {
+  color: var(--now);
+  font-weight: 600;
+}
+
+.atlas-tl-node--future .atlas-tl-card__date .atlas-date {
+  color: var(--tl-season-ink);
+}
+
+/* hover / focus / active */
+.atlas-tl-node:hover .atlas-tl-card,
+.atlas-tl-node:focus-visible .atlas-tl-card,
+.atlas-tl-node--active .atlas-tl-card {
+  transform: translateY(-3px);
+}
+
+.atlas-tl-node:hover .atlas-tl-card__media,
+.atlas-tl-node--active .atlas-tl-card__media {
+  box-shadow: var(--shadow-md);
+}
+
+.atlas-tl-node:hover .atlas-tl-card__img {
+  transform: scale(1.04);
+}
+
+.atlas-tl-node:hover .atlas-tl-node__dot,
+.atlas-tl-node:focus-visible .atlas-tl-node__dot,
+.atlas-tl-node--active .atlas-tl-node__dot {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.atlas-tl-node:focus-visible .atlas-tl-card__media {
+  outline: 2px solid var(--accent);
+}
+
+/* Map ↔ Timeline focus */
+.atlas-tl-node--focused .atlas-tl-card__media {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.atlas-tl-node--focused .atlas-tl-node__dot {
+  box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent);
+}
+
+/* Where Next season ↔ future nodes */
+.atlas-tl-node--season-emphasis .atlas-tl-node__dot {
+  background: var(--tl-season);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--tl-season) 22%, transparent);
+}
+
+/* --- Open future node: "Where next?" --- */
+.atlas-tl-open {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.atlas-tl-open__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+  background: var(--bg);
+}
+
+.atlas-tl-open__card {
+  position: absolute;
+  left: -60px;
+  top: 28px;
+  width: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.atlas-tl-open__box {
+  display: grid;
+  place-items: center;
+  width: 100px;
+  height: 100px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--border-strong);
+  color: var(--text-tertiary);
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.atlas-tl-open:hover .atlas-tl-open__box,
+.atlas-tl-open:focus-visible .atlas-tl-open__box {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.atlas-tl-open__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.atlas-tl-open__card .atlas-tl-card__date {
+  margin-top: 11px;
+}
+
+/* --- Scroll indicator --- */
+.atlas-timeline__indicator {
+  position: relative;
+  width: 180px;
+  height: 3px;
+  margin: 4px auto 0;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.atlas-timeline__indicator-thumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--text-tertiary);
+}
+
+/* --- Empty state --- */
+.atlas-timeline__empty {
+  margin: 0 var(--gutter);
+  padding: 56px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  border-radius: var(--radius-xl);
+  border: 1px dashed var(--border-strong);
+}
+
+.atlas-timeline__empty p {
+  margin: 14px 0 0;
+  font-size: 26px;
+}
+
+.atlas-timeline__empty-sub {
+  max-width: 420px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.atlas-timeline__empty-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 80%);
+}
+
+.atlas-timeline__empty-line > span:not(.atlas-timeline__empty-now) {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--season-spring), var(--season-summer));
+}
+
+.atlas-timeline__empty-line > span:last-child {
+  background: repeating-linear-gradient(90deg, var(--border-strong) 0 4px, transparent 4px 10px);
+}
+
+.atlas-timeline__empty-now {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--now-soft);
+  /* a shade deeper than the NOW colour so the small caps clear AA on the pill */
+  color: color-mix(in srgb, var(--now) 82%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+}
+
+/* --- Hover preview (fixed, anchored to the node) --- */
+.atlas-tl-preview {
+  position: fixed;
+  z-index: 35;
+  transform: translateX(-50%);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  overflow: visible;
+  animation: atlas-tl-preview-in 0.2s var(--ease-out);
+}
+
+@keyframes atlas-tl-preview-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.atlas-tl-preview--below {
+  animation-name: atlas-tl-preview-in-below;
+}
+
+@keyframes atlas-tl-preview-in-below {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.atlas-tl-preview--closing {
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.atlas-tl-preview::after {
+  content: "";
+  position: absolute;
+  left: calc(50% + var(--tl-caret, 0px));
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.atlas-tl-preview--below::after {
+  bottom: auto;
+  top: -6px;
+  transform: translateX(-50%) rotate(-135deg);
+}
+
+.atlas-tl-preview--detached::after {
+  display: none;
+}
+
+.atlas-tl-preview__img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.atlas-tl-preview__body {
+  padding: 13px 16px 6px;
+}
+
+.atlas-tl-preview__state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.atlas-tl-preview__name {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 22px;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.atlas-tl-preview__meta {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.atlas-tl-preview__context {
+  margin: 10px 0 0;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.atlas-tl-preview__inspiration {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.atlas-tl-preview__action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% + 32px);
+  margin: 12px -16px 0;
+  padding: 11px 16px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.atlas-tl-preview__action:hover {
+  background: var(--surface-sunken);
+}
+
+@media (max-width: 720px) {
+  .atlas-journey {
+    padding-top: 44px;
+  }
+  .atlas-timeline__arrow {
+    display: none;
+  }
+  .atlas-timeline {
+    padding: 0;
+  }
+  .atlas-timeline__viewport {
+    border-radius: 0;
+  }
+  .atlas-journey__hint-mid {
+    display: none;
+  }
+}
+
+.atlas-timeline__empty-cta {
+  margin-top: 10px;
+}

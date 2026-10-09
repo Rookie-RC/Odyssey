@@ -1,0 +1,214 @@
+/* Command palette (⌘K / "/"). */
+
+.atlas-palette-backdrop {
+  padding-top: 14vh;
+}
+
+.atlas-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: 70vh;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: atlas-pop-in 0.2s var(--ease-out);
+}
+
+.atlas-palette__input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 0 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.atlas-palette__input input {
+  flex: 1;
+  min-width: 0;
+  height: 58px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 16.5px;
+}
+
+.atlas-palette__input input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.atlas-palette__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px 8px;
+  overscroll-behavior: contain;
+}
+
+.atlas-palette__group {
+  padding: 12px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.atlas-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.atlas-palette__item.is-active {
+  background: var(--surface-sunken);
+}
+
+.atlas-palette__thumb {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  font-size: 17px;
+  color: var(--text-secondary);
+}
+
+.atlas-palette__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.atlas-palette__thumb--cmd {
+  background: transparent;
+}
+
+.atlas-palette__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.atlas-palette__label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atlas-palette__country {
+  font-size: 12.5px;
+  font-weight: 450;
+  color: var(--text-secondary);
+}
+
+.atlas-palette__sub {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atlas-palette__check {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.atlas-palette__role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.atlas-palette__role--current {
+  color: var(--now);
+  border-color: color-mix(in srgb, var(--now) 40%, transparent);
+  background: var(--now-soft);
+}
+
+.atlas-palette__role--wish {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.atlas-palette__map {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.atlas-palette__map:hover {
+  background: var(--text-primary);
+  color: var(--bg);
+}
+
+.atlas-palette__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.atlas-palette__foot {
+  display: flex;
+  gap: 18px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.atlas-palette__foot > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 640px) {
+  .atlas-palette-backdrop {
+    padding-top: 8vh;
+  }
+  .atlas-palette__foot {
+    display: none;
+  }
+}

@@ -1,0 +1,928 @@
+/* Hero Map: fullscreen → contextual strip (PRODUCT_SPEC §18, VISUAL_SPEC §6).
+
+   The sticky shell reserves 100vh of document flow and stays pinned. Inside
+   it, .atlas-map-clip shrinks from the full viewport to a rounded inset strip
+   as the page scrolls (height, inset, radius written by AtlasApp's rAF loop),
+   while .atlas-map-band — a ground-coloured band behind the strip — keeps the
+   Journey from showing through around it. "Space making room for time". */
+
+.atlas-map-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.atlas-map-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  background: var(--bg);
+  pointer-events: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+html.atlas-collapsed .atlas-map-band {
+  border-bottom-color: var(--border);
+  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.3);
+}
+
+.atlas-map-clip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  pointer-events: auto;
+  background: var(--map-bg, var(--bg));
+  transition: box-shadow 0.3s ease;
+  /* isolate so the rounded corners clip the WebGL canvas in every engine */
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+html.atlas-collapsed .atlas-map-clip {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.atlas-main {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+}
+
+/* --- Hero (fills its clip parent) --- */
+.atlas-hero {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Explicit size + doubled specificity: maplibre-gl.css (loaded after this
+   file) sets .maplibregl-map { position: relative }, which would otherwise
+   collapse the container to zero height. */
+.atlas-hero .atlas-hero__map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.atlas-hero__tint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: var(--map-tint, none);
+  mix-blend-mode: var(--map-tint-blend, normal);
+  pointer-events: none;
+}
+
+/* "Scroll to explore my journey" — only meaningful on the first viewport. */
+.atlas-hero__hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  text-shadow: 0 0 8px var(--marker-label-halo), 0 0 3px var(--marker-label-halo);
+  pointer-events: none;
+  opacity: calc(1 - var(--hero-scroll, 0) * 5);
+}
+
+.atlas-hero__hint-chevron {
+  animation: atlas-bounce-y 1.9s ease-in-out infinite;
+}
+
+@keyframes atlas-bounce-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+/* --- Markers ----------------------------------------------------------------
+   Semantic hierarchy (VISUAL_SPEC §4): current > lived > trip > day trip >
+   stopover > transit. The element is a zero-size anchor centred on the place;
+   children are positioned around it. */
+
+.atlas-marker {
+  position: relative;
+  width: 0;
+  height: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.atlas-marker__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 11px;
+  height: 11px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--marker-visited);
+  border: 2px solid var(--marker-visited-stroke);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 10px 2px var(--marker-visited-glow);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
+}
+
+/* A small country flag planted on each visited place: a hairline pole rising
+   from the pin, the flag at its top (photographs' theme treatment applies). */
+.atlas-marker__flag {
+  position: absolute;
+  left: -0.65px;
+  bottom: 2px;
+  width: 1.3px;
+  height: 20px;
+  border-radius: 1px;
+  background: var(--marker-visited);
+  box-shadow: 0 0 2px var(--marker-label-halo);
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  transition: transform 0.25s var(--ease-out), opacity 0.25s ease;
+}
+
+.atlas-marker__flag img {
+  position: absolute;
+  left: 1.3px;
+  top: 0;
+  width: 13px;
+  max-width: none; /* the preflight's max-width: 100% would squeeze it to the pole */
+  height: 9px;
+  object-fit: cover;
+  border-radius: 1px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.2);
+  filter: var(--image-filter);
+}
+
+.atlas-marker:hover .atlas-marker__flag,
+.atlas-marker:focus-visible .atlas-marker__flag {
+  transform: scale(1.12);
+}
+
+/* The strip stays calm: flags fold away while the map is collapsed. */
+html.atlas-collapsed .atlas-marker__flag {
+  opacity: 0;
+  transform: scaleY(0.4);
+}
+
+.atlas-marker--day_trip .atlas-marker__dot {
+  width: 9px;
+  height: 9px;
+}
+
+.atlas-marker--stopover .atlas-marker__dot {
+  width: 9px;
+  height: 9px;
+  background: var(--marker-visited-stroke);
+  border: 2px solid var(--marker-visited);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.atlas-marker--transit .atlas-marker__dot {
+  width: 6px;
+  height: 6px;
+  border-width: 1px;
+  background: var(--marker-visited-faint);
+  box-shadow: none;
+}
+
+.atlas-marker--lived .atlas-marker__dot {
+  width: 12px;
+  height: 12px;
+}
+
+/* Past residence: calm static ring (never animated like the current base). */
+.atlas-marker__home {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid var(--marker-visited-faint);
+  pointer-events: none;
+}
+
+/* Current base: the strongest marker, a ring and a slow, low-amplitude pulse. */
+.atlas-marker--current .atlas-marker__dot {
+  width: 16px;
+  height: 16px;
+  background: var(--marker-current);
+  border: 3px solid var(--marker-visited-stroke);
+  box-shadow: 0 0 0 1px var(--marker-current-ring), 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
+  background: var(--marker-visited-stroke);
+  border: 3.5px solid var(--marker-current);
+  box-shadow: 0 0 14px 3px var(--marker-current-glow), 0 0 0 1px var(--marker-current-ring);
+}
+
+.atlas-marker__ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid var(--marker-current-ring);
+  background: var(--marker-current-glow);
+  pointer-events: none;
+}
+
+.atlas-marker__pulse {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%) scale(0.6);
+  border-radius: 50%;
+  background: var(--marker-current-glow);
+  animation: atlas-pulse 2.8s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes atlas-pulse {
+  0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0.9; }
+  70% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+}
+
+.atlas-marker:hover .atlas-marker__dot,
+.atlas-marker:focus-visible .atlas-marker__dot {
+  transform: translate(-50%, -50%) scale(1.25);
+}
+
+.atlas-marker:focus-visible .atlas-marker__dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Map ↔ Timeline focus: a restrained ring around the focused place. */
+.atlas-marker--focused::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: atlas-focus-in 0.35s var(--ease-out);
+  pointer-events: none;
+}
+
+@keyframes atlas-focus-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(1.6); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Place labels (collision-managed in HeroMap.layoutLabels). */
+.atlas-marker__label {
+  position: absolute;
+  left: 11px;
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  pointer-events: none;
+  color: var(--marker-label);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  text-shadow:
+    0 0 3px var(--marker-label-halo),
+    0 0 6px var(--marker-label-halo),
+    0 0 10px var(--marker-label-halo);
+  transition: opacity 0.2s ease;
+}
+
+.atlas-marker--label-left .atlas-marker__label {
+  left: auto;
+  right: 11px;
+  text-align: right;
+  align-items: flex-end;
+}
+
+.atlas-marker--label-hidden .atlas-marker__label {
+  opacity: 0;
+}
+
+.atlas-marker--stopover .atlas-marker__label,
+.atlas-marker--transit .atlas-marker__label,
+.atlas-marker--day_trip .atlas-marker__label {
+  font-weight: 500;
+  font-size: 12.5px;
+}
+
+.atlas-marker--current .atlas-marker__label {
+  left: 18px;
+}
+
+.atlas-marker--current.atlas-marker--label-left .atlas-marker__label {
+  right: 18px;
+}
+
+.atlas-marker__label-name {
+  display: block;
+}
+
+.atlas-marker--current .atlas-marker__label-name {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+html[data-theme="journal"] .atlas-marker--current .atlas-marker__label-name,
+html[data-theme="minimal"] .atlas-marker--current .atlas-marker__label-name,
+html[data-theme="film"] .atlas-marker--current .atlas-marker__label-name {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 19px;
+}
+
+.atlas-marker__label-country {
+  display: block;
+  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+html.atlas-collapsed .atlas-marker__label-country {
+  display: none;
+}
+
+/* Wishlist pins (optional layer): hollow, dashed — a place not yet visited. */
+.atlas-wishpin {
+  position: relative;
+  width: 0;
+  height: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+/* A place on the wishlist: a star in a soft ring of the wish colour. */
+.atlas-wishpin__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid var(--marker-wish);
+  background: color-mix(in srgb, var(--marker-wish) 14%, var(--surface));
+  color: var(--marker-wish);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker-wish) 16%, transparent), 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
+}
+
+.atlas-wishpin:hover .atlas-wishpin__dot,
+.atlas-wishpin:focus-visible .atlas-wishpin__dot {
+  transform: translate(-50%, -50%) scale(1.18);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--marker-wish) 24%, transparent), 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
+.atlas-wishpin:focus-visible .atlas-wishpin__dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* Its name, placed by the label layout (after every visited label). */
+.atlas-wishpin__label {
+  position: absolute;
+  left: 13px;
+  top: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 550;
+  font-style: italic;
+  line-height: 1.15;
+  color: var(--marker-wish);
+  text-shadow: 0 0 3px var(--marker-label-halo), 0 0 6px var(--marker-label-halo), 0 0 10px var(--marker-label-halo);
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.atlas-wishpin--label-left .atlas-wishpin__label {
+  left: auto;
+  right: 13px;
+  text-align: right;
+}
+
+.atlas-wishpin--label-hidden .atlas-wishpin__label {
+  opacity: 0;
+}
+
+/* When to go: revealed on hover / focus, below the name. */
+.atlas-wishpin__meta {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.atlas-wishpin--label-left .atlas-wishpin__meta {
+  left: auto;
+  right: 0;
+}
+
+.atlas-wishpin:hover .atlas-wishpin__label,
+.atlas-wishpin:focus-visible .atlas-wishpin__label,
+.atlas-wishpin:hover .atlas-wishpin__meta,
+.atlas-wishpin:focus-visible .atlas-wishpin__meta {
+  opacity: 1;
+}
+
+html.atlas-collapsed .atlas-wishpin__dot {
+  transform: translate(-50%, -50%) scale(0.8);
+}
+
+/* --- Micro preview (hover/focus) --- */
+.atlas-micro {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, calc(-100% - 16px));
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 11px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: atlas-micro-in 0.16s var(--ease-out);
+}
+
+@keyframes atlas-micro-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 10px)); }
+  to { opacity: 1; transform: translate(-50%, calc(-100% - 16px)); }
+}
+
+.atlas-micro__name {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.atlas-micro__meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* --- Expanded memory card (reference: Bordeaux card) --- */
+.atlas-memory-card {
+  position: absolute;
+  z-index: 7;
+  padding: 16px 16px 6px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  animation: atlas-card-in 0.28s var(--ease-out);
+  cursor: default;
+}
+
+@keyframes atlas-card-in {
+  from { opacity: 0; transform: translateX(-8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.atlas-memory-card--left {
+  animation-name: atlas-card-in-left;
+}
+
+@keyframes atlas-card-in-left {
+  from { opacity: 0; transform: translateX(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* caret pointing at the pin */
+.atlas-memory-card::before {
+  content: "";
+  position: absolute;
+  top: var(--caret-top, 50%);
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.atlas-memory-card--left::before {
+  left: auto;
+  right: -7px;
+  transform: translateY(-50%) rotate(-135deg);
+}
+
+.atlas-memory-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.atlas-memory-card__place {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.atlas-memory-card__place svg {
+  flex: none;
+  color: var(--text-secondary);
+  align-self: center;
+}
+
+.atlas-memory-card__date {
+  flex: none;
+  font-size: 12px;
+}
+
+.atlas-memory-card__sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 7px 0 13px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.atlas-memory-card__transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.atlas-memory-card__photos {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.atlas-memory-card__photos--2 {
+  grid-template-columns: 1.4fr 1fr;
+}
+
+.atlas-memory-card__photos img {
+  width: 100%;
+  height: 112px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  display: block;
+  background: var(--surface-sunken);
+}
+
+.atlas-memory-card__quote {
+  margin: 2px 0 10px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.atlas-memory-card__open {
+  display: flex;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 12px 16px;
+  justify-content: space-between;
+  align-items: center;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  transition: background 0.18s ease;
+}
+
+.atlas-memory-card__open:hover {
+  background: var(--surface-sunken);
+}
+
+.atlas-memory-card__open svg {
+  color: var(--text-secondary);
+  transition: transform 0.2s var(--ease-out);
+}
+
+.atlas-memory-card__open:hover svg {
+  transform: translateX(3px);
+}
+
+/* --- Map controls (bottom-right): zoom / reset + layers --- */
+.atlas-map-controls {
+  position: absolute;
+  right: var(--gutter);
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  opacity: calc(1 - var(--hero-scroll, 0) * 4);
+  transition: opacity 0.2s ease;
+}
+
+html.atlas-collapsed .atlas-map-controls {
+  visibility: hidden;
+}
+
+.atlas-map-controls__group,
+.atlas-map-controls__single {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.atlas-map-controls__group button,
+.atlas-map-controls__single {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.atlas-map-controls__group button + button {
+  border-top: 1px solid var(--border);
+}
+
+.atlas-map-controls__group button:last-child {
+  color: var(--text-secondary);
+}
+
+.atlas-map-controls__group button:hover,
+.atlas-map-controls__single:hover,
+.atlas-map-controls__single.is-open {
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+}
+
+.atlas-map-layers {
+  position: relative;
+}
+
+.atlas-map-layers__menu {
+  position: absolute;
+  right: calc(100% + 10px);
+  bottom: 0;
+  width: 268px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: atlas-pop-in 0.2s var(--ease-out);
+  transform-origin: bottom right;
+}
+
+.atlas-map-layers__title {
+  padding: 4px 8px 8px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.atlas-map-layers__item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.atlas-map-layers__item:hover {
+  background: var(--surface-sunken);
+}
+
+.atlas-map-layers__icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+.atlas-map-layers__item.is-on .atlas-map-layers__icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.atlas-map-layers__swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--now);
+  opacity: 0.4;
+}
+
+.atlas-map-layers__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.atlas-map-layers__label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.atlas-map-layers__hint {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+/* Switch */
+.atlas-switch {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.2s ease;
+}
+
+.atlas-switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s var(--ease-out);
+}
+
+[aria-checked="true"] > .atlas-switch,
+.atlas-switch--on {
+  background: var(--accent);
+}
+
+[aria-checked="true"] > .atlas-switch .atlas-switch__knob,
+.atlas-switch--on .atlas-switch__knob {
+  transform: translateX(12px);
+}
+
+/* --- MapLibre chrome themed to the Atlas --- */
+.atlas-hero .maplibregl-ctrl-bottom-right {
+  opacity: calc(1 - var(--hero-scroll, 0) * 4);
+}
+
+.atlas-hero .maplibregl-ctrl-bottom-right .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: 0 var(--gutter) 10px 0;
+  /* Frosted like the glass controls above it (too small to refract). */
+  background: var(--glass-tint);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 0 var(--glass-highlight);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.atlas-hero .maplibregl-ctrl-attrib-inner,
+.atlas-hero .maplibregl-ctrl-attrib a {
+  color: var(--text-secondary);
+}
+
+.atlas-hero .maplibregl-ctrl-attrib-button {
+  background-color: transparent;
+}
+
+html[data-mode="dark"] .atlas-hero .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+html.atlas-collapsed .atlas-hero .maplibregl-ctrl-attrib {
+  display: none;
+}
+
+/* --- WebGL error fallback --- */
+.atlas-map-error {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.atlas-map-error__detail {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 720px) {
+  .atlas-map-controls {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  .atlas-memory-card__photos img {
+    height: 92px;
+  }
+}
+
+.atlas-map-layers__action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.atlas-map-layers__action:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.atlas-map-layers__action:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
