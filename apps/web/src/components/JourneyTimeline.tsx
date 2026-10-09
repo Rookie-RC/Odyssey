@@ -11,6 +11,8 @@ import {
   type TimelineNode,
 } from "../lib/timeline";
 import { mediaSrc } from "../lib/api";
+import { abroadBands, abroadMilestones, type AbroadBand, type AbroadMilestone } from "../lib/abroad";
+import { TRANSPORT_GLYPH } from "../lib/transport";
 import type { SyncFocus } from "../lib/sync";
 import { t, useLocale } from "../lib/i18n";
 import type { AtlasTheme } from "../themes";
@@ -18,6 +20,7 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
+  HomeIcon,
   LongArrowLeft,
   LongArrowRight,
   PlusIcon,
@@ -59,11 +62,18 @@ const LINE_Y = 96;
 const TRACK_HEIGHT = 330;
 const CARD_W = 150;
 const OPEN_NODE_GAP = 190;
+/** Gap next to a study-abroad milestone (its card is narrower). */
+const MILESTONE_GAP = 145;
 
 const PREVIEW_FADE_MS = 140;
 
 interface PositionedNode {
   node: TimelineNode;
+  x: number;
+}
+
+interface PositionedMilestone {
+  milestone: AbroadMilestone;
   x: number;
 }
 
@@ -75,6 +85,9 @@ interface SeasonMark {
 
 interface TimelineLayout {
   positions: PositionedNode[];
+  milestones: PositionedMilestone[];
+  /** Stretches of the line spent abroad (home trips cut out), in px. */
+  abroadSegments: { x1: number; x2: number }[];
   seasonMarks: SeasonMark[];
   firstX: number;
   lastX: number;
@@ -97,19 +110,42 @@ function seasonYear(node: TimelineNode): number {
   return node.season === "winter" && month === 12 ? y + 1 : y;
 }
 
-function computeLayout(nodes: TimelineNode[], viewportWidth: number, nowTime: number): TimelineLayout | null {
+function computeLayout(
+  nodes: TimelineNode[],
+  viewportWidth: number,
+  nowTime: number,
+  milestones: AbroadMilestone[] = [],
+  bands: AbroadBand[] = []
+): TimelineLayout | null {
   if (nodes.length === 0 || viewportWidth <= 0) return null;
 
-  const minTime = Math.min(...nodes.map((n) => n.time));
-  const positions: PositionedNode[] = nodes.map((node) => ({
-    node,
-    x: SIDE_PADDING + (node.time - minTime) * PX_PER_YEAR,
-  }));
-  let prevX = -Infinity;
-  for (const p of positions) {
-    p.x = Math.max(p.x, prevX + MIN_NODE_GAP);
-    prevX = p.x;
+  // Place nodes and study-abroad milestones share one axis and one spacing
+  // rule. The nodes keep their own order (getTimelineItems' tie-breaks); a
+  // milestone goes before the nodes at a later time — and, for an arrival,
+  // before those at the same time (you land, then you live there).
+  type Item = { time: number; x: number; node?: TimelineNode; milestone?: AbroadMilestone };
+  const items: Item[] = [];
+  const pending = [...milestones].sort((a, b) => a.time - b.time);
+  for (const node of nodes) {
+    while (pending.length > 0 && (pending[0].time < node.time || (pending[0].time === node.time && pending[0].kind === "arrive"))) {
+      const m = pending.shift()!;
+      items.push({ time: m.time, x: 0, milestone: m });
+    }
+    items.push({ time: node.time, x: 0, node });
   }
+  for (const m of pending) items.push({ time: m.time, x: 0, milestone: m });
+
+  const minTime = Math.min(...items.map((i) => i.time));
+  let prev: Item | null = null;
+  for (const it of items) {
+    const gap = !prev ? 0 : prev.node && it.node ? MIN_NODE_GAP : MILESTONE_GAP;
+    it.x = Math.max(SIDE_PADDING + (it.time - minTime) * PX_PER_YEAR, prev ? prev.x + gap : -Infinity);
+    prev = it;
+  }
+  const positions: PositionedNode[] = items.filter((i) => i.node).map((i) => ({ node: i.node!, x: i.x }));
+  const placedMilestones: PositionedMilestone[] = items
+    .filter((i) => i.milestone)
+    .map((i) => ({ milestone: i.milestone!, x: i.x }));
 
   // Season header: one mark where the season (or its year) changes along the
   // line. The NOW column carries the NOW pill instead.
@@ -124,8 +160,8 @@ function computeLayout(nodes: TimelineNode[], viewportWidth: number, nowTime: nu
     seasonMarks.push({ x: p.x, season: p.node.season, year: seasonYear(p.node) });
   }
 
-  const firstX = positions[0].x;
-  const lastX = positions[positions.length - 1].x;
+  const firstX = items[0].x;
+  const lastX = items[items.length - 1].x;
   const openX = lastX + OPEN_NODE_GAP;
   const runway = Math.max(200, Math.round(viewportWidth / 2 - CARD_W));
   const trackWidth = openX + CARD_W / 2 + runway;
@@ -133,12 +169,40 @@ function computeLayout(nodes: TimelineNode[], viewportWidth: number, nowTime: nu
   const nowNode = positions.find((p) => p.node.kind === "now");
   const nowX = nowNode ? nowNode.x : SIDE_PADDING + (nowTime - minTime) * PX_PER_YEAR;
 
+  // A time's x on the pushed-apart axis: interpolated between its laid-out
+  // neighbours (the NOW anchor included), proportional beyond the ends.
+  const anchors = [...items.map((i) => ({ time: i.time, x: i.x })), { time: nowTime, x: nowX }].sort(
+    (a, b) => a.time - b.time || a.x - b.x
+  );
+  const xAt = (time: number): number => {
+    const first = anchors[0];
+    const last = anchors[anchors.length - 1];
+    if (time <= first.time) return first.x - (first.time - time) * PX_PER_YEAR;
+    if (time >= last.time) return last.x + (time - last.time) * PX_PER_YEAR;
+    let i = 0;
+    while (anchors[i + 1].time < time) i++;
+    const a = anchors[i];
+    const b = anchors[i + 1];
+    return b.time === a.time ? b.x : a.x + ((time - a.time) / (b.time - a.time)) * (b.x - a.x);
+  };
+  const abroadSegments: { x1: number; x2: number }[] = [];
+  for (const band of bands) {
+    let from = band.from;
+    for (const [g1, g2] of band.gaps) {
+      if (g1 > from) abroadSegments.push({ x1: xAt(from), x2: xAt(g1) });
+      from = Math.max(from, g2);
+    }
+    if (band.to > from) abroadSegments.push({ x1: xAt(from), x2: xAt(band.to) });
+  }
+
   const maxTranslate = 0;
   const minTranslate = Math.min(0, viewportWidth - trackWidth);
   const initialTranslate = clamp(viewportWidth / 2 - nowX, minTranslate, maxTranslate);
 
   return {
     positions,
+    milestones: placedMilestones,
+    abroadSegments,
     seasonMarks,
     firstX,
     lastX,
@@ -189,7 +253,15 @@ export default function JourneyTimeline({
   const [previewAnchor, setPreviewAnchor] = useState<PreviewAnchor | null>(null);
   const [previewClosing, setPreviewClosing] = useState(false);
 
-  const layout = useMemo(() => computeLayout(nodes, viewportWidth, nowTime), [nodes, viewportWidth, nowTime]);
+  const milestones = useMemo(
+    () => abroadMilestones(profile?.abroad),
+    [profile, locale] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const bands = useMemo(() => abroadBands(profile?.abroad, nowTime), [profile, nowTime]);
+  const layout = useMemo(
+    () => computeLayout(nodes, viewportWidth, nowTime, milestones, bands),
+    [nodes, viewportWidth, nowTime, milestones, bands]
+  );
 
   const userDraggedRef = useRef(false);
   const dragRef = useRef<{ pointerId: number; startClientX: number; startTranslate: number; moved: boolean } | null>(
@@ -548,6 +620,18 @@ export default function JourneyTimeline({
                     </linearGradient>
                   ) : null}
                 </defs>
+                {/* Time spent abroad: a soft band under the line. */}
+                {layout.abroadSegments.map((seg, i) => (
+                  <rect
+                    key={i}
+                    className="atlas-tl-abroad-band"
+                    x={seg.x1}
+                    y={LINE_Y - 7}
+                    width={Math.max(0, seg.x2 - seg.x1)}
+                    height={14}
+                    rx={7}
+                  />
+                ))}
                 {/* Earlier: a faint lead-in from the past. */}
                 <line
                   x1={24}
@@ -598,6 +682,24 @@ export default function JourneyTimeline({
                 <span className="atlas-tl-now__pill">{t("Now")}</span>
                 <span className="atlas-tl-now__rule" />
               </span>
+
+              {layout.milestones.map(({ milestone: m, x }) => (
+                <span
+                  key={m.id}
+                  className={"atlas-tl-milestone atlas-tl-milestone--" + m.kind}
+                  style={{ left: x, top: LINE_Y }}
+                >
+                  <span className="atlas-tl-milestone__dot" aria-hidden="true">
+                    <MilestoneIcon kind={m.kind} />
+                  </span>
+                  <span className="atlas-tl-node__stem" aria-hidden="true" />
+                  <span className="atlas-tl-milestone__card">
+                    <span className="atlas-tl-card__date atlas-date">{m.dateLabel}</span>
+                    <span className="atlas-tl-milestone__title">{m.title}</span>
+                    {m.detail ? <span className="atlas-tl-card__meta atlas-break">{m.detail}</span> : null}
+                  </span>
+                </span>
+              ))}
 
               {layout.positions.map((p) => (
                 <NodeColumn
@@ -679,6 +781,22 @@ export default function JourneyTimeline({
         />
       ) : null}
     </section>
+  );
+}
+
+/** Landing for an arrival, take-off for the final return, a house for a trip
+ * home (the plane is the map's own route glyph). */
+function MilestoneIcon({ kind }: { kind: AbroadMilestone["kind"] }) {
+  if (kind === "home") return <HomeIcon size={13} strokeWidth={1.8} />;
+  return (
+    <svg viewBox="0 0 24 24" width={13} height={13} aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d={TRANSPORT_GLYPH.plane}
+        transform={"rotate(" + (kind === "arrive" ? 135 : 45) + " 12 12)"}
+      />
+    </svg>
   );
 }
 

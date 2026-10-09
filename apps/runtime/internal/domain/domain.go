@@ -212,6 +212,75 @@ type Profile struct {
 		Label string `json:"label"`
 		URL   string `json:"url"`
 	} `json:"links,omitempty"`
+	// Abroad lists the stretches of life spent studying abroad (留学), from
+	// arrival to the final return home. The Timeline marks them and the
+	// Profile summarizes what happened in each.
+	Abroad []AbroadPeriod `json:"abroad,omitempty"`
+}
+
+// AbroadPeriod is one stay abroad — a degree, an exchange semester. Dates are
+// "YYYY-MM" or "YYYY-MM-DD" like a Visit's.
+type AbroadPeriod struct {
+	ID    string `json:"id"`
+	Label string `json:"label,omitempty"`
+	// StartDate is the arrival abroad; EndDate the final return home, unset
+	// while still abroad.
+	StartDate string `json:"startDate"`
+	EndDate   string `json:"endDate,omitempty"`
+	// HomeTrips are the times back home in between (holidays).
+	HomeTrips []DateSpan `json:"homeTrips,omitempty"`
+}
+
+type DateSpan struct {
+	StartDate string `json:"startDate"`
+	EndDate   string `json:"endDate,omitempty"`
+}
+
+// ValidDate reports whether s is "YYYY-MM" or "YYYY-MM-DD" with a real month
+// (and a day of 1–31). Such strings compare chronologically as text.
+func ValidDate(s string) bool {
+	if len(s) != 7 && len(s) != 10 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if i == 4 || i == 7 {
+			if s[i] != '-' {
+				return false
+			}
+		} else if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	month := (s[5]-'0')*10 + (s[6] - '0')
+	if month < 1 || month > 12 {
+		return false
+	}
+	if len(s) == 10 {
+		day := (s[8]-'0')*10 + (s[9] - '0')
+		if day < 1 || day > 31 {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidSpan: a valid start, an optional valid end, and the end not before the
+// start (compared at the coarser of the two precisions).
+func ValidSpan(start, end string) bool {
+	if !ValidDate(start) {
+		return false
+	}
+	if end == "" {
+		return true
+	}
+	if !ValidDate(end) {
+		return false
+	}
+	n := len(start)
+	if len(end) < n {
+		n = len(end)
+	}
+	return end[:n] >= start[:n]
 }
 
 // Settings are the portable user preferences (PRODUCT_SPEC §34), stored in

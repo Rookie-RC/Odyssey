@@ -124,6 +124,27 @@ export interface Profile {
   bio?: string;
   interests?: string[];
   links?: { label: string; url: string }[];
+  /** Stretches of life spent studying abroad (lib/abroad.ts). */
+  abroad?: AbroadPeriod[];
+}
+
+/** A start date ("YYYY-MM" or "YYYY-MM-DD") with an optional end. */
+export interface DateSpan {
+  startDate: string;
+  endDate?: string;
+}
+
+/** One stay abroad — a degree, an exchange semester (留学). */
+export interface AbroadPeriod {
+  id: string;
+  /** e.g. "TUM · MSc", "Erasmus in Lyon". */
+  label?: string;
+  /** Arrival abroad. */
+  startDate: string;
+  /** The final return home; unset while still abroad. */
+  endDate?: string;
+  /** Times back home in between (holidays). */
+  homeTrips?: DateSpan[];
 }
 
 export interface Settings {

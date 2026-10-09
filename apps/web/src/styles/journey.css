@@ -145,6 +145,69 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* --- Study abroad (lib/abroad.ts): a soft band under the line for the time
+   spent abroad, and small milestones for arriving, going home and returning.
+   Milestones are context, not memories: no photo, no preview. --- */
+.atlas-tl-abroad-band {
+  fill: var(--accent);
+  opacity: 0.12;
+}
+
+html[data-mode="dark"] .atlas-tl-abroad-band {
+  opacity: 0.2;
+}
+
+.atlas-tl-milestone {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.atlas-tl-milestone__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1.5px solid var(--accent);
+  color: var(--accent);
+}
+
+.atlas-tl-milestone .atlas-tl-node__stem {
+  top: 12px;
+  height: 14px;
+  border-left-style: dotted;
+}
+
+.atlas-tl-milestone__card {
+  position: absolute;
+  left: -60px;
+  top: 28px;
+  width: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.atlas-tl-milestone__card .atlas-tl-card__date {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.atlas-tl-milestone__title {
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--accent);
+}
+
 /* --- NOW pill + dashed rule --- */
 .atlas-tl-now {
   position: absolute;

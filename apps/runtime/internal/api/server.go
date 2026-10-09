@@ -206,11 +206,45 @@ func (s *Server) handlePutProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if err := validateAbroad(p.Abroad); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := s.store.SaveProfile(p); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, p)
+}
+
+// validateAbroad checks the study-abroad periods: unique ids, sane date
+// spans, and home trips that start inside their period.
+func validateAbroad(periods []domain.AbroadPeriod) error {
+	if len(periods) > 20 {
+		return errors.New("abroad: at most 20 periods")
+	}
+	seen := map[string]bool{}
+	for _, p := range periods {
+		if strings.TrimSpace(p.ID) == "" || seen[p.ID] {
+			return errors.New("abroad: every period needs a unique id")
+		}
+		seen[p.ID] = true
+		if !domain.ValidSpan(p.StartDate, p.EndDate) {
+			return errors.New("abroad: invalid dates (YYYY-MM or YYYY-MM-DD, end not before start)")
+		}
+		if len(p.HomeTrips) > 50 {
+			return errors.New("abroad: at most 50 home trips per period")
+		}
+		for _, h := range p.HomeTrips {
+			if !domain.ValidSpan(h.StartDate, h.EndDate) {
+				return errors.New("abroad: invalid home-trip dates")
+			}
+			if !domain.ValidSpan(p.StartDate, h.StartDate) || (p.EndDate != "" && !domain.ValidSpan(h.StartDate, p.EndDate)) {
+				return errors.New("abroad: a home trip must start within its period")
+			}
+		}
+	}
+	return nil
 }
 
 // --- Places ---

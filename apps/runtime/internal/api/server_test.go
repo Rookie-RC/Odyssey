@@ -271,6 +271,36 @@ func TestWishlistCRUD(t *testing.T) {
 // TestSettingsRoundTrip: free-form theme ids and the map display toggles are
 // stored verbatim — including an explicit "wishlist off", which must not
 // collapse into "unset" (that means shown).
+func TestProfileAbroadPeriods(t *testing.T) {
+	s, _ := newTestServer(t, true)
+	h := s.Handler()
+
+	good := domain.Profile{Name: "Yu", Abroad: []domain.AbroadPeriod{{
+		ID: "msc", Label: "TUM · MSc", StartDate: "2023-10", EndDate: "2025-09-30",
+		HomeTrips: []domain.DateSpan{{StartDate: "2024-07-20", EndDate: "2024-09"}, {StartDate: "2025-01"}},
+	}, {ID: "phd", StartDate: "2025-11-01"}}}
+	wantStatus(t, do(t, h, "PUT", "/api/profile", good), http.StatusOK)
+	got := decode[domain.Profile](t, do(t, h, "GET", "/api/profile", nil))
+	if !reflect.DeepEqual(got.Abroad, good.Abroad) {
+		t.Fatalf("abroad round trip: %+v", got.Abroad)
+	}
+
+	for name, bad := range map[string][]domain.AbroadPeriod{
+		"missing id":       {{StartDate: "2023-10"}},
+		"duplicate id":     {{ID: "a", StartDate: "2023-10"}, {ID: "a", StartDate: "2024-10"}},
+		"bad month":        {{ID: "a", StartDate: "2023-13"}},
+		"free text date":   {{ID: "a", StartDate: "last autumn"}},
+		"end before start": {{ID: "a", StartDate: "2023-10", EndDate: "2023-09-30"}},
+		"trip before":      {{ID: "a", StartDate: "2023-10", HomeTrips: []domain.DateSpan{{StartDate: "2023-08"}}}},
+		"trip after end":   {{ID: "a", StartDate: "2023-10", EndDate: "2024-06", HomeTrips: []domain.DateSpan{{StartDate: "2024-07"}}}},
+	} {
+		w := do(t, h, "PUT", "/api/profile", domain.Profile{Name: "Yu", Abroad: bad})
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: status %d, want 400", name, w.Code)
+		}
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
 	s, _ := newTestServer(t, true)
 	h := s.Handler()

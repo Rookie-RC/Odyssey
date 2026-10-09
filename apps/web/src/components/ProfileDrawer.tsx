@@ -11,6 +11,7 @@ import LanguagePicker from "./LanguagePicker";
 import { t, type LocalePreference } from "../lib/i18n";
 import { profileInitials } from "./Topbar";
 import { ArrowRight, CloseIcon, ExternalIcon, HomeIcon, ImageIcon, SettingsIcon, TicketIcon } from "./Icons";
+import { AbroadEditor, AbroadSummaryList, abroadFromDraft, abroadToDraft, type AbroadDraft } from "./AbroadSection";
 
 interface ProfileDrawerProps {
   profile: Profile | null;
@@ -45,6 +46,7 @@ interface Draft {
   links: LinkRow[];
   currentBaseId: string;
   avatar: string;
+  abroad: AbroadDraft[];
 }
 
 /** Right-side drawer, visually subordinate to the Atlas (VISUAL_SPEC §14).
@@ -106,6 +108,7 @@ export default function ProfileDrawer({
       links: (profile?.links ?? []).map((l) => ({ label: l.label, url: l.url })),
       currentBaseId: profile?.currentBase?.placeId ?? "",
       avatar: profile?.avatar ?? "",
+      abroad: abroadToDraft(profile?.abroad),
     };
     initialDraftRef.current = JSON.stringify(d);
     setDraft(d);
@@ -140,7 +143,15 @@ export default function ProfileDrawer({
       const links = draft.links
         .filter((l) => l.label.trim() || l.url.trim())
         .map((l) => ({ label: l.label.trim() || l.url.trim(), url: l.url.trim() }));
+      const abroad = abroadFromDraft(draft.abroad);
+      if (abroad.incomplete) {
+        setMessage(t("Every stay abroad and every trip home needs a start date."));
+        return;
+      }
+      // Start from the stored profile so fields this form does not edit
+      // (including ones from a newer app version) survive the save.
       const next: Profile = {
+        ...profile,
         name: draft.name.trim() || "Traveler",
         bio: draft.bio.trim(),
         interests: draft.interests
@@ -148,9 +159,12 @@ export default function ProfileDrawer({
           .map((i) => i.trim())
           .filter(Boolean),
         links,
+        abroad: abroad.periods.length > 0 ? abroad.periods : undefined,
       };
       if (draft.avatar) next.avatar = draft.avatar;
+      else delete next.avatar;
       if (draft.currentBaseId) next.currentBase = { placeId: draft.currentBaseId };
+      else delete next.currentBase;
       await api.saveProfile(next);
       setEditing(false);
       setMessage(t("Profile saved."));
@@ -244,6 +258,21 @@ export default function ProfileDrawer({
                     );
                   })}
                 </div>
+              ) : null}
+
+              {profile?.abroad && profile.abroad.length > 0 ? (
+                <section className="atlas-profile__block">
+                  <h3 className="atlas-profile__label">{t("Studying abroad")}</h3>
+                  <AbroadSummaryList periods={profile.abroad} places={places} visits={visits} />
+                </section>
+              ) : writable ? (
+                <section className="atlas-profile__block">
+                  <h3 className="atlas-profile__label">{t("Studying abroad")}</h3>
+                  <button type="button" className="atlas-abroad__cta" onClick={startEdit}>
+                    {t("Add when you arrived and when you went home — the Atlas will count the days and the places.")}
+                    <ArrowRight size={14} />
+                  </button>
+                </section>
               ) : null}
 
               {recent.length > 0 ? (
@@ -440,6 +469,7 @@ function ProfileEditForm({
           ))}
         </select>
       </label>
+      <AbroadEditor value={draft.abroad} onChange={(update) => onChange((d) => ({ ...d, abroad: update(d.abroad) }))} />
       <label className="atlas-form-field">
         <span className="atlas-form-label">{t("Bio")}</span>
         <textarea className="atlas-form-input" rows={3} value={draft.bio} onChange={(e) => set({ bio: e.target.value })} />
