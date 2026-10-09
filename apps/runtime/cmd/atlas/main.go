@@ -37,8 +37,31 @@ func main() {
 		openBrowser = flag.Bool("open-browser", true, "open the default browser on startup")
 		readonly    = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
 		lanShare    = flag.Bool("lan", false, "share read-only on the local network at startup, regardless of the lanSharing setting")
+
+		mode         = flag.String("mode", "local", "local: one Atlas on this computer; cloud: multi-user web service (accounts, one Atlas per user)")
+		publicOrigin = flag.String("public-origin", "", "cloud: comma-separated origins the frontend is served from, e.g. https://atlas.example.com")
+		allowSignup  = flag.Bool("allow-signup", true, "cloud: let anyone create an account")
+		userQuotaMB  = flag.Int64("user-quota-mb", 500, "cloud: storage per user in MB (photos, data, backups); 0 = unlimited")
+		trustProxy   = flag.Bool("trust-proxy", false, "cloud: trust X-Forwarded-For/-Proto from a reverse proxy on this machine")
 	)
 	flag.Parse()
+
+	switch *mode {
+	case "local":
+	case "cloud":
+		runCloud(cloudOptions{
+			dataDir:      *dataDir,
+			host:         *host,
+			port:         *port,
+			publicOrigin: *publicOrigin,
+			allowSignup:  *allowSignup,
+			quotaMB:      *userQuotaMB,
+			trustProxy:   *trustProxy,
+		})
+		return
+	default:
+		log.Fatalf("unknown -mode %q (want local or cloud)", *mode)
+	}
 
 	dir, err := resolveDataDir(*dataDir)
 	if err != nil {

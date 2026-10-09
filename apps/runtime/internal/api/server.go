@@ -54,6 +54,10 @@ type Server struct {
 	// lan controls the optional LAN-sharing listeners (nil when the runtime
 	// has none, e.g. in tests). Set once via SetLAN before serving.
 	lan LANController
+
+	// noLANGate turns off the remote (LAN) read-only gate in Handler; see
+	// DisableLANGate.
+	noLANGate bool
 }
 
 // LANController is what the API needs from the LAN-sharing listeners
@@ -72,6 +76,12 @@ func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir str
 // handler tree (which includes this API), so it can only be created after the
 // Server; call SetLAN before the first request is served.
 func (s *Server) SetLAN(c LANController) { s.lan = c }
+
+// DisableLANGate turns off the remote (LAN) read-only gate in Handler. Cloud
+// mode serves every client over the network and owns access control itself
+// (sessions, per-user routing — internal/cloud), so "not loopback" means
+// nothing there. Call before serving.
+func (s *Server) DisableLANGate() { s.noLANGate = true }
 
 // Handler returns the API mux. Host/Origin/CORS checks are applied around
 // the whole runtime by Protect (see access.go), wired in main.
@@ -127,7 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/atlas/backups/{name}", s.handleDeleteBackup)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if IsRemote(r) && !remoteAllowed(r) {
+		if !s.noLANGate && IsRemote(r) && !remoteAllowed(r) {
 			writeError(w, http.StatusForbidden, remoteReadOnlyMsg)
 			return
 		}
