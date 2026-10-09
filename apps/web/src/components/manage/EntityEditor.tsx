@@ -18,6 +18,7 @@ import MiniMap from "./MiniMap";
 import { PLACE_TYPES, PLACE_TYPE_LABELS } from "../../lib/places";
 import type { PlaceType } from "../../lib/types";
 import { HttpGeocodingProvider, type GeocodingResult } from "../../lib/geocode";
+import { t } from "../../lib/i18n";
 
 const geocodeProvider = new HttpGeocodingProvider();
 
@@ -141,9 +142,9 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
     setError("");
     try {
       if (kind === "place") {
-        if (!existingPlace) throw new Error("place not found");
-        if (!placeName.trim()) throw new Error("name is required");
-        if (!placeCoords) throw new Error("pick a location on the map");
+        if (!existingPlace) throw new Error(t("place not found"));
+        if (!placeName.trim()) throw new Error(t("name is required"));
+        if (!placeCoords) throw new Error(t("pick a location on the map"));
         await repo.updatePlace({
           ...existingPlace,
           name: placeName.trim(),
@@ -152,19 +153,19 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
           type: placeType,
           coordinates: placeCoords,
         });
-        onDone("Place updated.");
+        onDone(t("Place updated."));
         return;
       }
-      if (!resolved) throw new Error("a location is required");
+      if (!resolved) throw new Error(t("a location is required"));
       const { placeId, placeCreated } = await resolvePlaceId(repo, resolved);
       if (kind === "visit") {
         const rec = visitFromDraft(visit, placeId, existingVisit ?? undefined);
         await repo.updateVisit(rec);
-        onDone("Visit updated" + (placeCreated ? " · new place created." : "."));
+        onDone(placeCreated ? t("Visit updated · new place created.") : t("Visit updated."));
       } else {
         const rec = wishlistFromDraft(wishlist, placeId, existingWishlist ?? undefined);
         await repo.updateWishlist(rec);
-        onDone("Wishlist updated" + (placeCreated ? " · new place created." : "."));
+        onDone(placeCreated ? t("Wishlist updated · new place created.") : t("Wishlist updated."));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -176,17 +177,17 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
     return (
       <div className="atlas-entity-form">
         <Field
-          label="Search to update location"
-          hint="Optional — search and pick a result to update name, country and coordinates together."
+          label={t("Search to update location")}
+          hint={t("Optional — search and pick a result to update name, country and coordinates together.")}
         >
           <div className="atlas-locpicker__search">
             <input
               className="atlas-form-input"
               type="search"
-              placeholder="e.g. Lofoten, Sardinia, Dolomites…"
+              placeholder={t("e.g. Lofoten, Sardinia, Dolomites…")}
               value={placeQuery}
               onChange={(e) => setPlaceQuery(e.target.value)}
-              aria-label="Search location"
+              aria-label={t("Search location")}
             />
             {placeSearching ? <span className="atlas-locpicker__spinner" aria-hidden="true" /> : null}
           </div>
@@ -200,7 +201,7 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
                   <span className="atlas-locpicker__result-name">{r.name}</span>
                   <span className="atlas-locpicker__result-meta">
                     {r.displayName}
-                    {r.suggestedType ? " · " + PLACE_TYPE_LABELS[r.suggestedType] : ""}
+                    {r.suggestedType ? " · " + t(PLACE_TYPE_LABELS[r.suggestedType]) : ""}
                   </span>
                 </button>
               </li>
@@ -208,29 +209,27 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
           </ul>
         ) : null}
 
-        <Field label="Name">
+        <Field label={t("Name")}>
           <TextInput value={placeName} onChange={(e) => setPlaceName(e.target.value)} />
         </Field>
         <div className="atlas-form-grid">
           <Field
-            label="Country"
-            hint={
-              "Search above to change the country (code: " + (placeCountryCode || "—") + ")."
-            }
+            label={t("Country")}
+            hint={t("Search above to change the country (code: {code}).", { code: placeCountryCode || "—" })}
           >
             <TextInput value={placeCountry} readOnly disabled />
           </Field>
-          <Field label="Type">
+          <Field label={t("Type")}>
             <Select value={placeType} onChange={(e) => setPlaceType(e.target.value as PlaceType)}>
-              {PLACE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {PLACE_TYPE_LABELS[t]}
+              {PLACE_TYPES.map((pt) => (
+                <option key={pt} value={pt}>
+                  {t(PLACE_TYPE_LABELS[pt])}
                 </option>
               ))}
             </Select>
           </Field>
         </div>
-        <Field label="Location" hint="Drag the marker or click the map to refine the coordinates.">
+        <Field label={t("Location")} hint={t("Drag the marker or click the map to refine the coordinates.")}>
           <MiniMap
             theme={theme}
             value={placeCoords}
@@ -241,9 +240,9 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
         {error ? <p className="atlas-locpicker__error">{error}</p> : null}
         <div className="atlas-addflow__actions">
           <Btn kind="primary" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? t("Saving…") : t("Save")}
           </Btn>
-          <Btn onClick={onCancel}>Cancel</Btn>
+          <Btn onClick={onCancel}>{t("Cancel")}</Btn>
         </div>
       </div>
     );
@@ -270,9 +269,9 @@ export default function EntityEditor({ kind, id, ctx, onDone, onCancel }: Entity
       {error ? <p className="atlas-locpicker__error">{error}</p> : null}
       <div className="atlas-addflow__actions">
         <Btn kind="primary" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("Saving…") : t("Save")}
         </Btn>
-        <Btn onClick={onCancel}>Cancel</Btn>
+        <Btn onClick={onCancel}>{t("Cancel")}</Btn>
       </div>
     </div>
   );

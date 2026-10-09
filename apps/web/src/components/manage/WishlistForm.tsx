@@ -9,6 +9,7 @@ import type { InspirationDraft, WishlistDraft } from "./drafts";
 import { emptyInspiration } from "./drafts";
 import MediaPicker from "./MediaPicker";
 import { Btn, Checkbox, Field, Select, TextArea, TextInput } from "./FormUI";
+import { t } from "../../lib/i18n";
 
 const SEASONS: Season[] = ["spring", "summer", "autumn", "winter"];
 const INSPIRATION_TYPES: InspirationType[] = [
@@ -42,7 +43,7 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
 
   return (
     <div className="atlas-entity-form">
-      <Field label="Best seasons" hint="Where Next groups destinations by season.">
+      <Field label={t("Best seasons")} hint={t("Where Next groups destinations by season.")}>
         <div className="atlas-form-checks">
           {SEASONS.map((s) => (
             <Checkbox key={s} label={seasonLabel(s)} checked={value.seasons.includes(s)} onChange={() => toggleSeason(s)} />
@@ -51,17 +52,17 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
       </Field>
 
       <div className="atlas-form-grid">
-        <Field label="Target year (optional)">
+        <Field label={t("Target year (optional)")}>
           <TextInput
             type="number"
             min={2025}
             max={2100}
-            placeholder="e.g. 2027"
+            placeholder={t("e.g. 2027")}
             value={value.targetYear}
             onChange={(e) => set({ targetYear: e.target.value })}
           />
         </Field>
-        <Field label="Target season (optional)">
+        <Field label={t("Target season (optional)")}>
           <Select
             value={value.targetSeason}
             onChange={(e) => set({ targetSeason: e.target.value as "" | Season })}
@@ -76,7 +77,7 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
         </Field>
       </div>
 
-      <Field label="Priority" hint="1 = highest. Used to rank Where Next.">
+      <Field label={t("Priority")} hint={t("1 = highest. Used to rank Where Next.")}>
         <Select
           value={value.priority}
           onChange={(e) => set({ priority: e.target.value })}
@@ -90,16 +91,16 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
         </Select>
       </Field>
 
-      <Field label="Why" hint="Short display-oriented reason.">
+      <Field label={t("Why")} hint={t("Short display-oriented reason.")}>
         <TextArea
           rows={2}
-          placeholder="e.g. Midnight sun, dramatic mountains and hiking."
+          placeholder={t("e.g. Midnight sun, dramatic mountains and hiking.")}
           value={value.why}
           onChange={(e) => set({ why: e.target.value })}
         />
       </Field>
 
-      <Field label="Inspirations">
+      <Field label={t("Inspirations")}>
         <div className="atlas-form-list">
           {value.inspirations.map((insp, i) => (
             <div key={i} className="atlas-form-card">
@@ -108,16 +109,16 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
                   value={insp.type}
                   onChange={(e) => setInspiration(i, { type: e.target.value as InspirationType })}
                 >
-                  {INSPIRATION_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {inspirationTypeLabel(t)}
+                  {INSPIRATION_TYPES.map((it) => (
+                    <option key={it} value={it}>
+                      {inspirationTypeLabel(it)}
                     </option>
                   ))}
                 </Select>
                 <button
                   type="button"
                   className="atlas-form-icon-btn"
-                  aria-label="Remove inspiration"
+                  aria-label={t("Remove inspiration")}
                   onClick={() =>
                     set({ inspirations: value.inspirations.filter((_, idx) => idx !== i) })
                   }
@@ -127,51 +128,51 @@ export default function WishlistForm({ value, onChange, media, placeId, hideImag
               </div>
               <div className="atlas-form-grid">
                 <TextInput
-                  placeholder="Title"
+                  placeholder={t("Title")}
                   value={insp.title}
                   onChange={(e) => setInspiration(i, { title: e.target.value })}
                 />
                 <TextInput
-                  placeholder="Creator"
+                  placeholder={t("Creator")}
                   value={insp.creator}
                   onChange={(e) => setInspiration(i, { creator: e.target.value })}
                 />
               </div>
               <div className="atlas-form-grid">
                 <TextInput
-                  placeholder="Platform (e.g. YouTube)"
+                  placeholder={t("Platform (e.g. YouTube)")}
                   value={insp.platform}
                   onChange={(e) => setInspiration(i, { platform: e.target.value })}
                 />
                 <TextInput
-                  placeholder="URL"
+                  placeholder={t("URL")}
                   value={insp.url}
                   onChange={(e) => setInspiration(i, { url: e.target.value })}
                 />
               </div>
               <TextInput
-                placeholder="Note (optional)"
+                placeholder={t("Note (optional)")}
                 value={insp.note}
                 onChange={(e) => setInspiration(i, { note: e.target.value })}
               />
             </div>
           ))}
           <Btn onClick={() => set({ inspirations: [...value.inspirations, emptyInspiration()] })}>
-            + Add inspiration
+            {t("+ Add inspiration")}
           </Btn>
         </div>
       </Field>
 
-      <Field label="Notes" hint="Free-form personal planning thoughts.">
+      <Field label={t("Notes")} hint={t("Free-form personal planning thoughts.")}>
         <TextArea
           rows={3}
-          placeholder="Maybe 2027 or 2028. Could go with friends…"
+          placeholder={t("Maybe 2027 or 2028. Could go with friends…")}
           value={value.note}
           onChange={(e) => set({ note: e.target.value })}
         />
       </Field>
 
-      <Field label="Images">
+      <Field label={t("Images")}>
         {hideImages ? null : (
           <MediaPicker
             media={media}

@@ -6,13 +6,16 @@
 // Sheet turns an existing Visit/Wishlist record back into a draft, and the
 // equality helpers decide whether an edit is dirty. Keeping a single copy of
 // this round-trip logic means inline editing can never drift from Manage Atlas.
-import type { InspirationType, Season, Visit, VisitType, Wishlist } from "../../lib/types";
+import type { InspirationType, Season, Transport, Visit, VisitType, Wishlist } from "../../lib/types";
+import { DEFAULT_TRANSPORT, transportOf } from "../../lib/transport";
 
 export interface VisitDraft {
   visitType: VisitType;
   startDate: string;
   endDate: string;
   withFriends: boolean;
+  /** How the trip was travelled (styles its route); ignored for lived. */
+  transport: Transport;
   highlights: { name: string; note: string }[];
   reflection: string;
   mediaIds: string[];
@@ -24,6 +27,7 @@ export function emptyVisitDraft(): VisitDraft {
     startDate: "",
     endDate: "",
     withFriends: false,
+    transport: DEFAULT_TRANSPORT,
     highlights: [],
     reflection: "",
     mediaIds: [],
@@ -37,6 +41,7 @@ export function visitToDraft(v: Visit): VisitDraft {
     startDate: v.startDate ?? "",
     endDate: v.endDate ?? "",
     withFriends: v.withFriends ?? false,
+    transport: transportOf(v),
     highlights: (v.highlights ?? []).map((h) => ({ name: h.name, note: h.note ?? "" })),
     reflection: v.reflection ?? "",
     mediaIds: v.mediaIds ?? [],
@@ -113,6 +118,7 @@ export function visitDraftEquals(a: VisitDraft, b: VisitDraft): boolean {
     a.startDate === b.startDate &&
     a.endDate === b.endDate &&
     a.withFriends === b.withFriends &&
+    a.transport === b.transport &&
     a.reflection === b.reflection &&
     arraysEqual(a.mediaIds, b.mediaIds) &&
     a.highlights.length === b.highlights.length &&

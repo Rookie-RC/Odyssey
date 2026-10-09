@@ -5,8 +5,9 @@
 // organized by Place when a placeId is known) and immediately join the library.
 import { useRef, useState } from "react";
 import type { Media } from "../../lib/types";
-import { api } from "../../lib/api";
+import { api, mediaSrc } from "../../lib/api";
 import { Btn, EmptyState } from "./FormUI";
+import { t } from "../../lib/i18n";
 
 interface MediaPickerProps {
   media: Media[];
@@ -53,7 +54,12 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange, onU
     if (failed) {
       setError(
         added.length > 0
-          ? `${added.length} photo${added.length > 1 ? "s" : ""} uploaded; then failed: ${failed}`
+          ? t(
+              added.length === 1
+                ? "{n} photo uploaded; then failed: {error}"
+                : "{n} photos uploaded; then failed: {error}",
+              { n: added.length, error: failed }
+            )
           : failed
       );
     }
@@ -69,7 +75,7 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange, onU
   return (
     <div className="atlas-mediapicker">
       {media.length === 0 ? (
-        <EmptyState>No media yet — upload the first image below.</EmptyState>
+        <EmptyState>{t("No media yet — upload the first image below.")}</EmptyState>
       ) : (
         <div className="atlas-mediapicker__grid">
           {media.map((m) => {
@@ -83,7 +89,7 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange, onU
                 aria-pressed={sel}
                 title={m.caption ?? m.path}
               >
-                <img src={m.path} alt={m.caption ?? ""} loading="lazy" draggable={false} />
+                <img src={mediaSrc(m, 320)} alt={m.caption ?? ""} loading="lazy" draggable={false} />
                 <span className="atlas-mediapicker__check" aria-hidden="true">
                   {sel ? "✓" : ""}
                 </span>
@@ -107,9 +113,9 @@ export default function MediaPicker({ media, placeId, selectedIds, onChange, onU
           onChange={(e) => upload(e.target.files)}
         />
         <Btn kind="primary" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          {uploading ? "Uploading…" : "+ Upload photos"}
+          {uploading ? t("Uploading…") : t("+ Upload photos")}
         </Btn>
-        <span className="atlas-form-hint">Drag photos here, or click to choose. Stored under atlas-data/media.</span>
+        <span className="atlas-form-hint">{t("Drag photos here, or click to choose. Stored under atlas-data/media.")}</span>
       </div>
       {error ? <p className="atlas-locpicker__error">{error}</p> : null}
     </div>

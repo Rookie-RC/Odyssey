@@ -9,7 +9,9 @@ import { useMemo, useState } from "react";
 import type { Media, Place, Profile, Settings, Visit, Wishlist } from "../../lib/types";
 import { HttpAtlasRepository, type AtlasRepository } from "../../lib/repository";
 import type { RuntimeInfo } from "../../lib/api";
-import type { AtlasTheme } from "../../themes";
+import type { AtlasTheme, ThemePreference } from "../../themes";
+import ThemePicker from "../ThemePicker";
+import { t, type LocalePreference } from "../../lib/i18n";
 import ManageOverview from "./ManageOverview";
 import ManagePlaces from "./ManagePlaces";
 import ManageVisits from "./ManageVisits";
@@ -31,6 +33,10 @@ export interface ManageContext {
   profile: Profile | null;
   settings: Settings | null;
   theme: AtlasTheme;
+  themePreference: ThemePreference;
+  onThemeChange: (pref: ThemePreference) => void;
+  localePreference: LocalePreference;
+  onLocaleChange: (pref: LocalePreference) => void;
   runtime: RuntimeInfo | null;
   repo: AtlasRepository;
   notify: (msg: string) => void;
@@ -48,14 +54,16 @@ type EditorState =
   | { kind: "edit-place"; id: string }
   | null;
 
-const SECTIONS: { id: ManageSection; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "places", label: "Places" },
-  { id: "visits", label: "Visits" },
-  { id: "wishlist", label: "Wishlist" },
-  { id: "media", label: "Media" },
-  { id: "transfer", label: "Import / Export" },
-  { id: "settings", label: "Settings" },
+// Labels are functions so they translate at render time (the interface
+// language can change while Manage Atlas is open).
+const SECTIONS: { id: ManageSection; label: () => string }[] = [
+  { id: "overview", label: () => t("Overview") },
+  { id: "places", label: () => t("Places") },
+  { id: "visits", label: () => t("Visits") },
+  { id: "wishlist", label: () => t("Wishlist") },
+  { id: "media", label: () => t("Media") },
+  { id: "transfer", label: () => t("Import / Export") },
+  { id: "settings", label: () => t("Settings") },
 ];
 
 interface ManageAtlasProps {
@@ -69,7 +77,12 @@ interface ManageAtlasProps {
   runtime: RuntimeInfo | null;
   onReload: () => void;
   onExit: () => void;
-  onToggleTheme: () => void;
+  themePreference: ThemePreference;
+  onThemeChange: (pref: ThemePreference) => void;
+  localePreference: LocalePreference;
+  onLocaleChange: (pref: LocalePreference) => void;
+  /** Open straight into an add flow (e.g. from the empty Atlas). */
+  initialAdd?: AddKind | null;
 }
 
 export default function ManageAtlas({
@@ -83,10 +96,14 @@ export default function ManageAtlas({
   runtime,
   onReload,
   onExit,
-  onToggleTheme,
+  themePreference,
+  onThemeChange,
+  localePreference,
+  onLocaleChange,
+  initialAdd = null,
 }: ManageAtlasProps) {
   const [section, setSection] = useState<ManageSection>("overview");
-  const [editor, setEditor] = useState<EditorState>(null);
+  const [editor, setEditor] = useState<EditorState>(initialAdd ? { kind: "add", addKind: initialAdd } : null);
   const [toast, setToast] = useState("");
 
   const repo = useMemo(() => new HttpAtlasRepository(), []);
@@ -108,6 +125,10 @@ export default function ManageAtlas({
     profile,
     settings,
     theme,
+    themePreference,
+    onThemeChange,
+    localePreference,
+    onLocaleChange,
     runtime,
     repo,
     notify,
@@ -121,35 +142,35 @@ export default function ManageAtlas({
   const editorTitle =
     editor?.kind === "add"
       ? editor.addKind === "visit"
-        ? "I've been here"
-        : "I want to go here"
+        ? t("I've been here")
+        : t("I want to go here")
       : editor?.kind === "edit-visit"
-        ? "Edit visit"
+        ? t("Edit visit")
         : editor?.kind === "edit-wishlist"
-          ? "Edit wishlist"
+          ? t("Edit wishlist")
           : editor?.kind === "edit-place"
-            ? "Edit place"
+            ? t("Edit place")
             : "";
 
   return (
     <div className="atlas-manage">
       <header className="atlas-manage__topbar">
         <div className="atlas-manage__brand">
-          <span className="atlas-manage__title">Manage Atlas</span>
+          <span className="atlas-manage__title">{t("Manage Atlas")}</span>
           <span className="atlas-manage__datadir" title={runtime?.dataDir ?? ""}>
             {runtime?.dataDir ?? "…"}
           </span>
         </div>
         <div className="atlas-manage__topbar-actions">
-          <Btn onClick={onToggleTheme}>{theme.id === "light" ? "Night" : "Light"}</Btn>
+          <ThemePicker preference={themePreference} active={theme} onChange={onThemeChange} />
           <Btn kind="primary" onClick={onExit}>
-            Back to Atlas
+            {t("Back to Atlas")}
           </Btn>
         </div>
       </header>
 
       <div className="atlas-manage__body">
-        <nav className="atlas-manage__nav" aria-label="Manage sections">
+        <nav className="atlas-manage__nav" aria-label={t("Manage sections")}>
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -157,7 +178,7 @@ export default function ManageAtlas({
               className={"atlas-manage__nav-item" + (section === s.id ? " atlas-manage__nav-item--active" : "")}
               onClick={() => setSection(s.id)}
             >
-              {s.label}
+              {s.label()}
               {s.id === "places" && places.length > 0 ? (
                 <span className="atlas-manage__count">{places.length}</span>
               ) : null}

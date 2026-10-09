@@ -7,6 +7,7 @@ import { useState } from "react";
 import { placeTypeLabel } from "../../lib/places";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, EmptyState, Row } from "./FormUI";
+import { t, tn } from "../../lib/i18n";
 
 export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -21,7 +22,7 @@ export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
     try {
       await repo.deletePlace(id);
       setConfirmId(null);
-      notify("Place deleted.");
+      notify(t("Place deleted."));
       reload();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -34,13 +35,13 @@ export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
   return (
     <div className="atlas-manage-section">
       <div className="atlas-manage-section__head">
-        <h2 className="atlas-manage-section__title">Places</h2>
-        <Btn onClick={() => ctx.openAdd("visit")}>+ Add</Btn>
+        <h2 className="atlas-manage-section__title">{t("Places")}</h2>
+        <Btn onClick={() => ctx.openAdd("visit")}>{t("+ Add")}</Btn>
       </div>
       {message ? <p className="atlas-locpicker__error">{message}</p> : null}
 
       {sorted.length === 0 ? (
-        <EmptyState>No places yet. Add your first visit or wishlist entry.</EmptyState>
+        <EmptyState>{t("No places yet. Add your first visit or wishlist entry.")}</EmptyState>
       ) : (
         <div className="atlas-manage-list">
           {sorted.map((p) => {
@@ -51,10 +52,10 @@ export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
                 key={p.id}
                 actions={
                   <>
-                    <Btn onClick={() => ctx.openEditPlace(p.id)}>Edit</Btn>
+                    <Btn onClick={() => ctx.openEditPlace(p.id)}>{t("Edit")}</Btn>
                     {confirmId === p.id ? (
                       <Btn kind="danger" onClick={() => del(p.id)}>
-                        Confirm delete
+                        {t("Confirm delete")}
                       </Btn>
                     ) : (
                       <Btn
@@ -64,7 +65,7 @@ export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
                           setConfirmId(p.id);
                         }}
                       >
-                        Delete
+                        {t("Delete")}
                       </Btn>
                     )}
                   </>
@@ -74,13 +75,13 @@ export default function ManagePlaces({ ctx }: { ctx: ManageContext }) {
                   {p.name}
                   <span className="atlas-manage-row__sub">
                     {p.country}
-                    {p.countryCode ? " · " + p.countryCode : ""} · {placeTypeLabel(p.type)}
+                    {p.countryCode ? " · " + p.countryCode : ""} · {t(placeTypeLabel(p.type))}
                   </span>
                 </div>
                 <div className="atlas-manage-row__meta">
-                  {vc > 0 ? `${vc} visit${vc > 1 ? "s" : ""}` : "no visits"}
-                  {wc > 0 ? ` · ${wc} wishlist` : ""}
-                  {p.id === ctx.profile?.currentBase?.placeId ? " · current base" : ""}
+                  {vc > 0 ? tn(vc, "{n} visit", "{n} visits") : t("no visits")}
+                  {wc > 0 ? " · " + t("{n} wishlist", { n: wc }) : ""}
+                  {p.id === ctx.profile?.currentBase?.placeId ? " · " + t("current base") : ""}
                 </div>
               </Row>
             );

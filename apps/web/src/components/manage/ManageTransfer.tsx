@@ -4,9 +4,23 @@
 // whole Atlas as a single portable .atlas file, replace-import with an
 // automatic backup, and start a blank Atlas. All packaging/validation happens
 // in the Go runtime; this section only triggers it and reports results.
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { BackupInfo } from "../../lib/api";
 import type { ManageContext } from "./ManageAtlas";
-import { Btn, Card } from "./FormUI";
+import { Btn, Card, EmptyState } from "./FormUI";
+import { getLocale, t } from "../../lib/i18n";
+
+function formatBytes(n: number): string {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function formatWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(getLocale() === "zh" ? "zh-CN" : undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -25,12 +39,50 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [confirmNew, setConfirmNew] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [backups, setBackups] = useState<BackupInfo[] | null>(null);
+  const [backupError, setBackupError] = useState("");
+  const [confirmBackup, setConfirmBackup] = useState<{ name: string; action: "restore" | "delete" } | null>(null);
+
+  const loadBackups = useCallback(async () => {
+    try {
+      setBackups(await repo.listBackups());
+      setBackupError("");
+    } catch (e) {
+      setBackups([]);
+      setBackupError(e instanceof Error ? e.message : String(e));
+    }
+  }, [repo]);
+
+  useEffect(() => {
+    loadBackups();
+  }, [loadBackups]);
+
+  const doBackupAction = async (name: string, action: "restore" | "delete") => {
+    setBusy(action);
+    try {
+      if (action === "restore") {
+        const res = await repo.restoreBackup(name);
+        setMsg("ok", t("Restored {name}. The Atlas you had before was backed up as {backup}.", { name, backup: res.backup }));
+        notify(t("Backup restored — your previous Atlas was backed up first."));
+        reload();
+      } else {
+        await repo.deleteBackup(name);
+        setMsg("ok", t("Deleted backup {name}.", { name }));
+      }
+    } catch (e) {
+      setMsg("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+      setConfirmBackup(null);
+      loadBackups();
+    }
+  };
 
   const setMsg = (kind: "ok" | "error", text: string) => setMessage({ kind, text });
 
   const doExport = async () => {
     setBusy("export");
-    setMsg("ok", "Packaging your Atlas…");
+    setMsg("ok", t("Packaging your Atlas…"));
     try {
       const blob = await repo.exportAtlas();
       const stamp = new Date()
@@ -38,7 +90,7 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
         .replace(/[-:T]/g, "")
         .slice(0, 14);
       downloadBlob(blob, "yu-atlas-" + stamp + ".atlas");
-      setMsg("ok", "Export complete — the .atlas file was downloaded.");
+      setMsg("ok", t("Export complete — the .atlas file was downloaded."));
     } catch (e) {
       setMsg("error", e instanceof Error ? e.message : String(e));
     } finally {
@@ -48,12 +100,13 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
 
   const doImport = async (file: File) => {
     setBusy("import");
-    setMsg("ok", "Validating and importing…");
+    setMsg("ok", t("Validating and importing…"));
     try {
       const res = await repo.importAtlas(file);
-      setMsg("ok", "Atlas imported. Backup: " + res.backup);
-      notify("Atlas imported — a backup was created first.");
+      setMsg("ok", t("Atlas imported. Backup: {backup}", { backup: res.backup }));
+      notify(t("Atlas imported — a backup was created first."));
       reload();
+      loadBackups();
     } catch (e) {
       setMsg("error", e instanceof Error ? e.message : String(e));
     } finally {
@@ -64,13 +117,14 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
 
   const doNew = async () => {
     setBusy("new");
-    setMsg("ok", "Creating a blank Atlas…");
+    setMsg("ok", t("Creating a blank Atlas…"));
     try {
       const res = await repo.newAtlas();
       setConfirmNew(false);
-      setMsg("ok", "New Atlas created. Backup: " + res.backup);
-      notify("Started a new Atlas — a backup was created first.");
+      setMsg("ok", t("New Atlas created. Backup: {backup}", { backup: res.backup }));
+      notify(t("Started a new Atlas — a backup was created first."));
       reload();
+      loadBackups();
     } catch (e) {
       setMsg("error", e instanceof Error ? e.message : String(e));
     } finally {
@@ -81,10 +135,11 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
   return (
     <div className="atlas-manage-section">
       <div className="atlas-manage-section__head">
-        <h2 className="atlas-manage-section__title">Import / Export</h2>
+        <h2 className="atlas-manage-section__title">{t("Import / Export")}</h2>
         <p className="atlas-form-hint">
-          Your whole Atlas travels as one portable .atlas file — structured data and media
-          together. Backups are automatic before any replacement.
+          {t(
+            "Your whole Atlas travels as one portable .atlas file — structured data and media together. Backups are automatic before any replacement."
+          )}
         </p>
       </div>
 
@@ -95,23 +150,25 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
       ) : null}
 
       <Card>
-        <h3 className="atlas-manage-card__title">Export Atlas</h3>
+        <h3 className="atlas-manage-card__title">{t("Export Atlas")}</h3>
         <p className="atlas-form-hint">
-          Create a portable .atlas backup containing your data and media. The file is fully
-          self-contained — enough to reconstruct the Atlas anywhere.
+          {t(
+            "Create a portable .atlas backup containing your data and media. The file is fully self-contained — enough to reconstruct the Atlas anywhere."
+          )}
         </p>
         <div className="atlas-manage-card__actions">
           <Btn kind="primary" onClick={doExport} disabled={busy !== null}>
-            {busy === "export" ? "Exporting…" : "Export"}
+            {busy === "export" ? t("Exporting…") : t("Export")}
           </Btn>
         </div>
       </Card>
 
       <Card>
-        <h3 className="atlas-manage-card__title">Import Atlas</h3>
+        <h3 className="atlas-manage-card__title">{t("Import Atlas")}</h3>
         <p className="atlas-form-hint">
-          Replace the current Atlas with a .atlas file. A backup of the current Atlas is created
-          automatically first; the package is validated before anything is replaced.
+          {t(
+            "Replace the current Atlas with a .atlas file. A backup of the current Atlas is created automatically first; the package is validated before anything is replaced."
+          )}
         </p>
         <div className="atlas-manage-card__actions">
           <input
@@ -125,33 +182,89 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
             }}
           />
           <Btn kind="primary" onClick={() => inputRef.current?.click()} disabled={busy !== null}>
-            {busy === "import" ? "Importing…" : "Choose file"}
+            {busy === "import" ? t("Importing…") : t("Choose file")}
           </Btn>
         </div>
       </Card>
 
       <Card>
-        <h3 className="atlas-manage-card__title">New Atlas</h3>
+        <h3 className="atlas-manage-card__title">{t("New Atlas")}</h3>
         <p className="atlas-form-hint">
-          Start fresh with a blank Atlas — no files to create by hand. A backup of the current
-          Atlas is created first, and your theme preference is kept.
+          {t(
+            "Start fresh with a blank Atlas — no files to create by hand. A backup of the current Atlas is created first, and your theme preference is kept."
+          )}
         </p>
         <div className="atlas-manage-card__actions">
           {confirmNew ? (
             <>
               <Btn kind="danger" onClick={doNew} disabled={busy !== null}>
-                {busy === "new" ? "Creating…" : "Confirm — replace everything"}
+                {busy === "new" ? t("Creating…") : t("Confirm — replace everything")}
               </Btn>
               <Btn onClick={() => setConfirmNew(false)} disabled={busy !== null}>
-                Cancel
+                {t("Cancel")}
               </Btn>
             </>
           ) : (
             <Btn onClick={() => setConfirmNew(true)} disabled={busy !== null}>
-              New Atlas…
+              {t("New Atlas…")}
             </Btn>
           )}
         </div>
+      </Card>
+      <Card>
+        <h3 className="atlas-manage-card__title">{t("Backups")}</h3>
+        <p className="atlas-form-hint">
+          {t(
+            "Taken automatically before every import, restore or New Atlas, and kept in your atlas-data/backups folder. Restoring one backs up the current Atlas first, so nothing is ever lost."
+          )}
+        </p>
+        {backupError ? <p className="atlas-locpicker__error">{backupError}</p> : null}
+        {backups == null ? (
+          <p className="atlas-form-hint">{t("Loading…")}</p>
+        ) : backups.length === 0 ? (
+          <EmptyState>{t("No backups yet.")}</EmptyState>
+        ) : (
+          <ul className="atlas-backups">
+            {backups.map((b) => {
+              const confirming = confirmBackup?.name === b.name ? confirmBackup.action : null;
+              return (
+                <li key={b.name} className="atlas-backups__row">
+                  <div className="atlas-backups__info">
+                    <span className="atlas-backups__when">{formatWhen(b.createdAt)}</span>
+                    <span className="atlas-backups__meta">
+                      {b.name} · {formatBytes(b.size)}
+                    </span>
+                  </div>
+                  <div className="atlas-backups__actions">
+                    {confirming ? (
+                      <>
+                        <Btn
+                          kind={confirming === "delete" ? "danger" : "primary"}
+                          onClick={() => doBackupAction(b.name, confirming)}
+                          disabled={busy !== null}
+                        >
+                          {confirming === "restore" ? t("Confirm restore") : t("Confirm delete")}
+                        </Btn>
+                        <Btn onClick={() => setConfirmBackup(null)} disabled={busy !== null}>
+                          {t("Cancel")}
+                        </Btn>
+                      </>
+                    ) : (
+                      <>
+                        <Btn onClick={() => setConfirmBackup({ name: b.name, action: "restore" })} disabled={busy !== null}>
+                          {t("Restore")}
+                        </Btn>
+                        <Btn onClick={() => setConfirmBackup({ name: b.name, action: "delete" })} disabled={busy !== null}>
+                          {t("Delete")}
+                        </Btn>
+                      </>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Card>
     </div>
   );

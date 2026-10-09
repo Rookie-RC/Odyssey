@@ -13,6 +13,7 @@ import type { Place, PlaceType } from "../../lib/types";
 import type { AtlasTheme } from "../../themes";
 import MiniMap from "./MiniMap";
 import { Field, Select } from "./FormUI";
+import { t } from "../../lib/i18n";
 
 export interface ResolvedLocation {
   /** Existing Place when one matched (reuse), otherwise null. */
@@ -144,10 +145,10 @@ export default function LocationPicker({
       setOpen(false);
       setResults([]);
       setHighlight(-1);
-      const t = r.suggestedType;
-      setType(t);
+      const suggested = r.suggestedType;
+      setType(suggested);
       const existing = findMatchingPlace(places, r);
-      const draft = newPlaceFromResult(r, t);
+      const draft = newPlaceFromResult(r, suggested);
       setResolved({ existing, draft });
       onChangeRef.current({ existing, draft });
     },
@@ -186,12 +187,12 @@ export default function LocationPicker({
     <div className="atlas-locpicker">
       {!manual ? (
         <>
-          <Field label="Search location" hint="Search for a city, region, island or natural area.">
+          <Field label={t("Search location")} hint={t("Search for a city, region, island or natural area.")}>
             <div className="atlas-locpicker__search">
               <input
                 className="atlas-form-input"
                 type="search"
-                placeholder="e.g. Lofoten, Sardinia, Dolomites…"
+                placeholder={t("e.g. Lofoten, Sardinia, Dolomites…")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onFocus={() => results.length > 0 && setOpen(true)}
@@ -211,7 +212,7 @@ export default function LocationPicker({
                   }
                 }}
                 aria-expanded={open}
-                aria-label="Search location"
+                aria-label={t("Search location")}
               />
               {searching ? <span className="atlas-locpicker__spinner" aria-hidden="true" /> : null}
             </div>
@@ -234,7 +235,7 @@ export default function LocationPicker({
                     <span className="atlas-locpicker__result-name">{r.name}</span>
                     <span className="atlas-locpicker__result-meta">
                       {r.displayName}
-                      {r.suggestedType ? " · " + PLACE_TYPE_LABELS[r.suggestedType] : ""}
+                      {r.suggestedType ? " · " + t(PLACE_TYPE_LABELS[r.suggestedType]) : ""}
                     </span>
                   </button>
                 </li>
@@ -242,12 +243,12 @@ export default function LocationPicker({
             </ul>
           ) : null}
           {open && !searching && results.length === 0 && !searchError ? (
-            <p className="atlas-locpicker__empty">No destination-scale results. Try a city, region or island.</p>
+            <p className="atlas-locpicker__empty">{t("No destination-scale results. Try a city, region or island.")}</p>
           ) : null}
 
           {!resolvedDraft ? (
             <button type="button" className="atlas-locpicker__manual-link" onClick={startManual}>
-              Can&rsquo;t find it? Pick on map instead
+              {t("Can’t find it? Pick on map instead")}
             </button>
           ) : null}
 
@@ -259,10 +260,10 @@ export default function LocationPicker({
                   <div className="atlas-locpicker__chosen-meta">
                     {resolvedDraft.country}
                     {resolvedDraft.countryCode ? " (" + resolvedDraft.countryCode + ")" : ""}
-                    {" · " + PLACE_TYPE_LABELS[resolvedDraft.type]}
+                    {" · " + t(PLACE_TYPE_LABELS[resolvedDraft.type])}
                   </div>
                 </div>
-                <button type="button" className="atlas-form-icon-btn" onClick={clear} aria-label="Clear location">
+                <button type="button" className="atlas-form-icon-btn" onClick={clear} aria-label={t("Clear location")}>
                   &times;
                 </button>
               </div>
@@ -275,10 +276,10 @@ export default function LocationPicker({
                 // existing Place as-is). Edit the Place itself in Manage →
                 // Places to change its location or type.
                 <div className="atlas-locpicker__reuse-summary">
-                  <p className="atlas-locpicker__reuse">Existing place reused — no duplicate will be created.</p>
+                  <p className="atlas-locpicker__reuse">{t("Existing place reused — no duplicate will be created.")}</p>
                   <MiniMap theme={theme} value={resolvedDraft.coordinates} onChange={() => {}} height={160} />
                   <p className="atlas-form-hint">
-                    To change this place&rsquo;s location or type, edit it in Manage → Places.
+                    {t("To change this place’s location or type, edit it in Manage → Places.")}
                   </p>
                 </div>
               ) : (
@@ -290,11 +291,11 @@ export default function LocationPicker({
                     height={200}
                   />
 
-                  <Field label="Place type" hint="Manually correct the type if the provider's guess is off.">
+                  <Field label={t("Place type")} hint={t("Manually correct the type if the provider's guess is off.")}>
                     <Select value={type} onChange={(e) => setType(e.target.value as PlaceType)}>
-                      {PLACE_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          {PLACE_TYPE_LABELS[t]}
+                      {PLACE_TYPES.map((pt) => (
+                        <option key={pt} value={pt}>
+                          {t(PLACE_TYPE_LABELS[pt])}
                         </option>
                       ))}
                     </Select>
@@ -307,38 +308,38 @@ export default function LocationPicker({
       ) : (
         <div className="atlas-locpicker__manual">
           <div className="atlas-locpicker__chosen">
-            <div className="atlas-form-hint">Pick a location on the map, then name it.</div>
-            <button type="button" className="atlas-form-icon-btn" onClick={cancelManual} aria-label="Back to search">
+            <div className="atlas-form-hint">{t("Pick a location on the map, then name it.")}</div>
+            <button type="button" className="atlas-form-icon-btn" onClick={cancelManual} aria-label={t("Back to search")}>
               &times;
             </button>
           </div>
           <MiniMap theme={theme} value={manualCoords} onChange={setManualCoords} height={200} />
-          <Field label="Name">
+          <Field label={t("Name")}>
             <input
               className="atlas-form-input"
               value={manualName}
               onChange={(e) => setManualName(e.target.value)}
-              placeholder="Place name"
+              placeholder={t("Place name")}
             />
           </Field>
-          <Field label="Country" hint="Optional, but helps the Atlas show context.">
+          <Field label={t("Country")} hint={t("Optional, but helps the Atlas show context.")}>
             <input
               className="atlas-form-input"
               value={manualCountry}
               onChange={(e) => setManualCountry(e.target.value)}
-              placeholder="Country"
+              placeholder={t("Country")}
             />
           </Field>
-          <Field label="Place type">
+          <Field label={t("Place type")}>
             <Select value={type} onChange={(e) => setType(e.target.value as PlaceType)}>
-              {PLACE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {PLACE_TYPE_LABELS[t]}
+              {PLACE_TYPES.map((pt) => (
+                <option key={pt} value={pt}>
+                  {t(PLACE_TYPE_LABELS[pt])}
                 </option>
               ))}
             </Select>
           </Field>
-          {!manualCoords ? <p className="atlas-locpicker__empty">Click the map to place a pin.</p> : null}
+          {!manualCoords ? <p className="atlas-locpicker__empty">{t("Click the map to place a pin.")}</p> : null}
         </div>
       )}
     </div>

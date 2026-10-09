@@ -7,6 +7,7 @@ import { getPlace, targetTimeLabel } from "../../lib/domain";
 import { seasonLabel } from "../../lib/timeline";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, EmptyState, Row } from "./FormUI";
+import { t } from "../../lib/i18n";
 
 export default function ManageWishlist({ ctx }: { ctx: ManageContext }) {
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -16,7 +17,7 @@ export default function ManageWishlist({ ctx }: { ctx: ManageContext }) {
     try {
       await repo.deleteWishlist(id);
       setConfirmId(null);
-      notify("Wishlist item removed.");
+      notify(t("Wishlist item removed."));
       reload();
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e));
@@ -31,14 +32,14 @@ export default function ManageWishlist({ ctx }: { ctx: ManageContext }) {
   return (
     <div className="atlas-manage-section">
       <div className="atlas-manage-section__head">
-        <h2 className="atlas-manage-section__title">Wishlist</h2>
+        <h2 className="atlas-manage-section__title">{t("Wishlist")}</h2>
         <Btn kind="primary" onClick={() => ctx.openAdd("wishlist")}>
-          + I want to go here
+          {t("+ I want to go here")}
         </Btn>
       </div>
 
       {sorted.length === 0 ? (
-        <EmptyState>No wishlist entries yet.</EmptyState>
+        <EmptyState>{t("No wishlist entries yet.")}</EmptyState>
       ) : (
         <div className="atlas-manage-list">
           {sorted.map((w) => {
@@ -49,26 +50,26 @@ export default function ManageWishlist({ ctx }: { ctx: ManageContext }) {
                 key={w.id}
                 actions={
                   <>
-                    <Btn onClick={() => ctx.openEditWishlist(w.id)}>Edit</Btn>
+                    <Btn onClick={() => ctx.openEditWishlist(w.id)}>{t("Edit")}</Btn>
                     {confirmId === w.id ? (
                       <Btn kind="danger" onClick={() => del(w.id)}>
-                        Confirm delete
+                        {t("Confirm delete")}
                       </Btn>
                     ) : (
                       <Btn kind="danger" onClick={() => setConfirmId(w.id)}>
-                        Delete
+                        {t("Delete")}
                       </Btn>
                     )}
                   </>
                 }
               >
                 <div className="atlas-manage-row__title">
-                  {place?.name ?? "(missing place)"}
+                  {place?.name ?? t("(missing place)")}
                   <span className="atlas-manage-row__sub">
-                    {w.priority ? "Priority " + w.priority : "No priority"}
+                    {w.priority ? t("Priority {n}", { n: w.priority }) : t("No priority")}
                     {w.seasons && w.seasons.length > 0
-                      ? " · " + w.seasons.map(seasonLabel).join(", ")
-                      : " · any season"}
+                      ? " · " + w.seasons.map((s) => seasonLabel(s)).join(t(", "))
+                      : " · " + t("any season")}
                     {w.targetTime ? " · " + targetTimeLabel(w.targetTime) : ""}
                   </span>
                 </div>
@@ -76,7 +77,7 @@ export default function ManageWishlist({ ctx }: { ctx: ManageContext }) {
                   {place?.country ?? ""}
                   {w.why ? " · " + w.why : ""}
                   <span className={hasTiming ? "" : " atlas-manage-row__meta--muted"}>
-                    {hasTiming ? " · on timeline" : " · not on timeline (no target time)"}
+                    {" · " + (hasTiming ? t("on timeline") : t("not on timeline (no target time)"))}
                   </span>
                 </div>
               </Row>

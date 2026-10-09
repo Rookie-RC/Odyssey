@@ -15,6 +15,7 @@
 // cover rule), edit captions (via updateMedia), and reorder. Media files are
 // never deleted here; only associations change.
 import { useEffect, useMemo, useRef, useState } from "react";
+import { mediaSrc } from "../../lib/api";
 import type { Media, Visit, Wishlist } from "../../lib/types";
 import type { PlaceStory } from "../../lib/domain";
 import type { AtlasRepository } from "../../lib/repository";
@@ -31,6 +32,7 @@ import {
   type WishlistDraft,
 } from "../manage/drafts";
 import { visitFromDraft, wishlistFromDraft } from "../manage/save";
+import { t } from "../../lib/i18n";
 
 export interface DirectEditProps {
   story: PlaceStory;
@@ -184,10 +186,10 @@ export default function DirectEdit({
   };
 
   return (
-    <div className="atlas-entity-form atlas-direct">
+    <div className="atlas-entity-form atlas-direct" data-owns-keyboard>
       {visit && primaryVisit ? (
         <div className="atlas-direct__group">
-          {wl ? <h4 className="atlas-direct__group-title">Memory</h4> : null}
+          {wl ? <h3 className="atlas-direct__group-title">{t("Memory")}</h3> : null}
           <VisitForm
             value={visit}
             onChange={setVisit}
@@ -200,7 +202,7 @@ export default function DirectEdit({
 
       {wl && wishlist ? (
         <div className="atlas-direct__group">
-          {visit ? <h4 className="atlas-direct__group-title">Wishlist</h4> : null}
+          {visit ? <h3 className="atlas-direct__group-title">{t("Wishlist")}</h3> : null}
           <WishlistForm
             value={wl}
             onChange={setWl}
@@ -213,9 +215,9 @@ export default function DirectEdit({
 
       {/* --- photos: add / remove / cover / caption / reorder --- */}
       <div className="atlas-direct__group">
-        <h4 className="atlas-direct__group-title">Photos</h4>
+        <h3 className="atlas-direct__group-title">{t("Photos")}</h3>
         {mediaIds.length === 0 ? (
-          <p className="atlas-form-hint">No photos associated yet.</p>
+          <p className="atlas-form-hint">{t("No photos associated yet.")}</p>
         ) : (
           <div className="atlas-direct-media">
             {mediaIds.map((id, i) => {
@@ -224,24 +226,24 @@ export default function DirectEdit({
               return (
                 <div key={id} className="atlas-direct-media__item">
                   <img
-                    src={m.path}
+                    src={mediaSrc(m, 320)}
                     alt={m.caption ?? ""}
                     draggable={false}
                     loading="lazy"
                   />
                   <div className="atlas-direct-media__meta">
                     <TextInput
-                      placeholder="Caption"
+                      placeholder={t("Caption")}
                       value={captions[id] ?? m.caption ?? ""}
                       onChange={(e) => setCaptions({ ...captions, [id]: e.target.value })}
-                      aria-label={"Caption for " + (m.caption ?? "photo")}
+                      aria-label={m.caption ? t("Caption for {caption}", { caption: m.caption }) : t("Caption for photo")}
                     />
                     <div className="atlas-direct-media__actions">
                       <button
                         type="button"
                         className="atlas-direct-media__btn"
-                        title="Move earlier"
-                        aria-label="Move earlier"
+                        title={t("Move earlier")}
+                        aria-label={t("Move earlier")}
                         disabled={i === 0}
                         onClick={() => moveMedia(id, -1)}
                       >
@@ -250,34 +252,34 @@ export default function DirectEdit({
                       <button
                         type="button"
                         className="atlas-direct-media__btn"
-                        title="Move later"
-                        aria-label="Move later"
+                        title={t("Move later")}
+                        aria-label={t("Move later")}
                         disabled={i === mediaIds.length - 1}
                         onClick={() => moveMedia(id, 1)}
                       >
                         →
                       </button>
                       {i === 0 ? (
-                        <span className="atlas-direct-media__cover-label">Cover</span>
+                        <span className="atlas-direct-media__cover-label">{t("Cover")}</span>
                       ) : (
                         <button
                           type="button"
                           className="atlas-direct-media__btn atlas-direct-media__btn--cover"
-                          title="Use as cover"
-                          aria-label="Use as cover"
+                          title={t("Use as cover")}
+                          aria-label={t("Use as cover")}
                           onClick={() => setCover(id)}
                         >
-                          Cover
+                          {t("Cover")}
                         </button>
                       )}
                       <button
                         type="button"
                         className="atlas-direct-media__btn atlas-direct-media__btn--remove"
-                        title="Remove from this place"
-                        aria-label="Remove photo"
+                        title={t("Remove from this place")}
+                        aria-label={t("Remove photo")}
                         onClick={() => removeMedia(id)}
                       >
-                        Remove
+                        {t("Remove")}
                       </button>
                     </div>
                   </div>
@@ -289,7 +291,7 @@ export default function DirectEdit({
 
         <div className="atlas-direct-media__add">
           <Btn onClick={() => setShowPicker((v) => !v)}>
-            {showPicker ? "Close media library" : "+ Add photos"}
+            {showPicker ? t("Close media library") : t("+ Add photos")}
           </Btn>
           {showPicker ? (
             <MediaPicker
@@ -309,10 +311,10 @@ export default function DirectEdit({
 
       <div className="atlas-direct__actions">
         <Btn onClick={onCancel} disabled={saving}>
-          Cancel
+          {t("Cancel")}
         </Btn>
         <Btn kind="primary" onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("Saving…") : t("Save")}
         </Btn>
       </div>
     </div>

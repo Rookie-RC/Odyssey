@@ -14,6 +14,7 @@ import WishlistForm from "./WishlistForm";
 import { emptyVisitDraft, emptyWishlistDraft, type VisitDraft, type WishlistDraft } from "./drafts";
 import { resolvePlaceId, visitFromDraft, wishlistFromDraft } from "./save";
 import { Btn } from "./FormUI";
+import { t } from "../../lib/i18n";
 
 export type AddKind = "visit" | "wishlist";
 
@@ -38,7 +39,7 @@ export default function AddFlow({ kind, places, media, theme, repo, onDone, onCa
 
   const save = async () => {
     if (!resolved) {
-      setError("Search and select a location first.");
+      setError(t("Search and select a location first."));
       return;
     }
     setSaving(true);
@@ -53,10 +54,13 @@ export default function AddFlow({ kind, places, media, theme, repo, onDone, onCa
         await repo.createWishlist(item);
       }
       onDone(
-        (isVisit ? "Visit" : "Wishlist") +
-          " saved" +
-          (placeCreated ? " · new place created" : " · existing place reused") +
-          "."
+        isVisit
+          ? placeCreated
+            ? t("Visit saved · new place created.")
+            : t("Visit saved · existing place reused.")
+          : placeCreated
+            ? t("Wishlist saved · new place created.")
+            : t("Wishlist saved · existing place reused.")
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -68,14 +72,14 @@ export default function AddFlow({ kind, places, media, theme, repo, onDone, onCa
     <div className="atlas-addflow">
       <div className="atlas-addflow__head">
         <div>
-          <div className="atlas-addflow__title">{isVisit ? "I've been here" : "I want to go here"}</div>
+          <div className="atlas-addflow__title">{isVisit ? t("I've been here") : t("I want to go here")}</div>
           <p className="atlas-form-hint">
             {isVisit
-              ? "Record a visit — the Atlas adds the place to the map and timeline."
-              : "Save a future destination — it appears in Where Next and the timeline when timed."}
+              ? t("Record a visit — the Atlas adds the place to the map and timeline.")
+              : t("Save a future destination — it appears in Where Next and the timeline when timed.")}
           </p>
         </div>
-        <button type="button" className="atlas-form-icon-btn" onClick={onCancel} aria-label="Close">
+        <button type="button" className="atlas-form-icon-btn" onClick={onCancel} aria-label={t("Close")}>
           &times;
         </button>
       </div>
@@ -104,9 +108,9 @@ export default function AddFlow({ kind, places, media, theme, repo, onDone, onCa
 
       <div className="atlas-addflow__actions">
         <Btn kind="primary" onClick={save} disabled={saving || !resolved}>
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("Saving…") : t("Save")}
         </Btn>
-        <Btn onClick={onCancel}>Cancel</Btn>
+        <Btn onClick={onCancel}>{t("Cancel")}</Btn>
       </div>
     </div>
   );

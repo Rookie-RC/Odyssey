@@ -4,9 +4,11 @@
 // Deleting a Media record that is still referenced by a Visit/Wishlist is
 // rejected by the runtime; unlink it from the entry first.
 import { useRef, useState } from "react";
+import { mediaSrc } from "../../lib/api";
 import type { Media } from "../../lib/types";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, EmptyState } from "./FormUI";
+import { t, tn } from "../../lib/i18n";
 
 export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
   const { media, places, repo, notify, reload } = ctx;
@@ -36,7 +38,7 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
           placeId: uploadPlace || undefined,
         });
       }
-      notify("Media uploaded.");
+      notify(t("Media uploaded."));
       reload();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -51,7 +53,7 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
     try {
       await repo.deleteMedia(id);
       setConfirmId(null);
-      notify("Media deleted.");
+      notify(t("Media deleted."));
       reload();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : String(e));
@@ -62,7 +64,7 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
   return (
     <div className="atlas-manage-section">
       <div className="atlas-manage-section__head">
-        <h2 className="atlas-manage-section__title">Media</h2>
+        <h2 className="atlas-manage-section__title">{t("Media")}</h2>
       </div>
       {message ? <p className="atlas-locpicker__error">{message}</p> : null}
 
@@ -76,13 +78,13 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
       >
         <div className="atlas-form-grid">
           <label className="atlas-form-field">
-            <span className="atlas-form-label">Store under place (optional)</span>
+            <span className="atlas-form-label">{t("Store under place (optional)")}</span>
             <select
               className="atlas-form-input"
               value={uploadPlace}
               onChange={(e) => setUploadPlace(e.target.value)}
             >
-              <option value="">misc</option>
+              <option value="">{t("misc")}</option>
               {[...places]
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((p) => (
@@ -102,15 +104,15 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
               onChange={(e) => upload(e.target.files)}
             />
             <Btn kind="primary" onClick={() => inputRef.current?.click()} disabled={uploading}>
-              {uploading ? "Uploading…" : "+ Upload photos"}
+              {uploading ? t("Uploading…") : t("+ Upload photos")}
             </Btn>
-            <span className="atlas-form-hint">Drag photos here, or click to choose. Stored under atlas-data/media.</span>
+            <span className="atlas-form-hint">{t("Drag photos here, or click to choose. Stored under atlas-data/media.")}</span>
           </div>
         </div>
       </div>
 
       {media.length === 0 ? (
-        <EmptyState>No media yet.</EmptyState>
+        <EmptyState>{t("No media yet.")}</EmptyState>
       ) : (
         <div className="atlas-manage-media">
           {media.map((m) => {
@@ -118,46 +120,46 @@ export default function ManageMedia({ ctx }: { ctx: ManageContext }) {
             const referenced = refs.visits > 0 || refs.wishlist > 0;
             return (
               <div key={m.id} className="atlas-manage-media__card">
-                <img src={m.path} alt={m.caption ?? ""} loading="lazy" draggable={false} />
+                <img src={mediaSrc(m, 320)} alt={m.caption ?? ""} loading="lazy" draggable={false} />
                 {editId === m.id ? (
                   <MediaMetaForm
                     media={m}
                     onSave={async (next) => {
                       await repo.updateMedia(next);
                       setEditId(null);
-                      notify("Media metadata updated.");
+                      notify(t("Media metadata updated."));
                       reload();
                     }}
                     onCancel={() => setEditId(null)}
                   />
                 ) : (
                   <div className="atlas-manage-media__meta">
-                    <div className="atlas-manage-media__caption">{m.caption || "Untitled"}</div>
+                    <div className="atlas-manage-media__caption">{m.caption || t("Untitled")}</div>
                     <div className="atlas-manage-media__sub">
-                      {m.author ? m.author : "no author"}
+                      {m.author ? m.author : t("no author")}
                       {m.license ? " · " + m.license : ""}
-                      {m.sourceUrl ? " · web" : ""}
+                      {m.sourceUrl ? " · " + t("web") : ""}
                     </div>
                     <div className="atlas-manage-media__refs">
                       {referenced
-                        ? `${refs.visits} visit${refs.visits > 1 ? "s" : ""} · ${refs.wishlist} wishlist`
-                        : "not referenced"}
+                        ? tn(refs.visits, "{n} visit", "{n} visits") + " · " + t("{n} wishlist", { n: refs.wishlist })
+                        : t("not referenced")}
                     </div>
                     <div className="atlas-manage-media__actions">
-                      <Btn onClick={() => setEditId(m.id)}>Edit</Btn>
+                      <Btn onClick={() => setEditId(m.id)}>{t("Edit")}</Btn>
                       {confirmId === m.id ? (
                         <Btn kind="danger" onClick={() => del(m.id)} disabled={referenced}>
-                          Confirm
+                          {t("Confirm")}
                         </Btn>
                       ) : (
                         <Btn kind="danger" onClick={() => setConfirmId(m.id)}>
-                          Delete
+                          {t("Delete")}
                         </Btn>
                       )}
                     </div>
                     {confirmId === m.id && referenced ? (
                       <p className="atlas-form-hint">
-                        Still referenced — remove it from the visit/wishlist first.
+                        {t("Still referenced — remove it from the visit/wishlist first.")}
                       </p>
                     ) : null}
                   </div>
@@ -190,25 +192,25 @@ function MediaMetaForm({
     <div className="atlas-manage-media__edit">
       <input
         className="atlas-form-input"
-        placeholder="Caption"
+        placeholder={t("Caption")}
         value={caption}
         onChange={(e) => setCaption(e.target.value)}
       />
       <input
         className="atlas-form-input"
-        placeholder="Author"
+        placeholder={t("Author")}
         value={author}
         onChange={(e) => setAuthor(e.target.value)}
       />
       <input
         className="atlas-form-input"
-        placeholder="License"
+        placeholder={t("License")}
         value={license}
         onChange={(e) => setLicense(e.target.value)}
       />
       <input
         className="atlas-form-input"
-        placeholder="Source URL"
+        placeholder={t("Source URL")}
         value={sourceUrl}
         onChange={(e) => setSourceUrl(e.target.value)}
       />
@@ -228,9 +230,9 @@ function MediaMetaForm({
             setSaving(false);
           }}
         >
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("Saving…") : t("Save")}
         </Btn>
-        <Btn onClick={onCancel}>Cancel</Btn>
+        <Btn onClick={onCancel}>{t("Cancel")}</Btn>
       </div>
     </div>
   );

@@ -7,8 +7,9 @@
 import { useEffect, useRef } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { loadThemeStyle } from "../../lib/map-style";
+import { baseStyleUrl, loadThemeStyle } from "../../lib/map-style";
 import type { AtlasTheme } from "../../themes";
+import { t, useLocale } from "../../lib/i18n";
 
 export interface MiniMapValue {
   lat: number;
@@ -32,6 +33,9 @@ export default function MiniMap({ theme, value, onChange, height = 220 }: MiniMa
   onChangeRef.current = onChange;
   const valueRef = useRef(value);
   valueRef.current = value;
+  // MapLibre bakes its control labels in at construction, so a language
+  // switch recreates the map (same as a theme switch).
+  const locale = useLocale();
 
   // Create the map once. The container lives for the component's lifetime and
   // the map instance is recreated when the theme style URL changes.
@@ -43,11 +47,11 @@ export default function MiniMap({ theme, value, onChange, height = 220 }: MiniMa
 
     const create = async () => {
       const gen = (mapGen.current += 1);
-      let style: StyleSpecification | string = theme.map.styleUrl;
+      let style: StyleSpecification | string = baseStyleUrl(theme);
       try {
-        style = await loadThemeStyle(theme.id, theme.map.styleUrl);
+        style = await loadThemeStyle(theme);
       } catch {
-        style = theme.map.styleUrl;
+        style = baseStyleUrl(theme);
       }
       if (cancelled || gen !== mapGen.current) return;
       if (mapRef.current) {
@@ -64,12 +68,24 @@ export default function MiniMap({ theme, value, onChange, height = 220 }: MiniMa
         zoom: valueRef.current ? 8 : 2,
         attributionControl: { compact: true },
         scrollZoom: false,
+        locale: {
+          "NavigationControl.ZoomIn": t("Zoom in"),
+          "NavigationControl.ZoomOut": t("Zoom out"),
+          "AttributionControl.ToggleAttribution": t("Toggle attribution"),
+          "Map.Title": t("Map"),
+          "Marker.Title": t("Map marker"),
+        },
       });
       map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
       map.on("click", (e) => {
         onChangeRef.current({ lat: e.lngLat.lat, lng: e.lngLat.lng });
       });
       map.on("load", () => {
+        // Credits stay one tap away (ⓘ) instead of covering the small map.
+        map
+          .getContainer()
+          .querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show")
+          ?.classList.remove("maplibregl-compact-show");
         if (mapRef.current !== map) return;
         updateMarker(map);
       });
@@ -87,7 +103,7 @@ export default function MiniMap({ theme, value, onChange, height = 220 }: MiniMa
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme.map.styleUrl, theme.id]);
+  }, [theme, locale]);
 
   const updateMarker = (map: maplibregl.Map) => {
     const v = valueRef.current;
@@ -121,12 +137,12 @@ export default function MiniMap({ theme, value, onChange, height = 220 }: MiniMa
       map.easeTo({ center: [v.lng, v.lat], zoom: Math.max(map.getZoom(), 6), duration: 300 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value?.lat, value?.lng, theme.map.styleUrl]);
+  }, [value?.lat, value?.lng, theme]);
 
   return (
     <div className="atlas-minimap" style={{ height }}>
       <div ref={containerRef} className="atlas-minimap__map" />
-      <p className="atlas-minimap__hint">Drag the marker or click the map to refine the location.</p>
+      <p className="atlas-minimap__hint">{t("Drag the marker or click the map to refine the location.")}</p>
     </div>
   );
 }
