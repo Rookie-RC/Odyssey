@@ -6,23 +6,48 @@ import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from ".
 import { HttpAtlasRepository } from "../lib/repository";
 import type { SyncFocus } from "../lib/sync";
 import type { TimelineNode } from "../lib/timeline";
-import HeroMap, { type CountryCollection } from "./HeroMap";
+import { seasonFromMonth } from "../lib/timeline";
+import { atlasFacts, atlasFactsLine, atlasWordmark } from "../lib/domain";
+import { startLiquidGlass, type LiquidGlass } from "../lib/liquid-glass";
+import {
+  LocaleContext,
+  parseLocalePreference,
+  resolveLocale,
+  setLocale,
+  t,
+  type LocalePreference,
+} from "../lib/i18n";
+import HeroMap, { type CountryCollection, type MapLayers } from "./HeroMap";
 import JourneyTimeline from "./JourneyTimeline";
 import WhereNext from "./WhereNext";
 import PlaceDetailSheet from "./PlaceDetailSheet";
 import ProfileDrawer from "./ProfileDrawer";
+import IdeasBoard from "./IdeasBoard";
+import CommandPalette, { type PaletteCommand } from "./CommandPalette";
+import ShortcutsDialog from "./ShortcutsDialog";
+import ShareDialog, { type ShareRequest } from "./ShareDialog";
+import Topbar from "./Topbar";
 import ManageAtlas from "./manage/ManageAtlas";
-import { applyTheme, themes } from "../themes";
-import type { ThemeId } from "../themes";
+import { HeartIcon, KeyboardIcon, WifiIcon } from "./Icons";
+import {
+  THEME_ORDER,
+  applyTheme,
+  parseThemePreference,
+  resolveTheme,
+  themes,
+  type ThemePreference,
+} from "../themes";
 
-// Collapsed "contextual strip" height (PRODUCT_SPEC §18: 80–140px).
-const STRIP_HEIGHT = 140;
+// Collapsed contextual strip (PRODUCT_SPEC §18: 80–140px band).
+const STRIP_HEIGHT = 84;
+const STRIP_MARGIN = 10;
 
-// One global overlay state (PRODUCT_SPEC §25): Place Detail and Profile are
-// mutually exclusive; nothing else can stack on top of them.
+// One global overlay state (PRODUCT_SPEC §25): Place Detail, Profile and the
+// Ideas board are mutually exclusive; nothing stacks on top of them.
 type ActiveOverlay =
   | { type: "place"; id: string }
   | { type: "profile" }
+  | { type: "ideas"; season?: Season }
   | null;
 
 const SEASONS: Season[] = ["spring", "summer", "autumn", "winter"];
@@ -31,8 +56,30 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
+function isTypingTarget(t: EventTarget | null): boolean {
+  const el = t as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+}
+
+/** Runs `fn` once a smooth scroll back to the top has arrived (so the hero has
+ * re-expanded), plus `settleMs`; gives up waiting after a couple of seconds. */
+function whenAtTop(fn: () => void, settleMs = 0): void {
+  const start = performance.now();
+  const tick = () => {
+    if (window.scrollY <= 1 || performance.now() - start > 2000) {
+      window.setTimeout(fn, settleMs);
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 export default function AtlasApp() {
   const clipRef = useRef<HTMLDivElement | null>(null);
+  const bandRef = useRef<HTMLDivElement | null>(null);
 
   const [places, setPlaces] = useState<Place[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
@@ -42,79 +89,126 @@ export default function AtlasApp() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [countriesGeo, setCountriesGeo] = useState<CountryCollection | null>(null);
   const [error, setError] = useState("");
-  const [themeId, setThemeId] = useState<ThemeId>("light");
+  const [loaded, setLoaded] = useState(false);
   const [writable, setWritable] = useState(false);
   const [runtime, setRuntime] = useState<RuntimeInfo | null>(null);
   const [view, setView] = useState<"atlas" | "manage">("atlas");
-  // Chronological route layer visibility (v1.2), persisted in Settings.
-  const [routesOn, setRoutesOn] = useState(false);
+  const [manageAdd, setManageAdd] = useState<"visit" | "wishlist" | null>(null);
+  const openManage = useCallback((add: "visit" | "wishlist" | null = null) => {
+    setManageAdd(add);
+    setView("manage");
+  }, []);
+
+  // Theme preference (Auto follows the OS) and the resolved theme.
+  const [themePref, setThemePref] = useState<ThemePreference>("light");
+  const [systemDark, setSystemDark] = useState(false);
+  const theme = useMemo(() => resolveTheme(themePref, systemDark), [themePref, systemDark]);
+
+  // Interface language (Auto follows the browser/OS language).
+  const [localePref, setLocalePref] = useState<LocalePreference>("auto");
+  const [browserLang, setBrowserLang] = useState("en");
+  const locale = resolveLocale(localePref, browserLang);
+  // Module-level locale for the pure domain formatters; set before children
+  // render so every label in this pass uses the same language.
+  setLocale(locale);
+
+  // Optional Hero Map layers, persisted through Settings.
+  const [layers, setLayers] = useState<MapLayers>({ routes: false, wishlist: true, countries: true });
 
   // Shared contextual focus for Map ↔ Timeline synchronization (v1.3).
-  // One state, two views; `source` records which side initiated it so the
-  // other side responds without echoing back (feedback-loop guard).
   const [syncFocus, setSyncFocus] = useState<SyncFocus | null>(null);
 
-  // Where Next season + global overlay (single overlay state). Initial state
-  // matches the server render (no hydration mismatch); the URL is applied once
-  // after mount (see url-applied effect below).
+  // Where Next season (defaults to the coming season) + global overlay.
   const [season, setSeason] = useState<Season>("summer");
   const [overlay, setOverlay] = useState<ActiveOverlay>(null);
   const [closingOverlay, setClosingOverlay] = useState(false);
-
-  const theme = themes[themeId];
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Share as a ticket (a trip, a country, the whole journey).
+  const [share, setShare] = useState<ShareRequest | null>(null);
+  const closeShare = useCallback(() => setShare(null), []);
+  const [flyTo, setFlyTo] = useState<{ placeId: string; nonce: number } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [exportNonce, setExportNonce] = useState(0);
 
   // Shared repository used by Manage Atlas and Direct Edit (the Detail Sheet).
   const repo = useMemo(() => new HttpAtlasRepository(), []);
 
-  // --- data load / reload (reload keeps the main Atlas in sync with Manage
-  // Atlas edits without a page refresh) ---
-  const loadData = useCallback(async () => {
-    try {
-      const [p, v, w, pr, m, s] = await Promise.all([
-        api.getPlaces(),
-        api.getVisits(),
-        api.getWishlist(),
-        api.getProfile(),
-        api.getMedia(),
-        api.getSettings(),
-      ]);
-      setPlaces(p);
-      setVisits(v);
-      setWishlist(w);
-      setProfile(pr);
-      setMedia(m);
-      setSettings(s);
-      if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
-      setRoutesOn(s.showRoutes ?? false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+  // Latest settings for incremental saves: every change merges into what was
+  // last persisted, so toggling routes and then switching theme can never
+  // overwrite one another with a stale copy. The server replaces the whole
+  // object, so nothing is written until the stored Settings have arrived:
+  // earlier choices apply locally and are queued, then merged and saved.
+  const settingsRef = useRef<Settings>({});
+  const settingsLoadedRef = useRef(false);
+  const pendingSettingsRef = useRef<Partial<Settings>>({});
+  const saveSettings = useCallback((patch: Partial<Settings>) => {
+    const next = { ...settingsRef.current, ...patch };
+    settingsRef.current = next;
+    setSettings(next);
+    if (!settingsLoadedRef.current) {
+      pendingSettingsRef.current = { ...pendingSettingsRef.current, ...patch };
+      return;
     }
+    api.saveSettings(next).catch(() => {
+      // read-only / LAN viewers cannot persist; the choice still applies locally
+    });
   }, []);
+
+  const applySettings = useCallback((stored: Settings) => {
+    // A choice made while loading wins over the stored value, then persists.
+    const pending = pendingSettingsRef.current;
+    pendingSettingsRef.current = {};
+    const s = { ...stored, ...pending };
+    settingsLoadedRef.current = true;
+    if (Object.keys(pending).length > 0) api.saveSettings(s).catch(() => {});
+    settingsRef.current = s;
+    setSettings(s);
+    setThemePref(parseThemePreference(s.theme));
+    setLocalePref(parseLocalePreference(s.language));
+    setLayers({
+      routes: s.showRoutes ?? false,
+      wishlist: s.showWishlist ?? true,
+      countries: !(s.hideCountries ?? false),
+    });
+  }, []);
+
+  // --- data load / reload (reload keeps the Atlas in sync with Manage edits) ---
+  const loadData = useCallback(async () => {
+    const [p, v, w, pr, m, s] = await Promise.allSettled([
+      api.getPlaces(),
+      api.getVisits(),
+      api.getWishlist(),
+      api.getProfile(),
+      api.getMedia(),
+      api.getSettings(),
+    ]);
+    // Settings stand on their own: one broken data file must not leave the
+    // theme, language and saves running on defaults.
+    if (s.status === "fulfilled") applySettings(s.value);
+    if (
+      p.status === "fulfilled" &&
+      v.status === "fulfilled" &&
+      w.status === "fulfilled" &&
+      pr.status === "fulfilled" &&
+      m.status === "fulfilled"
+    ) {
+      setPlaces(p.value);
+      setVisits(v.value);
+      setWishlist(w.value);
+      setProfile(pr.value);
+      setMedia(m.value);
+    }
+    const failed = [p, v, w, pr, m, s].find((r): r is PromiseRejectedResult => r.status === "rejected");
+    const reason: unknown = failed?.reason;
+    setError(!failed ? "" : reason instanceof Error ? reason.message : String(reason));
+    setLoaded(true);
+  }, [applySettings]);
 
   useEffect(() => {
     let alive = true;
+    loadData();
     (async () => {
-      try {
-        const [p, v, w, pr, m, s] = await Promise.all([
-          api.getPlaces(),
-          api.getVisits(),
-          api.getWishlist(),
-          api.getProfile(),
-          api.getMedia(),
-          api.getSettings(),
-        ]);
-        if (!alive) return;
-        setPlaces(p);
-        setVisits(v);
-        setWishlist(w);
-        setProfile(pr);
-        setMedia(m);
-        setSettings(s);
-        if (s.theme === "night" || s.theme === "light") setThemeId(s.theme);
-        setRoutesOn(s.showRoutes ?? false);
-      } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : String(e));
-      }
       try {
         const res = await fetch("/geodata/countries.geojson");
         const geo = (await res.json()) as CountryCollection;
@@ -135,32 +229,76 @@ export default function AtlasApp() {
     return () => {
       alive = false;
     };
+  }, [loadData]);
+
+  useEffect(() => {
+    setBrowserLang(navigator.language || "en");
+  }, []);
+
+  // --- system colour scheme (for Auto) ---
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const on = () => setSystemDark(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
   }, []);
 
   // --- apply theme tokens ---
+  // Not before the stored preference is known: the boot script has already
+  // painted the last-used theme, and the Light default would flash over it.
+  // Liquid glass panes follow the theme's refraction and corner radii.
+  const glassRef = useRef<LiquidGlass | null>(null);
   useEffect(() => {
+    if (!loaded) return;
     applyTheme(theme);
-  }, [theme]);
+    if (glassRef.current) glassRef.current.update(theme.glass.refraction);
+    else glassRef.current = startLiquidGlass(theme.glass.refraction);
+  }, [theme, loaded]);
+  useEffect(
+    () => () => {
+      glassRef.current?.stop();
+      glassRef.current = null;
+    },
+    []
+  );
 
-  // --- scroll-driven map collapse (height + radius written straight to the DOM
-  // via rAF so scrolling never re-renders React) ---
+  const wordmark = atlasWordmark(profile?.name);
+  useEffect(() => {
+    document.title = wordmark;
+  }, [wordmark]);
+
+  // --- scroll-driven map collapse ---
+  // Height, inset and radius are written straight to the DOM in rAF so
+  // scrolling never re-renders React. The map stays full-bleed for the first
+  // half of the collapse; only then does it gain its inset and rounded corners
+  // (VISUAL_SPEC §6: radius introduced only once no longer full-bleed).
   useEffect(() => {
     const update = () => {
       const clip = clipRef.current;
-      if (!clip) return;
+      const band = bandRef.current;
+      if (!clip || !band) return;
       const vh = window.innerHeight;
+      const vw = window.innerWidth;
       const sy = window.scrollY;
-      const collapseDist = Math.max(vh - STRIP_HEIGHT, 1);
+      const stripTotal = STRIP_HEIGHT + STRIP_MARGIN * 2;
+      const collapseDist = Math.max(vh - stripTotal, 1);
       const progress = clamp(sy / collapseDist, 0, 1);
-      const height = Math.max(STRIP_HEIGHT, vh - sy);
+      const k = clamp((progress - 0.45) / 0.55, 0, 1);
+      const eased = k * k * (3 - 2 * k);
+      const gutter = clamp(vw * 0.034, 20, 48);
+      const inset = eased * gutter;
+      const top = eased * STRIP_MARGIN;
+      const height = Math.max(STRIP_HEIGHT, vh - sy - top);
+      clip.style.left = inset + "px";
+      clip.style.right = inset + "px";
+      clip.style.top = top + "px";
       clip.style.height = height + "px";
-      const radius = Math.round(progress * 16);
-      clip.style.borderBottomLeftRadius = radius + "px";
-      clip.style.borderBottomRightRadius = radius + "px";
-      clip.classList.toggle("atlas-map-clip--strip", progress > 0.7);
-      // Drives the "Scroll to explore" hint's fade-out (globals.css) — written
-      // as a CSS var rather than React state so scrolling never re-renders.
-      document.documentElement.style.setProperty("--hero-scroll", String(progress));
+      clip.style.borderRadius = Math.round(eased * 16) + "px";
+      band.style.height = Math.min(vh, top + height + eased * STRIP_MARGIN) + "px";
+      const root = document.documentElement;
+      root.style.setProperty("--hero-scroll", progress.toFixed(4));
+      root.classList.toggle("atlas-collapsed", progress > 0.9);
     };
     let ticking = false;
     const onScroll = () => {
@@ -180,53 +318,114 @@ export default function AtlasApp() {
     };
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    const next: ThemeId = themeId === "light" ? "night" : "light";
-    setThemeId(next);
-    const base = settings ?? {};
-    api.saveSettings({ ...base, theme: next }).catch(() => {});
-  }, [themeId, settings]);
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+  }, []);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
-  // Chronological route layer toggle (v1.2). Persisted through the existing
-  // local settings system — no new persistence mechanism.
-  const toggleRoutes = useCallback(() => {
-    const next = !routesOn;
-    setRoutesOn(next);
-    const base = settings ?? {};
-    api.saveSettings({ ...base, showRoutes: next }).catch(() => {});
-  }, [routesOn, settings]);
+  const changeTheme = useCallback(
+    (pref: ThemePreference) => {
+      setThemePref(pref);
+      saveSettings({ theme: pref });
+    },
+    [saveSettings]
+  );
+
+  const changeLanguage = useCallback(
+    (pref: LocalePreference) => {
+      setLocalePref(pref);
+      saveSettings({ language: pref });
+    },
+    [saveSettings]
+  );
+
+  const cycleTheme = useCallback(() => {
+    const order: ThemePreference[] = [...THEME_ORDER];
+    const cur = themePref === "auto" ? theme.id : themePref;
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    changeTheme(next);
+    showToast(t("Theme · {name}", { name: t(themes[next as keyof typeof themes].label) }));
+  }, [themePref, theme.id, changeTheme, showToast]);
+
+  const changeLayers = useCallback(
+    (next: MapLayers) => {
+      setLayers(next);
+      saveSettings({
+        showRoutes: next.routes,
+        showWishlist: next.wishlist,
+        hideCountries: !next.countries,
+      });
+    },
+    [saveSettings]
+  );
 
   // --- overlay lifecycle (single source; animated close) ---
+  // Opening anything cancels a close still animating, so its timer cannot
+  // dismiss the overlay that replaced it.
+  const closeTimerRef = useRef<number | null>(null);
+  const cancelPendingClose = useCallback(() => {
+    if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+    setClosingOverlay(false);
+  }, []);
   const closeOverlay = useCallback(() => {
     if (!overlay || closingOverlay) return;
     setClosingOverlay(true);
-    window.setTimeout(() => {
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null;
       setOverlay(null);
       setClosingOverlay(false);
     }, 260);
   }, [overlay, closingOverlay]);
+  useEffect(() => () => {
+    if (closeTimerRef.current != null) window.clearTimeout(closeTimerRef.current);
+  }, []);
 
-  // An overlay supersedes contextual focus: opening the Detail Sheet or the
-  // Profile drawer clears the Map ↔ Timeline selection.
+  // An overlay supersedes contextual focus.
   const openPlace = useCallback((id: string) => {
+    cancelPendingClose();
     setSyncFocus(null);
     setOverlay({ type: "place", id });
-  }, []);
+  }, [cancelPendingClose]);
   const openProfile = useCallback(() => {
+    cancelPendingClose();
     setSyncFocus(null);
     setOverlay({ type: "profile" });
+  }, [cancelPendingClose]);
+  const openIdeas = useCallback((s?: Season) => {
+    cancelPendingClose();
+    setSyncFocus(null);
+    setOverlay({ type: "ideas", season: s });
+  }, [cancelPendingClose]);
+
+  const scrollToSection = useCallback((id: "map" | "journey" | "wherenext") => {
+    if (id === "map") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    const el = document.getElementById(id === "journey" ? "journey" : "where-next");
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - (STRIP_HEIGHT + STRIP_MARGIN * 2) + 4;
+    window.scrollTo({ top, behavior: "smooth" });
   }, []);
 
+  // "Show on map": expand the hero, then — once the page is back at the top
+  // and the map has re-expanded — fly the camera to the place.
+  const showOnMap = useCallback((placeId: string) => {
+    cancelPendingClose();
+    setOverlay(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    whenAtTop(() => setFlyTo({ placeId, nonce: Date.now() }), 120);
+  }, [cancelPendingClose]);
+
   // --- Map ↔ Timeline synchronization (v1.3) ---
-  // Multiple-Visit rule (documented): when a Place has several Visits, the
-  // focused Visit is
-  //   1. the Visit already in context, when it belongs to this Place
-  //      (the selection persists rather than silently switching);
-  //   2. otherwise the current-base Visit when the Place is the current base
-  //      (that Visit is the Timeline's NOW anchor — the "living here" node);
-  //   3. otherwise the most recent Visit by date (start date, else end date),
-  //      tie-broken by stable id.
-  // If no Visit resolves, there is nothing to synchronize (returns null).
+  // Multiple-Visit rule: the focused Visit is (1) the one already in context
+  // when it belongs to this Place, (2) the current-base Visit when the Place is
+  // the current base, (3) otherwise the most recent Visit (stable tie-break).
   const resolveVisitId = useCallback(
     (placeId: string, inContext?: string): string | undefined => {
       const candidates = visits.filter((v) => v.placeId === placeId);
@@ -246,20 +445,10 @@ export default function AtlasApp() {
     [visits, profile]
   );
 
-  // Timeline → Map: a Timeline node was clicked/selected. The map responds by
-  // emphasizing the Place's marker (and camera only when needed).
   const handleTimelineSelect = useCallback((node: TimelineNode) => {
-    setSyncFocus({
-      placeId: node.place.id,
-      nodeId: node.id,
-      visitId: node.visitId,
-      source: "timeline",
-    });
+    setSyncFocus({ placeId: node.place.id, nodeId: node.id, visitId: node.visitId, source: "timeline" });
   }, []);
 
-  // Map → Timeline: a map marker was clicked/selected. Resolve the relevant
-  // Visit (multiple-Visit rule above), then the Timeline responds by bringing
-  // that node into view.
   const handleMapFocus = useCallback(
     (placeId: string) => {
       setSyncFocus((prev) => {
@@ -272,20 +461,84 @@ export default function AtlasApp() {
     [resolveVisitId]
   );
 
-  // Stable handler (map background click clears the selection). Kept in a
-  // useCallback so HeroMap's map-creation effect never re-runs from a new
-  // inline identity.
   const clearSyncFocus = useCallback(() => setSyncFocus(null), []);
 
-  // Escape collapses the active overlay (spec: single-page, no stacked overlays).
+  // --- keyboard: Escape, palette, shortcuts ---
   useEffect(() => {
-    if (!overlay) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeOverlay();
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "k") {
+        // The palette belongs to the Atlas view, and a lightbox, editor or
+        // dialog that owns the keyboard keeps it (their Escape and arrow
+        // handlers would otherwise act underneath the palette).
+        if (!paletteOpen && (view !== "atlas" || document.querySelector("[data-owns-keyboard]"))) return;
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+        return;
+      }
+      if (paletteOpen || shortcutsOpen || share) return; // those dialogs own the keyboard
+      if (e.key === "Escape") {
+        if (overlay) closeOverlay();
+        return;
+      }
+      if (view !== "atlas" || overlay || mod || e.altKey || isTypingTarget(e.target)) return;
+      switch (e.key) {
+        case "/":
+          e.preventDefault();
+          setPaletteOpen(true);
+          break;
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen(true);
+          break;
+        case "t":
+        case "T":
+          cycleTheme();
+          break;
+        case "p":
+        case "P":
+          openProfile();
+          break;
+        case "m":
+        case "M":
+          scrollToSection("map");
+          break;
+        case "j":
+        case "J":
+          scrollToSection("journey");
+          break;
+        case "w":
+        case "W":
+          scrollToSection("wherenext");
+          break;
+        case "r":
+        case "R":
+          changeLayers({ ...layers, routes: !layers.routes });
+          showToast(layers.routes ? t("Routes hidden") : t("Routes shown"));
+          break;
+        case "i":
+        case "I":
+          openIdeas();
+          break;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, closeOverlay]);
+  }, [
+    overlay,
+    closeOverlay,
+    paletteOpen,
+    shortcutsOpen,
+    share,
+    view,
+    cycleTheme,
+    openProfile,
+    openIdeas,
+    scrollToSection,
+    changeLayers,
+    layers,
+    showToast,
+  ]);
 
   // Lock page scroll while an overlay or Manage Atlas is open.
   useEffect(() => {
@@ -297,20 +550,24 @@ export default function AtlasApp() {
   }, [overlay, closingOverlay, view]);
 
   // --- URL state (PRODUCT_SPEC §36): /?place=… /?season=… /?profile=true ---
-  // Applied after hydration (never on the server render) so the initial client
-  // render always matches the pre-rendered HTML.
+  // Applied after hydration so the first client render matches the export.
+  // Without a season in the URL, Where Next opens on the coming season.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const prof = params.get("profile");
     const p = params.get("place");
     const s = params.get("season");
+    const ideas = params.get("ideas");
     if (prof === "true") setOverlay({ type: "profile" });
     else if (p) setOverlay({ type: "place", id: p });
+    else if (ideas === "true") setOverlay({ type: "ideas" });
     if (SEASONS.includes(s as Season)) setSeason(s as Season);
+    else {
+      const next = seasonFromMonth(((new Date().getMonth() + 3) % 12) + 1);
+      setSeason(next);
+    }
   }, []);
 
-  // Keep the URL in sync when state changes (skip the mount commit so it never
-  // overwrites the URL before the read above has run).
   const firstPushRef = useRef(true);
   useEffect(() => {
     if (firstPushRef.current) {
@@ -322,50 +579,160 @@ export default function AtlasApp() {
     else url.searchParams.delete("place");
     if (overlay?.type === "profile") url.searchParams.set("profile", "true");
     else url.searchParams.delete("profile");
+    if (overlay?.type === "ideas") url.searchParams.set("ideas", "true");
+    else url.searchParams.delete("ideas");
     url.searchParams.set("season", season);
     window.history.replaceState(null, "", url.pathname + url.search);
   }, [overlay, season]);
 
-  // Fallback matches ProfileDrawer's own "Traveler" default, so an unnamed
-  // profile doesn't show one initial in the topbar and a different name in
-  // the drawer it opens.
-  const profileInitials = (profile?.name?.trim() || "Traveler")
-    .split(/\s+/)
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  const placeOverlayExists =
-    overlay?.type !== "place" || places.some((p) => p.id === overlay.id);
+  const placeOverlayExists = overlay?.type !== "place" || places.some((p) => p.id === overlay.id);
+  // A deleted or unknown ?place= would otherwise hold an invisible overlay
+  // (page scroll locked, shortcuts off) with nothing on screen.
+  useEffect(() => {
+    if (loaded && !placeOverlayExists) {
+      cancelPendingClose();
+      setOverlay(null);
+    }
+  }, [loaded, placeOverlayExists, cancelPendingClose]);
 
   const defaultMapPosition = settings?.defaultMapPosition
     ? ([settings.defaultMapPosition.lng, settings.defaultMapPosition.lat] as [number, number])
     : null;
 
+  const overlayOpen = overlay != null || closingOverlay;
+
+  // --- command palette commands ---
+  const commands = useMemo<PaletteCommand[]>(() => {
+    const go = t("Go to");
+    const list: PaletteCommand[] = [
+      { id: "go-map", group: go, label: t("The map"), hint: "M", run: () => scrollToSection("map") },
+      { id: "go-journey", group: go, label: t("My journey"), hint: "J", run: () => scrollToSection("journey") },
+      { id: "go-wherenext", group: go, label: t("Where next"), hint: "W", run: () => scrollToSection("wherenext") },
+      { id: "ideas", group: go, label: t("All ideas"), hint: "I", run: () => openIdeas() },
+      { id: "profile", group: go, label: t("Profile"), hint: "P", run: openProfile },
+    ];
+    if (writable) {
+      list.push({ id: "manage", group: go, label: t("Manage Atlas"), run: () => openManage() });
+    }
+    for (const id of ["auto", ...THEME_ORDER] as ThemePreference[]) {
+      list.push({
+        id: "theme-" + id,
+        group: t("Theme"),
+        label: id === "auto" ? t("Auto (system)") : t(themes[id].label),
+        detail: id === "auto" ? t("Follows Light / Night") : t(themes[id].description),
+        active: themePref === id,
+        run: () => changeTheme(id),
+      });
+    }
+    for (const [id, label] of [
+      ["auto", t("Auto")],
+      ["en", "English"],
+      ["zh", "简体中文"],
+    ] as [LocalePreference, string][]) {
+      list.push({
+        id: "lang-" + id,
+        group: t("Language"),
+        label,
+        detail: id === "auto" ? t("Follows your system") : undefined,
+        active: localePref === id,
+        run: () => changeLanguage(id),
+      });
+    }
+    list.push(
+      {
+        id: "layer-routes",
+        group: t("Map"),
+        label: layers.routes ? t("Hide routes") : t("Show routes"),
+        hint: "R",
+        run: () => changeLayers({ ...layers, routes: !layers.routes }),
+      },
+      {
+        id: "layer-wishlist",
+        group: t("Map"),
+        label: layers.wishlist ? t("Hide wishlist pins") : t("Show wishlist pins"),
+        run: () => changeLayers({ ...layers, wishlist: !layers.wishlist }),
+      },
+      {
+        id: "layer-countries",
+        group: t("Map"),
+        label: layers.countries ? t("Hide visited countries") : t("Show visited countries"),
+        run: () => changeLayers({ ...layers, countries: !layers.countries }),
+      },
+      {
+        id: "export-poster",
+        group: t("Map"),
+        label: t("Save map as image"),
+        run: () => {
+          // Capture the full hero, not a half-expanded strip (the map then
+          // waits for its camera to settle back from the strip view).
+          scrollToSection("map");
+          whenAtTop(() => setExportNonce((n) => n + 1));
+        },
+      },
+      { id: "shortcuts", group: t("Help"), label: t("Keyboard shortcuts"), hint: "?", run: () => setShortcutsOpen(true) }
+    );
+    if (visits.length > 0) {
+      list.push(
+        { id: "share-journey", group: t("Share"), label: t("Share my journey"), detail: t("As an atlas pass"), run: () => setShare({ scope: "journey" }) },
+        { id: "share-trip", group: t("Share"), label: t("Share a trip"), detail: t("As a boarding pass"), run: () => setShare({ scope: "trip" }) },
+        { id: "share-country", group: t("Share"), label: t("Share a country"), detail: t("Every city there, on one pass"), run: () => setShare({ scope: "country" }) }
+      );
+    }
+    return list;
+    // locale: labels are translated at build time of the list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    writable,
+    themePref,
+    localePref,
+    locale,
+    layers,
+    changeTheme,
+    changeLanguage,
+    changeLayers,
+    openIdeas,
+    openProfile,
+    scrollToSection,
+    visits.length,
+  ]);
+
+  const remote = runtime?.remote === true;
+  const posterSubtitle = useMemo(
+    () => atlasFactsLine(atlasFacts(places, visits, wishlist), false),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [places, visits, wishlist, locale]
+  );
+
   return (
-    <>
-      <div className="atlas-map-sticky">
+    <LocaleContext.Provider value={locale}>
+      <section className="atlas-map-sticky" id="map" aria-label={t("Map")}>
+        <div ref={bandRef} className="atlas-map-band" />
         <div ref={clipRef} className="atlas-map-clip">
           <HeroMap
             places={places}
             visits={visits}
+            wishlist={wishlist}
             profile={profile}
             countriesGeo={countriesGeo}
             theme={theme}
             media={media}
-            overlayOpen={overlay != null || closingOverlay}
-            routesOn={routesOn}
-            onToggleRoutes={toggleRoutes}
+            overlayOpen={overlayOpen}
+            layers={layers}
+            onLayersChange={changeLayers}
             focus={syncFocus}
             onFocusPlace={handleMapFocus}
             onClearFocus={clearSyncFocus}
             onOpenPlace={openPlace}
             initialCenter={defaultMapPosition}
+            flyTo={flyTo}
+            ready={loaded}
+            posterTitle={wordmark}
+            posterSubtitle={posterSubtitle}
+            exportNonce={exportNonce}
+            onNotice={showToast}
           />
         </div>
-      </div>
+      </section>
 
       <main className="atlas-main">
         <JourneyTimeline
@@ -375,11 +742,14 @@ export default function AtlasApp() {
           profile={profile}
           media={media}
           theme={theme}
+          loaded={loaded}
           emphasizedSeason={season}
-          overlayOpen={overlay != null || closingOverlay}
+          overlayOpen={overlayOpen}
           focus={syncFocus}
           onSelectNode={handleTimelineSelect}
           onOpenPlace={openPlace}
+          onWhereNext={() => scrollToSection("wherenext")}
+          onAddFirst={writable ? () => openManage("visit") : undefined}
         />
         <WhereNext
           wishlist={wishlist}
@@ -389,25 +759,47 @@ export default function AtlasApp() {
           season={season}
           onSeasonChange={setSeason}
           onOpenPlace={openPlace}
+          onViewAll={() => openIdeas()}
+          onAddWish={writable ? () => openManage("wishlist") : undefined}
         />
+        <footer className="atlas-footer">
+          <div>
+            {t("Built with")}
+            <span className="atlas-footer__heart" role="img" aria-label="♥">
+              <HeartIcon size={14} />
+            </span>
+            {t("for memories")}
+          </div>
+          <div className="atlas-footer__meta">
+            <button type="button" onClick={() => setShortcutsOpen(true)}>
+              <KeyboardIcon size={14} /> {t("Shortcuts")}
+            </button>
+            {remote ? (
+              <span className="atlas-footer__remote">
+                <WifiIcon size={14} /> {t("Shared on your local network · view only")}
+              </span>
+            ) : null}
+          </div>
+        </footer>
       </main>
 
-      <header className="atlas-topbar">
-        <div className="atlas-wordmark">Yu&rsquo;s Atlas</div>
-        <div className="atlas-topbar__actions">
-          <button className="atlas-profile-button" onClick={openProfile} type="button">
-            <span className="atlas-profile-button__avatar" aria-hidden="true">
-              {profileInitials}
-            </span>
-            {profile?.name ? <span className="atlas-profile-button__label">{profile.name}</span> : null}
-          </button>
-          <button className="atlas-theme-toggle" onClick={toggleTheme} type="button">
-            {themeId === "light" ? "Night" : "Light"}
-          </button>
-        </div>
-      </header>
+      <Topbar
+        profile={profile}
+        wordmark={wordmark}
+        theme={theme}
+        themePreference={themePref}
+        onThemeChange={changeTheme}
+        onOpenProfile={openProfile}
+        onOpenSearch={() => setPaletteOpen(true)}
+        onExpandMap={() => scrollToSection("map")}
+      />
 
       {error ? <div className="atlas-error">{error}</div> : null}
+      {toast ? (
+        <div className="atlas-toast" role="status">
+          {toast}
+        </div>
+      ) : null}
 
       {overlay?.type === "place" && placeOverlayExists ? (
         <PlaceDetailSheet
@@ -424,6 +816,9 @@ export default function AtlasApp() {
           repo={repo}
           onSaved={loadData}
           onClose={closeOverlay}
+          onNavigate={openPlace}
+          onShowOnMap={showOnMap}
+          onShare={(visitId, country) => setShare({ scope: "trip", visitId, country })}
         />
       ) : null}
 
@@ -431,15 +826,74 @@ export default function AtlasApp() {
         <ProfileDrawer
           profile={profile}
           places={places}
+          visits={visits}
+          wishlist={wishlist}
           theme={theme}
+          themePreference={themePref}
+          onThemeChange={changeTheme}
+          localePreference={localePref}
+          onLocaleChange={changeLanguage}
           writable={writable}
           closing={closingOverlay}
           onClose={closeOverlay}
           onManage={() => {
             closeOverlay();
-            setView("manage");
+            openManage();
           }}
           onProfileSaved={loadData}
+          onOpenPlace={openPlace}
+          onShare={(scope, country) => setShare({ scope, country })}
+        />
+      ) : null}
+
+      {overlay?.type === "ideas" ? (
+        <IdeasBoard
+          wishlist={wishlist}
+          places={places}
+          media={media}
+          initialSeason={overlay.season ?? null}
+          closing={closingOverlay}
+          onClose={closeOverlay}
+          onOpenPlace={openPlace}
+        />
+      ) : null}
+
+      {paletteOpen ? (
+        <CommandPalette
+          places={places}
+          visits={visits}
+          wishlist={wishlist}
+          media={media}
+          profile={profile}
+          commands={commands}
+          onClose={() => setPaletteOpen(false)}
+          onOpenPlace={(id) => {
+            setPaletteOpen(false);
+            openPlace(id);
+          }}
+          onShowOnMap={(id) => {
+            setPaletteOpen(false);
+            showOnMap(id);
+          }}
+        />
+      ) : null}
+
+      {shortcutsOpen ? <ShortcutsDialog onClose={() => setShortcutsOpen(false)} /> : null}
+
+      {share ? (
+        <ShareDialog
+          key={share.scope + (share.visitId ?? "") + (share.country ?? "")}
+          request={share}
+          places={places}
+          visits={visits}
+          wishlist={wishlist}
+          profile={profile}
+          media={media}
+          theme={theme}
+          wordmark={wordmark}
+          countries={countriesGeo}
+          onClose={closeShare}
+          onNotice={showToast}
         />
       ) : null}
 
@@ -452,12 +906,19 @@ export default function AtlasApp() {
           profile={profile}
           settings={settings}
           theme={theme}
+          themePreference={themePref}
+          onThemeChange={changeTheme}
+          localePreference={localePref}
+          onLocaleChange={changeLanguage}
           runtime={runtime}
           onReload={loadData}
-          onExit={() => setView("atlas")}
-          onToggleTheme={toggleTheme}
+          onExit={() => {
+            setView("atlas");
+            setManageAdd(null);
+          }}
+          initialAdd={manageAdd}
         />
       ) : null}
-    </>
+    </LocaleContext.Provider>
   );
 }
