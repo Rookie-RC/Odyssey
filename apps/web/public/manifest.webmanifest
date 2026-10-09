@@ -1,0 +1,17 @@
+{
+  "name": "Atlas — 旅行地图集",
+  "short_name": "Atlas",
+  "description": "Every place you've been, and the ones still to come — on one map. 去过的每一个地方，和还想去的下一站，都在一张地图上。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F7F6F1",
+  "theme_color": "#F7F6F1",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

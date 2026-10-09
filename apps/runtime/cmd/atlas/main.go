@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -252,6 +253,8 @@ func selectProvider(cfg config.Config) geocode.Provider {
 }
 
 func staticHandler() http.Handler {
+	// Not in Go's built-in MIME table; browsers want it for the PWA manifest.
+	_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 	sub := assets.FS()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/")

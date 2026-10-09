@@ -31,6 +31,12 @@ export const metadata: Metadata = {
   title: "Yu's Atlas",
   description: "A local-first personal travel atlas — space, time, memory and where next.",
   applicationName: "Yu's Atlas",
+  // Installable from the browser ("Add to Home Screen"): opens full screen
+  // like an app, no app store needed.
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
