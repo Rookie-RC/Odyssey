@@ -1,0 +1,236 @@
+/* Accounts (cloud mode): the sign-in screen (components/AuthScreen.tsx) and
+   the account card in Manage Atlas → Settings (components/AccountPanel.tsx).
+   Mobile first; every value comes from the theme tokens, so the screen
+   follows whichever theme this browser last used. */
+
+/* While CloudGate asks the runtime which screen to show: just the ground. */
+.atlas-auth-splash {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.atlas-auth {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(64px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.atlas-auth__arcs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  color: var(--accent);
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+html[data-mode="dark"] .atlas-auth__arcs {
+  opacity: 0.32;
+}
+
+.atlas-auth__lang {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+}
+
+.atlas-auth__lang .atlas-segmented__item {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.atlas-auth__card {
+  width: 100%;
+  max-width: 400px;
+  box-sizing: border-box;
+  padding: 28px 22px 22px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-lg);
+}
+
+.atlas-auth__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.atlas-auth__brand .atlas-wordmark {
+  margin: 0;
+  font-size: 30px;
+  text-shadow: none;
+}
+
+.atlas-auth__rose {
+  color: var(--accent);
+  flex: none;
+}
+
+.atlas-auth__tagline {
+  margin: 12px 0 22px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.atlas-auth__tabs {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 18px;
+}
+
+.atlas-auth__tabs .atlas-segmented__item {
+  flex: 1;
+  padding: 8px 10px;
+}
+
+.atlas-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 16px inputs: iOS Safari zooms the page into anything smaller. */
+.atlas-auth__input.atlas-form-input {
+  font-size: 16px;
+  padding: 11px 12px;
+}
+
+.atlas-auth__password {
+  position: relative;
+  display: block;
+}
+
+.atlas-auth__password .atlas-auth__input {
+  padding-right: 46px;
+}
+
+.atlas-auth__reveal {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.atlas-auth__reveal:hover {
+  color: var(--text-primary);
+}
+
+.atlas-auth__error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 14px;
+}
+
+html[data-mode="dark"] .atlas-auth__error {
+  color: #ff8a80;
+}
+
+.atlas-auth__submit.atlas-btn {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.atlas-auth__switch {
+  display: block;
+  margin: 16px auto 0;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.atlas-auth__switch:hover {
+  text-decoration: underline;
+}
+
+.atlas-auth__note {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+@media (min-width: 560px) {
+  .atlas-auth__card {
+    padding: 36px 34px 28px;
+  }
+
+  .atlas-auth__tagline {
+    font-size: 20px;
+  }
+}
+
+/* --- Account card (Manage Atlas → Settings) --- */
+
+.atlas-account__email {
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.atlas-account__meter {
+  height: 6px;
+  margin: 8px 0 4px;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.atlas-account__meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.atlas-account__meter.is-full > span {
+  background: var(--danger);
+}
+
+.atlas-account__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  max-width: 420px;
+}
+
+.atlas-account__danger {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}

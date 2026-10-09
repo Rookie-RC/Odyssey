@@ -1,5 +1,5 @@
-import AtlasApp from "../components/AtlasApp";
+import CloudGate from "../components/CloudGate";
 
 export default function Home() {
-  return <AtlasApp />;
+  return <CloudGate />;
 }

@@ -6,11 +6,23 @@ import type { GeocodingResult } from "./geocode";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
 
+/** Fired on window whenever a data request answers 401: in cloud mode the
+ * session has ended (signed out elsewhere, expired, account deleted), and
+ * CloudGate returns to the sign-in screen. Never fired in local mode. */
+export const UNAUTHORIZED_EVENT = "atlas:unauthorized";
+
+function checkUnauthorized(res: Response): void {
+  if (res.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(API_BASE + path, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+  checkUnauthorized(res);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(res.status + " " + res.statusText + ": " + text);
@@ -22,16 +34,71 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export interface RuntimeInfo {
-  mode: string;
-  /** False for read-only runtimes and for every request arriving over LAN. */
+  /** "local": one Atlas on this computer; "cloud": the multi-user web
+   * service, one Atlas per signed-in account (docs/DEPLOY.md). */
+  mode: "local" | "cloud";
+  /** False for read-only runtimes, for every request arriving over LAN, and
+   * in cloud mode while signed out. */
   writable: boolean;
-  port: number;
-  dataDir: string;
+  /** Local mode only. */
+  port?: number;
+  /** Local mode only, and only for this computer (never LAN guests). */
+  dataDir?: string;
   geocodingProvider: string;
   /** True when this browser reaches the runtime over the local network. */
   remote?: boolean;
-  /** Read-only LAN sharing (PRODUCT_SPEC §4). */
+  /** Read-only LAN sharing (PRODUCT_SPEC §4). Local mode only. */
   lan?: { enabled: boolean; urls: string[]; error?: string };
+  /** Cloud mode: whether this browser has a session, and for whom. */
+  authenticated?: boolean;
+  user?: AccountUser;
+  /** Cloud mode: whether new accounts can be created. */
+  allowSignup?: boolean;
+}
+
+/** The signed-in account (cloud mode). */
+export interface AccountUser {
+  id: string;
+  email: string;
+}
+
+export interface AccountUsage {
+  bytes: number;
+  /** 0 = unlimited. */
+  quotaBytes: number;
+}
+
+/** Account calls answer {error} on failure; surface that text as is (it is
+ * shown on the sign-in screen), and never treat a wrong password (401) as
+ * a lost session. */
+async function authRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const res = await fetch(API_BASE + path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let parsed: unknown = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    // not JSON
+  }
+  if (!res.ok) {
+    const msg = (parsed as { error?: string } | null)?.error;
+    throw new AuthError(msg || res.status + " " + res.statusText, res.status);
+  }
+  return parsed as T;
+}
+
+export class AuthError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "AuthError";
+  }
 }
 
 export interface BackupInfo {
@@ -42,6 +109,22 @@ export interface BackupInfo {
 
 export const api = {
   getRuntime: () => request<RuntimeInfo>("/api/runtime"),
+
+  // --- accounts (cloud mode) ---
+  auth: {
+    register: (email: string, password: string) =>
+      authRequest<{ user: AccountUser }>("/api/auth/register", "POST", { email, password }),
+    login: (email: string, password: string) =>
+      authRequest<{ user: AccountUser }>("/api/auth/login", "POST", { email, password }),
+    /** everywhere: also end every other session of this account. */
+    logout: (everywhere = false) => authRequest<{ ok: boolean }>("/api/auth/logout", "POST", { everywhere }),
+    me: () => authRequest<{ user: AccountUser; usage: AccountUsage }>("/api/auth/me", "GET"),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      authRequest<{ user: AccountUser }>("/api/auth/password", "POST", { currentPassword, newPassword }),
+    /** Permanently deletes the account and its whole Atlas. */
+    deleteAccount: (password: string) =>
+      authRequest<{ deleted: boolean }>("/api/auth/account", "DELETE", { password }),
+  },
 
   getProfile: () => request<Profile>("/api/profile"),
   saveProfile: (p: Profile) =>
@@ -99,6 +182,7 @@ export const api = {
     if (opts.author) form.append("author", opts.author);
     if (opts.license) form.append("license", opts.license);
     return fetch(API_BASE + "/api/media", { method: "POST", body: form }).then((res) => {
+      checkUnauthorized(res);
       if (!res.ok) {
         return res.text().then((t) => {
           throw new Error(res.status + " " + res.statusText + ": " + t);
@@ -128,6 +212,7 @@ export const api = {
   // --- portability (.atlas export / import / new) ---
   exportAtlas: async (): Promise<Blob> => {
     const res = await fetch(API_BASE + "/api/atlas/export", { method: "POST" });
+    checkUnauthorized(res);
     if (!res.ok) {
       const text = await res.text();
       throw new Error(res.status + " " + res.statusText + ": " + text);
@@ -138,6 +223,7 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(API_BASE + "/api/atlas/import", { method: "POST", body: form });
+    checkUnauthorized(res);
     const text = await res.text();
     if (!res.ok) {
       // The runtime always creates a backup before attempting the swap, and

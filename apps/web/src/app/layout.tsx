@@ -25,6 +25,7 @@ import "../styles/overlays.css";
 import "../styles/palette.css";
 import "../styles/glass.css";
 import "../styles/manage.css";
+import "../styles/auth.css";
 
 export const metadata: Metadata = {
   title: "Yu's Atlas",

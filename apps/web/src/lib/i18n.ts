@@ -16,8 +16,9 @@
 import { createContext, useContext } from "react";
 import { ZH as ZH_ATLAS } from "./i18n-zh";
 import { ZH_MANAGE } from "./i18n-zh-manage";
+import { ZH_ACCOUNT } from "./i18n-zh-account";
 
-const ZH: Record<string, string> = { ...ZH_MANAGE, ...ZH_ATLAS };
+const ZH: Record<string, string> = { ...ZH_ACCOUNT, ...ZH_MANAGE, ...ZH_ATLAS };
 
 export type Locale = "en" | "zh";
 export type LocalePreference = Locale | "auto";

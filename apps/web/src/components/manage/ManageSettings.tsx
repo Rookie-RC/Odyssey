@@ -13,10 +13,12 @@ import ThemePicker from "../ThemePicker";
 import LanguagePicker from "../LanguagePicker";
 import { t } from "../../lib/i18n";
 import { themes } from "../../themes";
+import AccountPanel from "../AccountPanel";
 
 export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
   const { theme, themePreference, onThemeChange, localePreference, onLocaleChange, settings, notify, reload, runtime } =
     ctx;
+  const cloud = runtime?.mode === "cloud";
   const [message, setMessage] = useState("");
   const [defaultPos, setDefaultPos] = useState<{ lat: number; lng: number } | null>(
     settings?.defaultMapPosition ?? null
@@ -99,15 +101,23 @@ export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
         </div>
       </Card>
 
-      <LanSharingCard runtime={runtime} settings={settings} notify={notify} reload={reload} onError={setMessage} />
+      {/* Cloud mode: the account instead of LAN sharing and the data
+          directory, which only exist for the runtime on this computer. */}
+      {cloud ? (
+        <AccountPanel runtime={runtime} notify={notify} />
+      ) : (
+        <LanSharingCard runtime={runtime} settings={settings} notify={notify} reload={reload} onError={setMessage} />
+      )}
 
       <Card>
         <h3 className="atlas-manage-card__title">{t("Runtime")}</h3>
         <div className="atlas-manage-kv">
-          <div>
-            <span className="atlas-manage-kv__label">{t("Data directory")}</span>
-            <span className="atlas-manage-kv__value">{runtime?.dataDir ?? "—"}</span>
-          </div>
+          {cloud ? null : (
+            <div>
+              <span className="atlas-manage-kv__label">{t("Data directory")}</span>
+              <span className="atlas-manage-kv__value">{runtime?.dataDir ?? "—"}</span>
+            </div>
+          )}
           <div>
             <span className="atlas-manage-kv__label">{t("Geocoding provider")}</span>
             <span className="atlas-manage-kv__value">{runtime?.geocodingProvider ?? "—"}</span>

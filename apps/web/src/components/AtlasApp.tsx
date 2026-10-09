@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type RuntimeInfo } from "../lib/api";
+import { signOut } from "../lib/account";
 import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
 import { HttpAtlasRepository } from "../lib/repository";
 import type { SyncFocus } from "../lib/sync";
@@ -671,6 +672,9 @@ export default function AtlasApp() {
       },
       { id: "shortcuts", group: t("Help"), label: t("Keyboard shortcuts"), hint: "?", run: () => setShortcutsOpen(true) }
     );
+    if (runtime?.mode === "cloud" && runtime.user) {
+      list.push({ id: "sign-out", group: t("Account"), label: t("Sign out"), detail: runtime.user.email, run: () => signOut() });
+    }
     if (visits.length > 0) {
       list.push(
         { id: "share-journey", group: t("Share"), label: t("Share my journey"), detail: t("As an atlas pass"), run: () => setShare({ scope: "journey" }) },
@@ -683,6 +687,7 @@ export default function AtlasApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     writable,
+    runtime,
     themePref,
     localePref,
     locale,
