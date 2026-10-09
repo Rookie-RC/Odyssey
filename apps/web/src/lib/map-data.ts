@@ -6,7 +6,8 @@
 //   - Wishlist-only places are excluded from the default Hero Map
 //   - countries are derived from visited Place.countryCode and are metadata only
 import type { Place, Profile, Visit, VisitType } from "./types";
-import { VISIT_RANK } from "./timeline";
+import { VISIT_RANK, formatMonthYear } from "./timeline";
+import { t } from "./i18n";
 
 export interface MapMarker {
   place: Place;
@@ -17,17 +18,14 @@ export interface MapMarker {
   rank: number; // higher = stronger visual weight
 }
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+/** Whether a visited marker plants a country flag: not the current base (it
+ * has its own ring), not a mere transit, and only with a real country code. */
+export function markerHasFlag(m: MapMarker): boolean {
+  return !m.isCurrent && m.visitType !== "transit" && /^[A-Z]{2}$/.test((m.place.countryCode ?? "").toUpperCase());
+}
 
 function formatDateLabel(visit: Visit): string {
-  if (!visit.startDate) return "";
-  const m = /^(\d{4})-(\d{2})/.exec(visit.startDate);
-  if (!m) return visit.startDate;
-  const month = Number(m[2]);
-  return (month >= 1 && month <= 12 ? MONTHS[month - 1] + " " : "") + m[1];
+  return visit.startDate ? formatMonthYear(visit.startDate) : "";
 }
 
 // buildMapMarkers returns one marker per visited place, using the strongest
@@ -75,4 +73,69 @@ export function visitedCountryCodes(places: Place[], visits: Visit[]): string[] 
     }
   }
   return Array.from(codes).sort();
+}
+
+/** Countries on the wishlist that hold no visited place yet: drawn hatched,
+ * "would like to go", beside the solid wash of visited countries. */
+export function wishlistCountryCodes(
+  places: Place[],
+  visits: Visit[],
+  wishlist: { placeId: string }[]
+): string[] {
+  const visited = new Set(visitedCountryCodes(places, visits));
+  const byId = new Map(places.map((p) => [p.id, p]));
+  const codes = new Set<string>();
+  for (const w of wishlist) {
+    const cc = byId.get(w.placeId)?.countryCode;
+    if (cc && !visited.has(cc)) codes.add(cc);
+  }
+  return Array.from(codes).sort();
+}
+
+export interface WishMarker {
+  place: Place;
+  wishlistId: string;
+  label: string;
+}
+
+// buildWishMarkers returns one marker per Wishlist place that has not been
+// visited (a visited place already has its memory marker). These only appear
+// when the optional Wishlist map layer is switched on.
+export function buildWishMarkers(
+  places: Place[],
+  visits: Visit[],
+  wishlist: { id: string; placeId: string; targetTime?: { year?: number; season?: string } }[]
+): WishMarker[] {
+  const visited = new Set(visits.map((v) => v.placeId));
+  const byId = new Map(places.map((p) => [p.id, p]));
+  const out: WishMarker[] = [];
+  const seen = new Set<string>();
+  for (const w of wishlist) {
+    const place = byId.get(w.placeId);
+    if (!place || visited.has(place.id) || seen.has(place.id)) continue;
+    seen.add(place.id);
+    const tt = w.targetTime;
+    const season = tt?.season ? t(tt.season[0].toUpperCase() + tt.season.slice(1)) : "";
+    const label =
+      season && tt?.year ? t("{season} {year}", { season, year: tt.year }) : season || (tt?.year ? t("{year}", { year: tt.year }) : "");
+    out.push({ place, wishlistId: w.id, label: label || t("Someday") });
+  }
+  return out;
+}
+
+/** [[west, south], [east, north]] around the given places, or null. Longitudes
+ * are taken as-is (an atlas spanning the antimeridian simply frames wide). */
+export function placesBounds(places: Place[]): [[number, number], [number, number]] | null {
+  if (places.length === 0) return null;
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const p of places) {
+    const { lat, lng } = p.coordinates;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    w = Math.min(w, lng);
+    e = Math.max(e, lng);
+    s = Math.min(s, lat);
+    n = Math.max(n, lat);
+  }
+  if (!Number.isFinite(w)) return null;
+  return [[w, s], [e, n]];
 }

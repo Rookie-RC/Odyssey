@@ -3,18 +3,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { Media, Place, Profile, Visit } from "../lib/types";
-import { buildMapMarkers, visitedCountryCodes } from "../lib/map-data";
-import type { MapMarker } from "../lib/map-data";
+import type { Media, Place, Profile, Transport, Visit, Wishlist } from "../lib/types";
+import {
+  buildMapMarkers,
+  buildWishMarkers,
+  placesBounds,
+  visitedCountryCodes,
+  wishlistCountryCodes,
+  markerHasFlag,
+  type MapMarker,
+  type WishMarker,
+} from "../lib/map-data";
 import { getRouteTrajectory } from "../lib/routes";
 import { visitTypeLabel } from "../lib/timeline";
-import { getPrimaryMediaForPlace } from "../lib/domain";
-import { loadThemeStyle } from "../lib/map-style";
+import { formatDateRange, getPlaceStory } from "../lib/domain";
+import { TRANSPORTS, TRANSPORT_GLYPH, transportLabel, transportOf } from "../lib/transport";
+import { LAYER_BEFORE, baseStyleUrl, loadThemeStyle } from "../lib/map-style";
+import { mediaSrc } from "../lib/api";
+import { getLocale, t, useLocale } from "../lib/i18n";
 import type { SyncFocus } from "../lib/sync";
 import type { AtlasTheme } from "../themes";
+import {
+  ChevronDown,
+  ChevronRight,
+  LayersIcon,
+  MinusIcon,
+  PeopleIcon,
+  PinIcon,
+  PlusIcon,
+  RecenterIcon,
+  RouteIcon,
+  StarIcon,
+  HomeIcon,
+  ImageIcon,
+  TransportIcon,
+} from "./Icons";
 
 const EUROPE_CENTER: [number, number] = [10, 50];
 const EUROPE_ZOOM = 4.2;
+const FIT_MAX_ZOOM = 5.2;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -30,6 +57,13 @@ export interface CountryCollection {
   features: CountryFeature[];
 }
 
+/** Optional Hero Map layers (persisted in Settings). */
+export interface MapLayers {
+  routes: boolean;
+  wishlist: boolean;
+  countries: boolean;
+}
+
 interface PreviewState {
   marker: MapMarker;
   mode: "micro" | "expanded";
@@ -38,19 +72,18 @@ interface PreviewState {
 interface HeroMapProps {
   places: Place[];
   visits: Visit[];
+  wishlist: Wishlist[];
   profile: Profile | null;
   countriesGeo: CountryCollection | null;
   theme: AtlasTheme;
   media: Media[];
-  /** True while an overlay (place detail / profile) is open or closing. */
+  /** True while an overlay (place detail / profile / ideas) is open or closing. */
   overlayOpen: boolean;
-  /** Chronological route layer visibility (v1.2). */
-  routesOn: boolean;
-  onToggleRoutes: () => void;
+  layers: MapLayers;
+  onLayersChange: (next: MapLayers) => void;
   /** Shared Map ↔ Timeline focus (v1.3). The map responds when the Timeline
    * initiated (`source === "timeline"`): the marker is emphasized and the
-   * camera is gently adjusted only when needed. Map-initiated focus is
-   * already where the user clicked. */
+   * camera is gently adjusted only when needed. */
   focus?: SyncFocus | null;
   /** Emitted when a marker is clicked/selected (Map → Timeline sync). */
   onFocusPlace?: (placeId: string) => void;
@@ -60,6 +93,28 @@ interface HeroMapProps {
   /** Optional default map position from Settings (PRODUCT_SPEC §34). */
   initialCenter?: [number, number] | null;
   initialZoom?: number | null;
+  /** Imperative "show on map" request (command palette); nonce re-triggers. */
+  flyTo?: { placeId: string; nonce: number } | null;
+  /** Caption for "Save map as image". */
+  posterTitle: string;
+  posterSubtitle: string;
+  /** Imperative "save map as image" request (command palette); nonce re-triggers. */
+  exportNonce?: number;
+  onNotice?: (message: string) => void;
+  /** False until Settings (theme, language, default position) are known; the
+   * map is created only then, so it never paints the wrong basemap first. */
+  ready?: boolean;
+}
+
+interface MarkerEntry {
+  marker: maplibregl.Marker;
+  el: HTMLDivElement;
+  label: HTMLSpanElement | null;
+  labelSize: { w: number; h: number } | null;
+  lngLat: [number, number];
+  rank: number;
+  isCurrent: boolean;
+  hasFlag: boolean;
 }
 
 function webglAvailable(): boolean {
@@ -74,70 +129,115 @@ function webglAvailable(): boolean {
 export default function HeroMap({
   places,
   visits,
+  wishlist,
   profile,
   countriesGeo,
   theme,
   media,
   overlayOpen,
-  routesOn,
-  onToggleRoutes,
+  layers,
+  onLayersChange,
   focus = null,
   onFocusPlace,
   onClearFocus,
   onOpenPlace,
   initialCenter,
   initialZoom,
+  flyTo,
+  posterTitle,
+  posterSubtitle,
+  exportNonce = 0,
+  onNotice,
+  ready = true,
 }: HeroMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markerObjsRef = useRef<maplibregl.Marker[]>([]);
-  // placeId -> marker DOM element, used to apply the shared focus emphasis.
-  const markerElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const entriesRef = useRef<Map<string, MarkerEntry>>(new Map());
+  const wishObjsRef = useRef<maplibregl.Marker[]>([]);
+  // Wishlist pins whose names join the label layout (after visited labels).
+  const wishEntriesRef = useRef<
+    { el: HTMLDivElement; label: HTMLSpanElement; labelSize: { w: number; h: number } | null; lngLat: [number, number] }[]
+  >([]);
   const previewRef = useRef<PreviewState | null>(null);
+  const userMovedRef = useRef(false);
+  const appliedThemeRef = useRef<string | null>(null);
+  // Strip camera (collapse → base, expand → back): the view to return to and
+  // the move waiting for the canvas to settle. A camera move the user asks for
+  // (drag, "show on map") cancels it.
+  const stripCameraRef = useRef<{
+    saved: { center: maplibregl.LngLat; zoom: number } | null;
+    pending: (() => void) | null;
+    timer: number | null;
+    /** The move in flight, re-aimed if the canvas resizes under it. */
+    active: { center: maplibregl.LngLatLike; zoom: number; end: number } | null;
+  }>({ saved: null, pending: null, timer: null, active: null });
+  const cancelStripCamera = useCallback(() => {
+    const cam = stripCameraRef.current;
+    if (cam.timer != null) window.clearTimeout(cam.timer);
+    cam.timer = null;
+    cam.pending = null;
+    cam.saved = null;
+    cam.active = null;
+  }, []);
+  // True between a style's `style.load` and the next setStyle. Style-bound
+  // layers are (re)added on this rather than isStyleLoaded(), which stays false
+  // until every tile and the sprite have arrived — so additions right after a
+  // theme switch, or during a pan, would otherwise be silently dropped.
+  const styleReadyRef = useRef(false);
 
   const [mapReady, setMapReady] = useState(false);
+  const [styleGen, setStyleGen] = useState(0);
   const [mapError, setMapError] = useState("");
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewPixel, setPreviewPixel] = useState<{ x: number; y: number } | null>(null);
+  const [layersOpen, setLayersOpen] = useState(false);
 
-  const markers = useMemo(() => buildMapMarkers(places, visits, profile), [places, visits, profile]);
+  // Labels inside the derived markers are localized: recompute on a language switch.
+  const locale = useLocale();
+  const markers = useMemo(
+    () => buildMapMarkers(places, visits, profile),
+    [places, visits, profile, locale] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const wishMarkers = useMemo(
+    () => buildWishMarkers(places, visits, wishlist),
+    [places, visits, wishlist, locale] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const wishMarkersRef = useRef(wishMarkers);
+  wishMarkersRef.current = wishMarkers;
   const countryCodes = useMemo(() => visitedCountryCodes(places, visits), [places, visits]);
+  const wishCodes = useMemo(() => wishlistCountryCodes(places, visits, wishlist), [places, visits, wishlist]);
   // Residence-based route trajectory, derived in the domain layer (lib/routes)
   // and memoized: it only changes when Places/Visits change, never on map
   // moves or the hero collapse scroll.
   const trajectory = useMemo(() => getRouteTrajectory(places, visits), [places, visits]);
 
   // Latest values for map callbacks (kept stable across renders).
-  const contentRef = useRef({ theme, markers, countryCodes, countriesGeo, routesOn, trajectory });
-  contentRef.current = { theme, markers, countryCodes, countriesGeo, routesOn, trajectory };
+  const contentRef = useRef({ theme, countryCodes, wishCodes, countriesGeo, layers, trajectory, markers });
+  contentRef.current = { theme, countryCodes, wishCodes, countriesGeo, layers, trajectory, markers };
   previewRef.current = preview;
 
-  // A Place Detail / Profile overlay supersedes the map preview.
+  // An overlay supersedes the map preview and the layers menu.
   useEffect(() => {
-    if (overlayOpen) setPreview(null);
+    if (overlayOpen) {
+      setPreview(null);
+      setLayersOpen(false);
+    }
   }, [overlayOpen]);
 
   // The page scroll drives the hero collapse (PRODUCT_SPEC §18): once the map
-  // shrinks to the strip, a marker's projected pixel position is meaningless
-  // (or sits above content that has scrolled underneath), so a lingering
-  // preview would float detached over Journey/Where Next. Close it as soon as
-  // scrolling starts, mirroring the Timeline preview's own scroll dismissal.
+  // shrinks toward the strip, a marker's projected position is meaningless,
+  // so a lingering preview would float detached over the Journey.
   useEffect(() => {
-    if (!preview) return;
-    const onScroll = () => setPreview(null);
+    if (!preview && !layersOpen) return;
+    const onScroll = () => {
+      setPreview(null);
+      setLayersOpen(false);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [preview]);
+  }, [preview, layersOpen]);
 
-  const openDetail = useCallback(
-    (m: MapMarker) => {
-      setPreview(null);
-      onOpenPlace?.(m.place.id);
-    },
-    [onOpenPlace]
-  );
-
-  // --- show / hide / focus callbacks (stable) ---
+  // --- preview helpers (stable) ---
   const projectPreview = useCallback((m: MapMarker) => {
     const map = mapRef.current;
     if (!map) return;
@@ -145,355 +245,743 @@ export default function HeroMap({
     setPreviewPixel({ x: p.x, y: p.y });
   }, []);
 
-  const showPreview = useCallback((m: MapMarker, mode: PreviewState["mode"]) => {
-    setPreview({ marker: m, mode });
-    projectPreview(m);
-  }, [projectPreview]);
+  const showMicro = useCallback(
+    (m: MapMarker) => {
+      setPreview((prev) => (prev?.mode === "expanded" ? prev : { marker: m, mode: "micro" }));
+      if (previewRef.current?.mode !== "expanded") projectPreview(m);
+    },
+    [projectPreview]
+  );
 
-  const clearMicroPreview = useCallback((m: MapMarker) => {
+  const clearMicro = useCallback((m: MapMarker) => {
     setPreview((prev) =>
       prev && prev.mode === "micro" && prev.marker.place.id === m.place.id ? null : prev
     );
   }, []);
 
-  const focusMarker = useCallback((m: MapMarker) => {
-    setPreview({ marker: m, mode: "expanded" });
+  const expandMarker = useCallback(
+    (m: MapMarker, opts: { pan?: boolean } = {}) => {
+      setPreview({ marker: m, mode: "expanded" });
+      const map = mapRef.current;
+      if (!map) return;
+      if (opts.pan) {
+        map.easeTo({ center: [m.place.coordinates.lng, m.place.coordinates.lat], duration: 420 });
+      }
+      projectPreview(m);
+    },
+    [projectPreview]
+  );
+
+  // --- label collision layout ---
+  // Every visited place may carry a name label, but labels never collide: in
+  // rank order (current, lived, trip … transit) each label tries the right of
+  // its pin, then the left, and is hidden if both would overlap an earlier
+  // label or another pin. Density therefore stays calm at any zoom
+  // (VISUAL_SPEC §4: selective labels, no dense European text clutter).
+  const layoutLabels = useCallback(() => {
     const map = mapRef.current;
-    if (map) {
-      map.easeTo({ center: [m.place.coordinates.lng, m.place.coordinates.lat], duration: 350 });
-      const p = map.project([m.place.coordinates.lng, m.place.coordinates.lat]);
-      setPreviewPixel({ x: p.x, y: p.y });
+    if (!map) return;
+    const collapsed = document.documentElement.classList.contains("atlas-collapsed");
+    const entries = Array.from(entriesRef.current.values());
+    const W = map.getCanvas().clientWidth;
+    const H = map.getCanvas().clientHeight;
+    const pts = entries.map((e) => ({ e, p: map.project(e.lngLat) }));
+    type Rect = { x: number; y: number; w: number; h: number };
+    const taken: Rect[] = pts.map(({ p, e }) => {
+      const r = e.isCurrent ? 9 : 5;
+      return { x: p.x - r, y: p.y - r, w: r * 2, h: r * 2 };
+    });
+    // A planted flag rises above its pin (pole + 13×9 flag).
+    for (const { p, e } of pts) {
+      if (e.hasFlag) taken.push({ x: p.x - 1, y: p.y - 24, w: 16, h: 13 });
+    }
+    const wishes = wishEntriesRef.current.map((w) => ({ w, p: map.project(w.lngLat) }));
+    // Vehicle badges on the routes (only those drawn at this zoom).
+    const { layers: shown, trajectory: tr } = contentRef.current;
+    if (shown.routes && !collapsed) {
+      // Zoom-dependent filters are evaluated at integer zoom levels.
+      const z = Math.floor(map.getZoom());
+      for (const f of tr.icons.features) {
+        if (z < f.properties.minZoom) continue;
+        const q = map.project(f.geometry.coordinates);
+        taken.push({ x: q.x - 9, y: q.y - 9, w: 18, h: 18 });
+      }
+    }
+    for (const { p } of wishes) taken.push({ x: p.x - 9, y: p.y - 9, w: 18, h: 18 });
+    // Floating chrome (map controls, top-bar actions) is an obstacle too, so a
+    // label never slides underneath a button.
+    const box = map.getContainer().getBoundingClientRect();
+    for (const sel of [".atlas-map-controls", ".atlas-topbar__actions"]) {
+      const el = document.querySelector(sel);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0) continue;
+      taken.push({ x: r.left - box.left - 6, y: r.top - box.top - 6, w: r.width + 12, h: r.height + 12 });
+    }
+    const hits = (a: Rect) =>
+      taken.some((b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y);
+    pts.sort((a, b) => b.e.rank - a.e.rank);
+    for (const { e, p } of pts) {
+      if (!e.label) continue;
+      if (!e.labelSize) {
+        e.labelSize = { w: e.label.offsetWidth, h: e.label.offsetHeight };
+      }
+      const { w, h } = e.labelSize;
+      const off = e.isCurrent ? 18 : 11;
+      const right: Rect = { x: p.x + off, y: p.y - h / 2, w, h };
+      const left: Rect = { x: p.x - off - w, y: p.y - h / 2, w, h };
+      const inView = (r: Rect) => r.x >= 4 && r.x + r.w <= W - 4 && r.y >= 4 && r.y + r.h <= H - 4;
+      let side: "right" | "left" | null = null;
+      if (collapsed && !e.isCurrent) side = null;
+      else if (!hits(right) && (inView(right) || !inView(left))) side = "right";
+      else if (!hits(left) && inView(left)) side = "left";
+      else if (e.isCurrent) side = "right"; // the current label is always shown
+      e.el.classList.toggle("atlas-marker--label-left", side === "left");
+      e.el.classList.toggle("atlas-marker--label-hidden", side === null);
+      if (side) taken.push(side === "right" ? right : left);
+    }
+    // Wishlist names come last: they yield to every visited label.
+    for (const { w, p } of wishes) {
+      if (!w.labelSize) w.labelSize = { w: w.label.offsetWidth, h: w.label.offsetHeight };
+      const { w: lw, h } = w.labelSize;
+      const right: Rect = { x: p.x + 13, y: p.y - h / 2, w: lw, h };
+      const left: Rect = { x: p.x - 13 - lw, y: p.y - h / 2, w: lw, h };
+      const inView = (r: Rect) => r.x >= 4 && r.x + r.w <= W - 4 && r.y >= 4 && r.y + r.h <= H - 4;
+      let side: "right" | "left" | null = null;
+      if (collapsed) side = null;
+      else if (!hits(right) && inView(right)) side = "right";
+      else if (!hits(left) && inView(left)) side = "left";
+      w.el.classList.toggle("atlas-wishpin--label-left", side === "left");
+      w.el.classList.toggle("atlas-wishpin--label-hidden", side === null);
+      if (side) taken.push(side === "right" ? right : left);
     }
   }, []);
 
-  // --- (re)build country layers + markers (idempotent) ---
-  const renderMapContent = useCallback(() => {
+  const labelRaf = useRef<number | null>(null);
+  const scheduleLabels = useCallback(() => {
+    if (labelRaf.current != null) return;
+    labelRaf.current = requestAnimationFrame(() => {
+      labelRaf.current = null;
+      layoutLabels();
+    });
+  }, [layoutLabels]);
+
+  // --- camera framing ---
+  const frameAtlas = useCallback(
+    (animate: boolean) => {
+      const map = mapRef.current;
+      if (!map) return;
+      const { markers } = contentRef.current;
+      if (initialCenter) {
+        const opts = { center: initialCenter, zoom: initialZoom ?? EUROPE_ZOOM };
+        if (animate) map.flyTo({ ...opts, duration: 900, essential: true });
+        else map.jumpTo(opts);
+        return;
+      }
+      const b = placesBounds(markers.map((m) => m.place));
+      if (!b) {
+        const opts = { center: EUROPE_CENTER, zoom: EUROPE_ZOOM };
+        if (animate) map.flyTo({ ...opts, duration: 900 });
+        else map.jumpTo(opts);
+        return;
+      }
+      const W = map.getCanvas().clientWidth;
+      const H = map.getCanvas().clientHeight;
+      const padding = {
+        top: Math.round(H * 0.16) + 40,
+        bottom: Math.round(H * 0.16) + 60,
+        left: Math.round(W * 0.14),
+        right: Math.round(W * 0.14),
+      };
+      try {
+        map.fitBounds(b, { padding, maxZoom: FIT_MAX_ZOOM, duration: animate ? 900 : 0 });
+      } catch {
+        map.jumpTo({ center: EUROPE_CENTER, zoom: EUROPE_ZOOM });
+      }
+    },
+    [initialCenter, initialZoom]
+  );
+
+  // --- (re)add style-bound layers: country fill + routes (idempotent) ---
+  const renderLayers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !styleReadyRef.current) return;
+    const { theme, countryCodes, wishCodes, countriesGeo, layers, trajectory } = contentRef.current;
+
+    const pick = (list: string[]): CountryCollection => {
+      const codes = new Set(list);
+      return {
+        type: "FeatureCollection",
+        features: (countriesGeo?.features ?? []).filter((f) => codes.has(f.properties.ISO_A2)),
+      };
+    };
+    const filtered = pick(countryCodes);
+    const countrySrc = map.getSource("countries") as maplibregl.GeoJSONSource | undefined;
+    if (!countrySrc) map.addSource("countries", { type: "geojson", data: filtered as never });
+    else countrySrc.setData(filtered as never);
+    if (!map.getLayer("countries-fill")) {
+      // Inserted beneath the basemap water: the coarse Natural Earth polygons
+      // are trimmed by the precise OSM coastline, so the fill never spills
+      // into the sea and needs no (misaligned) outline.
+      map.addLayer(
+        { id: "countries-fill", type: "fill", source: "countries", paint: { "fill-color": theme.countries.fill } },
+        map.getLayer(LAYER_BEFORE.countries) ? LAYER_BEFORE.countries : undefined
+      );
+    }
+    map.setPaintProperty("countries-fill", "fill-color", theme.countries.fill);
+    map.setLayoutProperty("countries-fill", "visibility", layers.countries ? "visible" : "none");
+
+    // Countries only on the wishlist: fine hatching in the wish colour — solid
+    // means "been there", hatched means "would like to go". Shown with the
+    // wishlist pins.
+    const hatch = "atlas-hatch-" + theme.id;
+    if (!map.hasImage(hatch)) map.addImage(hatch, hatchImage(theme.countries.wish), { pixelRatio: 2 });
+    const wishSrc = map.getSource("wish-countries") as maplibregl.GeoJSONSource | undefined;
+    if (!wishSrc) map.addSource("wish-countries", { type: "geojson", data: pick(wishCodes) as never });
+    else wishSrc.setData(pick(wishCodes) as never);
+    if (!map.getLayer("countries-wish")) {
+      map.addLayer(
+        { id: "countries-wish", type: "fill", source: "wish-countries", paint: { "fill-pattern": hatch } },
+        map.getLayer(LAYER_BEFORE.countries) ? LAYER_BEFORE.countries : undefined
+      );
+    }
+    map.setPaintProperty("countries-wish", "fill-pattern", hatch);
+    map.setLayoutProperty("countries-wish", "visibility", layers.wishlist ? "visible" : "none");
+
+    // Routes (v1.2/v1.3): residence → destination, each drawn in its trip's
+    // transport style — a dashed flight arc, a rail line with sleepers, a road
+    // with a centre line — above roads/borders, below labels and the DOM
+    // markers. The focused segment (feature-state "emphasized", Map ↔ Timeline
+    // sync) is subtly stronger.
+    const routeSrc = map.getSource("routes") as maplibregl.GeoJSONSource | undefined;
+    // promoteId: MapLibre drops non-numeric string feature ids, so feature
+    // state (segment emphasis) is keyed by the `segment` property instead.
+    if (!routeSrc) map.addSource("routes", { type: "geojson", data: trajectory.geojson as never, promoteId: "segment" });
+    else routeSrc.setData(trajectory.geojson as never);
+    const iconSrc = map.getSource("route-icons") as maplibregl.GeoJSONSource | undefined;
+    if (!iconSrc) map.addSource("route-icons", { type: "geojson", data: trajectory.icons as never });
+    else iconSrc.setData(trajectory.icons as never);
+    const before = map.getLayer(LAYER_BEFORE.routes) ? LAYER_BEFORE.routes : undefined;
+    const ink = opaque(theme.routes.line);
+    for (const spec of routeLayers(theme)) {
+      if (!map.getLayer(spec.id)) map.addLayer(spec as maplibregl.LayerSpecification, before);
+      else for (const [k, v] of Object.entries(spec.paint ?? {})) map.setPaintProperty(spec.id, k, v);
+      map.setLayoutProperty(spec.id, "visibility", layers.routes ? "visible" : "none");
+    }
+    for (const mode of TRANSPORTS) {
+      const name = "atlas-mode-" + mode + "-" + theme.id;
+      if (!map.hasImage(name)) map.addImage(name, vehicleImage(mode, ink, theme.markers.labelHalo), { pixelRatio: 2 });
+    }
+    if (!map.getLayer("routes-icons")) {
+      map.addLayer(
+        {
+          id: "routes-icons",
+          type: "symbol",
+          source: "route-icons",
+          filter: [">=", ["zoom"], ["get", "minZoom"]],
+          layout: {
+            "icon-image": ["concat", "atlas-mode-", ["get", "mode"], "-" + theme.id],
+            // The plane turns with its flight; ground vehicles stay upright.
+            "icon-rotate": ["case", ["==", ["get", "mode"], "plane"], ["get", "bearing"], 0],
+            "icon-rotation-alignment": "map",
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.78, 6, 1],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+        },
+        before
+      );
+    }
+    map.setLayoutProperty("routes-icons", "icon-image", ["concat", "atlas-mode-", ["get", "mode"], "-" + theme.id]);
+    const collapsed = document.documentElement.classList.contains("atlas-collapsed");
+    map.setLayoutProperty("routes-icons", "visibility", layers.routes && !collapsed ? "visible" : "none");
+    scheduleLabels(); // vehicle badges are label obstacles
+  }, [scheduleLabels]);
+
+  // --- create the map (once, when Settings are known) ---
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !ready) return;
+    let cancelled = false;
+    let map: maplibregl.Map | null = null;
+    (async () => {
+      if (!webglAvailable()) {
+        setMapError(t("WebGL is not available in this browser, which the map requires."));
+        return;
+      }
+      const initialTheme = contentRef.current.theme;
+      const initialLocale = getLocale();
+      let style: StyleSpecification | string = baseStyleUrl(initialTheme);
+      try {
+        style = await loadThemeStyle(initialTheme);
+      } catch {
+        // offline / blocked: fall back to the raw style URL (MapLibre retries)
+      }
+      if (cancelled) return;
+      try {
+        map = new maplibregl.Map({
+          container,
+          style,
+          center: initialCenter ?? EUROPE_CENTER,
+          zoom: initialZoom ?? EUROPE_ZOOM,
+          // Wheel input over the hero map must scroll the page (it drives the
+          // collapse/expand transition), so scroll zoom is disabled; zoom is
+          // explicit intent: Ctrl+wheel (scoped below) or the +/− controls.
+          scrollZoom: false,
+          // A flat 2D atlas: rotation and pitch are disabled at the gesture
+          // level and clamped so the camera can never leave 2D.
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchZoomRotate: true,
+          touchPitch: false,
+          keyboard: false,
+          maxPitch: 0,
+          attributionControl: { compact: true },
+          fadeDuration: 180,
+        });
+        map.touchZoomRotate.disableRotation();
+      } catch (e) {
+        setMapError(e instanceof Error ? e.message : String(e));
+        return;
+      }
+      mapRef.current = map;
+      appliedThemeRef.current = initialTheme.id + "|" + getLocale();
+      // Settings (and so the theme) may have arrived while the first style
+      // was loading: catch up immediately.
+      const latest = contentRef.current.theme;
+      if (latest.id !== initialTheme.id || getLocale() !== initialLocale) {
+        appliedThemeRef.current = latest.id + "|" + getLocale();
+        loadThemeStyle(latest)
+          .then((st) => {
+            if (mapRef.current !== map || !map) return;
+            styleReadyRef.current = false;
+            map.setStyle(st, { diff: false });
+          })
+          .catch(() => {});
+      }
+      map.on("load", () => {
+        setMapReady(true);
+        // Keep the credits one tap away (ⓘ) rather than a line of text over
+        // the hero: MapLibre opens compact attribution expanded on load.
+        container
+          .querySelector(".maplibregl-ctrl-attrib.maplibregl-compact-show")
+          ?.classList.remove("maplibregl-compact-show");
+      });
+      map.on("style.load", () => {
+        styleReadyRef.current = true;
+        setStyleGen((g) => g + 1);
+      });
+      map.on("click", () => {
+        setPreview(null);
+        setLayersOpen(false);
+        onClearFocus?.();
+      });
+      map.on("dragstart", () => {
+        userMovedRef.current = true;
+        cancelStripCamera();
+      });
+      map.on("move", () => {
+        const prev = previewRef.current;
+        if (prev) {
+          const m = mapRef.current;
+          if (m) {
+            const p = m.project([prev.marker.place.coordinates.lng, prev.marker.place.coordinates.lat]);
+            setPreviewPixel({ x: p.x, y: p.y });
+          }
+        }
+        scheduleLabels();
+      });
+      map.on("resize", scheduleLabels);
+    })();
+    return () => {
+      cancelled = true;
+      if (labelRaf.current != null) cancelAnimationFrame(labelRaf.current);
+      mapRef.current?.remove();
+      mapRef.current = null;
+      styleReadyRef.current = false;
+    };
+    // The map is created exactly once (`ready` only ever turns true); later
+    // prop changes flow through effects.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  // --- theme / language change: swap the adapted base style in place
+  // (camera, markers and selection survive; style-bound layers are re-added
+  // on style.load) ---
+  useEffect(() => {
+    const map = mapRef.current;
+    const key = theme.id + "|" + locale;
+    // No map yet: creation reads the latest theme itself once it is ready.
+    if (!map || appliedThemeRef.current === key) return;
+    appliedThemeRef.current = key;
+    let cancelled = false;
+    loadThemeStyle(theme)
+      .then((style) => {
+        if (cancelled || mapRef.current !== map) return;
+        styleReadyRef.current = false;
+        map.setStyle(style, { diff: false });
+      })
+      .catch(() => {
+        if (cancelled || mapRef.current !== map) return;
+        styleReadyRef.current = false;
+        map.setStyle(baseStyleUrl(theme), { diff: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [theme, locale]);
+
+  // --- style-bound layers follow data, layer toggles and style reloads ---
+  useEffect(() => {
+    renderLayers();
+  }, [renderLayers, styleGen, mapReady, countryCodes, wishCodes, countriesGeo, trajectory, layers, theme]);
+
+  // --- visited markers (DOM; independent of the style) ---
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    const { theme, markers, countryCodes, countriesGeo, routesOn, trajectory } = contentRef.current;
-
-    const codes = new Set(countryCodes);
-    const filtered: CountryCollection = {
-      type: "FeatureCollection",
-      features: (countriesGeo?.features ?? []).filter((f) => codes.has(f.properties.ISO_A2)),
-    };
-    if (!map.getSource("countries")) {
-      map.addSource("countries", { type: "geojson", data: filtered as never });
-    } else {
-      (map.getSource("countries") as maplibregl.GeoJSONSource).setData(filtered as never);
-    }
-    // The visited-country polygons come from Natural Earth 110m, which is far
-    // coarser than the basemap's OSM-derived geometry. An outline would visibly
-    // misalign with the basemap's country borders/coastlines, so we render only
-    // a very subtle fill: coverage stays a secondary contextual layer without
-    // drawing attention to the geometry mismatch.
-    for (const id of ["countries-fill", "countries-line"]) {
-      if (map.getLayer(id)) map.removeLayer(id);
-    }
-    map.addLayer({
-      id: "countries-fill",
-      type: "fill",
-      source: "countries",
-      paint: { "fill-color": theme.countries.fill },
-    });
-
-    // Chronological route layer (v1.2): a thin GeoJSON line layer between the
-    // country fill and the (DOM) markers, which therefore always stay on top.
-    // The layer is only present while routesOn; geometry updates only when the
-    // memoized trajectory changes.
-    if (routesOn) {
-      if (!map.getSource("routes")) {
-        map.addSource("routes", { type: "geojson", data: trajectory.geojson as never });
-      } else {
-        (map.getSource("routes") as maplibregl.GeoJSONSource).setData(trajectory.geojson as never);
-      }
-      if (!map.getLayer("routes-line")) {
-        map.addLayer({
-          id: "routes-line",
-          type: "line",
-          source: "routes",
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": theme.routes.line,
-            // Thin and restrained; width grows very slightly as the user zooms
-            // in, but never enough to dominate markers. The focused segment
-            // (feature-state "emphasized", driven by Map ↔ Timeline sync) is
-            // subtly stronger — slightly wider and more opaque — while every
-            // other segment stays visible but weaker. ("zoom" must sit at the
-            // top level of the expression, so the emphasis case is inside the
-            // interpolate outputs.)
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              3,
-              ["case", ["boolean", ["feature-state", "emphasized"], false], 2.6, 1.2],
-              7,
-              ["case", ["boolean", ["feature-state", "emphasized"], false], 3.1, 1.7],
-              11,
-              ["case", ["boolean", ["feature-state", "emphasized"], false], 3.8, 2.4],
-            ],
-            "line-opacity": [
-              "case",
-              ["boolean", ["feature-state", "emphasized"], false],
-              0.95,
-              0.55,
-            ],
-          },
-        });
-      }
-    } else if (map.getLayer("routes-line")) {
-      map.removeLayer("routes-line");
-      map.removeSource("routes");
-    }
-
-    markerObjsRef.current.forEach((m) => m.remove());
-    markerObjsRef.current = [];
-    markerElsRef.current.clear();
+    for (const e of entriesRef.current.values()) e.marker.remove();
+    entriesRef.current.clear();
     for (const m of markers) {
-      const el = makeMarkerElement(m);
-      markerElsRef.current.set(m.place.id, el);
-      const marker = new maplibregl.Marker({ element: el, anchor: "center" })
-        .setLngLat([m.place.coordinates.lng, m.place.coordinates.lat])
-        .addTo(map);
-      // MapLibre stamps its own generic aria-label ("Map marker") and no
-      // tabindex onto the element during addTo(), so both are (re)applied
-      // afterwards: every marker announces its own place, and the
-      // role="button" it already carries becomes a promise keyboard users can
-      // actually act on (PRODUCT_SPEC §38).
-      el.setAttribute("aria-label", m.place.name + ", " + m.place.country);
+      const { el, label } = makeMarkerElement(m);
+      const lngLat: [number, number] = [m.place.coordinates.lng, m.place.coordinates.lat];
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map);
+      // MapLibre stamps a generic aria-label and drops tabindex during
+      // addTo(), so both are (re)applied: every marker announces its own place
+      // and is keyboard-operable (PRODUCT_SPEC §38).
+      const name = m.place.name + ", " + m.place.country;
+      el.setAttribute("aria-label", m.isCurrent ? t("{place} — current base", { place: name }) : name);
       el.tabIndex = 0;
-      el.addEventListener("mouseenter", () => showPreview(m, "micro"));
-      el.addEventListener("mouseleave", () => clearMicroPreview(m));
-      el.addEventListener("focus", () => showPreview(m, "micro"));
-      el.addEventListener("blur", () => clearMicroPreview(m));
+      el.addEventListener("mouseenter", () => showMicro(m));
+      el.addEventListener("mouseleave", () => clearMicro(m));
+      el.addEventListener("focus", () => showMicro(m));
+      el.addEventListener("blur", () => clearMicro(m));
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        focusMarker(m);
-        // Map → Timeline synchronization (v1.3): selecting a marker focuses
-        // the matching Timeline item in the shared focus state.
+        expandMarker(m);
+        // Map → Timeline synchronization (v1.3).
         onFocusPlace?.(m.place.id);
       });
       el.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" && ev.key !== " ") return;
-        ev.preventDefault(); // Space would otherwise scroll the page
+        ev.preventDefault();
         ev.stopPropagation();
-        focusMarker(m);
+        expandMarker(m);
+        onFocusPlace?.(m.place.id);
       });
-      markerObjsRef.current.push(marker);
-    }
-  }, [mapReady, showPreview, clearMicroPreview, focusMarker, onFocusPlace]);
-
-  // --- create (or recreate) the map ---
-  const mapGenRef = useRef(0);
-  const createMap = useCallback(async () => {
-    const container = containerRef.current;
-    if (!container) return;
-    const gen = ++mapGenRef.current;
-    if (mapRef.current) {
-      mapRef.current.remove();
-      mapRef.current = null;
-    }
-    setMapReady(false);
-    setMapError("");
-    if (!webglAvailable()) {
-      setMapError("WebGL is not available in this browser, which the map requires.");
-      return;
-    }
-    // Load the base style once per theme and adapt it toward the theme's
-    // atmosphere (lib/map-style.ts). Fall back to the raw style URL if the
-    // network fetch fails, so the map still works offline.
-    const theme = contentRef.current.theme;
-    let style: StyleSpecification | string = theme.map.styleUrl;
-    try {
-      style = await loadThemeStyle(theme.id, theme.map.styleUrl);
-    } catch {
-      style = theme.map.styleUrl;
-    }
-    if (gen !== mapGenRef.current) return; // superseded by a newer createMap
-    let map: maplibregl.Map;
-    try {
-      map = new maplibregl.Map({
-        container,
-        style,
-        center: EUROPE_CENTER,
-        zoom: EUROPE_ZOOM,
-        // Wheel input over the hero map must scroll the page (it drives the
-        // collapse/expand transition), so MapLibre's built-in scroll zoom is
-        // disabled. Zoom is reserved for explicit intent: Ctrl+wheel (scoped
-        // handler below) or the +/- controls.
-        scrollZoom: false,
-        // The Atlas is a flat 2D map: rotation and pitch/tilt are disabled at
-        // the gesture level (right-drag rotate, Ctrl+drag rotate, drag-to-pitch,
-        // touch rotate/pitch) and clamped so the camera can never leave 2D.
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchZoomRotate: false,
-        touchPitch: false,
-        keyboard: false,
-        maxPitch: 0,
-        attributionControl: { compact: true },
+      entriesRef.current.set(m.place.id, {
+        marker,
+        el,
+        label,
+        labelSize: null,
+        lngLat,
+        rank: m.rank,
+        isCurrent: m.isCurrent,
+        hasFlag: markerHasFlag(m),
       });
-    } catch (e) {
-      setMapError(e instanceof Error ? e.message : String(e));
-      return;
     }
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on("load", () => setMapReady(true));
-    map.on("click", () => {
-      setPreview(null);
-      // Map background click clears the shared selection (v1.3).
-      onClearFocus?.();
-    });
-    map.on("move", () => {
-      const prev = previewRef.current;
-      if (prev) {
-        const p = map.project([prev.marker.place.coordinates.lng, prev.marker.place.coordinates.lat]);
-        setPreviewPixel({ x: p.x, y: p.y });
-      }
-    });
-    mapRef.current = map;
-  }, [onClearFocus]);
+    scheduleLabels();
+  }, [markers, mapReady, showMicro, clearMicro, expandMarker, onFocusPlace, scheduleLabels]);
 
-  // --- init map (once) ---
+  // Label metrics depend on the theme's fonts: re-measure after a theme switch.
   useEffect(() => {
-    createMap();
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, [createMap]);
+    const t = window.setTimeout(() => {
+      for (const e of entriesRef.current.values()) e.labelSize = null;
+      for (const w of wishEntriesRef.current) w.labelSize = null;
+      scheduleLabels();
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [theme.id, scheduleLabels]);
 
-  // --- scoped Ctrl+wheel zoom ---
-  // MapLibre's built-in scrollZoom is disabled so a normal wheel scrolls the
-  // page (driving the hero collapse/expand). Zoom becomes an explicit gesture:
-  // Ctrl+wheel over the map container. preventDefault() also stops the
-  // browser's own Ctrl+wheel page zoom. Without Ctrl we touch nothing, so
-  // normal page scrolling is never interfered with.
+  // Collapsing to the strip hides secondary labels and, as a subtle camera
+  // adjustment (VISUAL_SPEC §6), centres the strip on the current base so the
+  // contextual band always shows "where I am now". Expanding restores the
+  // camera the user left.
+  const currentLngLat = useMemo(() => {
+    const m = markers.find((x) => x.isCurrent);
+    return m ? ([m.place.coordinates.lng, m.place.coordinates.lat] as [number, number]) : null;
+  }, [markers]);
+  const currentRef = useRef(currentLngLat);
+  currentRef.current = currentLngLat;
+  useEffect(() => {
+    let collapsed = document.documentElement.classList.contains("atlas-collapsed");
+    let tracked: maplibregl.Map | null = null;
+    const cam = stripCameraRef.current;
+    // MapLibre animates the camera against a screen point taken at the start,
+    // so a canvas changing size underneath lands it somewhere else entirely.
+    // The move therefore waits until the canvas has stopped resizing with the
+    // scroll, and is re-aimed from where it is if a resize still catches it.
+    const move = (map: maplibregl.Map, center: maplibregl.LngLatLike, zoom: number, duration: number) => {
+      cam.active = { center, zoom, end: performance.now() + duration };
+      map.easeTo({ center, zoom, duration });
+    };
+    const arm = () => {
+      if (cam.timer != null) window.clearTimeout(cam.timer);
+      cam.timer = window.setTimeout(() => {
+        cam.timer = null;
+        const run = cam.pending;
+        cam.pending = null;
+        run?.();
+      }, 160);
+    };
+    const onResize = () => {
+      if (cam.pending) arm();
+      const a = cam.active;
+      const map = tracked;
+      if (!a || !map) return;
+      const left = a.end - performance.now();
+      if (left <= 0 && !map.isMoving()) {
+        cam.active = null;
+        return;
+      }
+      map.easeTo({ center: a.center, zoom: a.zoom, duration: Math.max(120, left), easing: (k) => 1 - (1 - k) * (1 - k) });
+    };
+    const obs = new MutationObserver(() => {
+      scheduleLabels();
+      const now = document.documentElement.classList.contains("atlas-collapsed");
+      if (now === collapsed) return;
+      collapsed = now;
+      const map = mapRef.current;
+      // Vehicles stay off the strip; its routes are context, not detail.
+      if (map?.getLayer("routes-icons")) {
+        const show = !now && contentRef.current.layers.routes;
+        map.setLayoutProperty("routes-icons", "visibility", show ? "visible" : "none");
+      }
+      const target = currentRef.current;
+      if (!map || !target) return;
+      if (tracked !== map) {
+        tracked?.off("resize", onResize);
+        map.on("resize", onResize);
+        tracked = map;
+      }
+      if (now) {
+        // Keep the view to return to, even if the strip formed again before
+        // the previous restore ran.
+        if (!cam.saved) cam.saved = { center: map.getCenter(), zoom: map.getZoom() };
+        const zoom = Math.max(3.4, cam.saved.zoom - 0.4);
+        cam.pending = () => move(map, target, zoom, 700);
+      } else if (cam.saved) {
+        const back = cam.saved;
+        cam.pending = () => {
+          cam.saved = null;
+          move(map, back.center, back.zoom, 600);
+        };
+      }
+      arm();
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      obs.disconnect();
+      tracked?.off("resize", onResize);
+      if (cam.timer != null) window.clearTimeout(cam.timer);
+    };
+  }, [scheduleLabels]);
+
+  // --- wishlist pins (optional layer) ---
+  useEffect(() => {
+    const map = mapRef.current;
+    wishObjsRef.current.forEach((m) => m.remove());
+    wishObjsRef.current = [];
+    wishEntriesRef.current = [];
+    if (!map || !mapReady || !layers.wishlist) {
+      scheduleLabels();
+      return;
+    }
+    for (const w of wishMarkers) {
+      const { el, label } = makeWishElement(w);
+      const lngLat: [number, number] = [w.place.coordinates.lng, w.place.coordinates.lat];
+      const marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map);
+      wishEntriesRef.current.push({ el, label, labelSize: null, lngLat });
+      el.setAttribute("aria-label", t("Wishlist: {place}", { place: w.place.name + ", " + w.place.country }));
+      el.tabIndex = 0;
+      const open = (ev: Event) => {
+        ev.stopPropagation();
+        onOpenPlace?.(w.place.id);
+      };
+      el.addEventListener("click", open);
+      el.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          open(ev);
+        }
+      });
+      wishObjsRef.current.push(marker);
+    }
+    scheduleLabels();
+  }, [wishMarkers, layers.wishlist, mapReady, onOpenPlace, scheduleLabels]);
+
+  // --- first framing: fit the visited places once they are known ---
+  const framedRef = useRef(false);
+  useEffect(() => {
+    if (framedRef.current || !mapReady || userMovedRef.current) return;
+    if (markers.length === 0 && !initialCenter) return;
+    framedRef.current = true;
+    frameAtlas(false);
+    scheduleLabels();
+  }, [mapReady, markers, initialCenter, frameAtlas, scheduleLabels]);
+
+  // --- scoped Ctrl+wheel zoom (⌘+wheel on a Mac; a trackpad pinch arrives as Ctrl) ---
+  // Plain wheel scrolls the page (driving the hero collapse); Ctrl+wheel over
+  // the map zooms around the cursor and suppresses the browser's page zoom.
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return; // plain wheel → page scroll (no interference)
+      if (!e.ctrlKey && !e.metaKey) return;
       const map = mapRef.current;
       if (!map) return;
-      e.preventDefault(); // suppress browser page zoom + page scroll
-      let value = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 40 : e.deltaY;
+      e.preventDefault();
+      userMovedRef.current = true;
+      cancelStripCamera();
+      const value = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 40 : e.deltaY;
       if (value === 0) return;
-      // Scale like MapLibre's own scroll zoom (sigmoid), tuned so a wheel
-      // notch and small trackpad deltas both feel deliberate. Wheel up
-      // (deltaY < 0) zooms in, wheel down zooms out.
       const rate = 1 / 200;
       let scale = 2 / (1 + Math.exp(-Math.abs(value * rate)));
       if (value > 0) scale = 1 / scale;
       const zoom = clamp(map.getZoom() * scale, map.getMinZoom(), map.getMaxZoom());
-      // Keep the point under the cursor stationary while zooming.
       const rect = map.getCanvasContainer().getBoundingClientRect();
       const around = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
       map.easeTo({ zoom, duration: 0, around });
     };
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, []);
-
-  // --- re-render map content when data or readiness changes ---
-  useEffect(() => {
-    renderMapContent();
-  }, [markers, countryCodes, countriesGeo, mapReady, trajectory, routesOn, renderMapContent]);
+  }, [cancelStripCamera]);
 
   // --- Map ↔ Timeline synchronization (v1.3): marker emphasis ---
-  // Timeline-initiated focus emphasizes the matching marker (a restrained
-  // ring); anything else (map-initiated, cleared, or a place without a
-  // marker, e.g. a future/wishlist node) leaves markers untouched. Runs after
-  // renderMapContent so freshly recreated markers are covered.
   useEffect(() => {
-    const focusPlaceId =
-      focus && markerElsRef.current.has(focus.placeId) ? focus.placeId : null;
-    for (const [placeId, el] of markerElsRef.current) {
-      el.classList.toggle("atlas-marker--focused", placeId === focusPlaceId);
+    const focusPlaceId = focus && entriesRef.current.has(focus.placeId) ? focus.placeId : null;
+    for (const [placeId, e] of entriesRef.current) {
+      e.el.classList.toggle("atlas-marker--focused", placeId === focusPlaceId);
     }
   }, [focus, markers, mapReady]);
 
   // --- Map ↔ Timeline synchronization (v1.3): restrained camera ---
-  // Only a timeline-initiated focus moves the camera, and only when the Place
-  // is not already comfortably visible: a small pan preserving the current
-  // zoom, with modest easing. Hover never moves the camera; a collapsed Hero
-  // Map never moves the camera (marker emphasis still applies — see above).
+  // Only a timeline-initiated focus moves the camera, only when the Place is
+  // not comfortably visible, and never while the map is a collapsed strip.
   useEffect(() => {
     if (!focus || focus.source !== "timeline" || !mapReady) return;
     const map = mapRef.current;
     const place = places.find((p) => p.id === focus.placeId);
-    // Only visited Places have markers; a future/wishlist node has nothing to
-    // emphasize on the hero map, so the camera must not wander to it.
-    if (!map || !place || !markerElsRef.current.has(focus.placeId)) return;
-    if (
-      document.querySelector(".atlas-map-clip")?.classList.contains("atlas-map-clip--strip")
-    ) {
-      return; // collapsed contextual strip: keep the user's scroll position
-    }
+    if (!map || !place || !entriesRef.current.has(focus.placeId)) return;
+    if (document.documentElement.classList.contains("atlas-collapsed")) return;
     const p = map.project([place.coordinates.lng, place.coordinates.lat]);
     const w = map.getCanvas().clientWidth;
     const h = map.getCanvas().clientHeight;
     const margin = Math.min(110, Math.round(Math.min(w, h) * 0.16));
-    if (p.x > margin && p.x < w - margin && p.y > margin && p.y < h - margin) {
-      return; // already comfortably visible — do not move the camera
-    }
+    if (p.x > margin && p.x < w - margin && p.y > margin && p.y < h - margin) return;
     map.easeTo({ center: [place.coordinates.lng, place.coordinates.lat], duration: 480 });
   }, [focus, places, mapReady]);
 
   // --- Map ↔ Timeline synchronization (v1.3): route-segment emphasis ---
-  // When the focused node is a Visit with a residence → destination segment
-  // and Routes are enabled, that segment is emphasized via MapLibre
-  // feature-state (wider, more opaque) while the others stay visible but
-  // weaker. Routes disabled → no emphasis, and synchronization keeps working.
   const emphasizedSegIdRef = useRef<string | null>(null);
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReady) return;
-    const clearEmphasis = () => {
-      if (emphasizedSegIdRef.current != null && map.getSource("routes")) {
-        map.setFeatureState(
-          { source: "routes", id: emphasizedSegIdRef.current },
-          { emphasized: false }
-        );
-      }
+    if (!map || !mapReady || !map.getSource("routes")) return;
+    if (emphasizedSegIdRef.current != null) {
+      map.setFeatureState({ source: "routes", id: emphasizedSegIdRef.current }, { emphasized: false });
       emphasizedSegIdRef.current = null;
-    };
+    }
     const segId = focus?.visitId
       ? trajectory.segments.find((s) => s.id.endsWith("#" + focus.visitId))?.id
       : undefined;
-    if (!segId || !routesOn || !map.getSource("routes")) {
-      clearEmphasis();
-      return;
-    }
-    clearEmphasis();
+    if (!segId || !layers.routes) return;
     map.setFeatureState({ source: "routes", id: segId }, { emphasized: true });
     emphasizedSegIdRef.current = segId;
-  }, [focus, routesOn, trajectory, mapReady]);
+  }, [focus, layers.routes, trajectory, mapReady, styleGen]);
 
-  // --- recreate map on theme change (base style swap) ---
-  const skipFirstStyle = useRef(true);
+  // --- "show on map" (command palette) ---
   useEffect(() => {
-    if (skipFirstStyle.current) {
-      skipFirstStyle.current = false;
-      return;
-    }
-    createMap();
-  }, [theme.map.styleUrl, createMap]);
-
-  // --- optional default map position (Settings) ---
-  // The map is created once on mount (possibly before Settings arrive), so the
-  // default position is applied with a one-shot jump the first time it is known.
-  const appliedInitialRef = useRef(false);
-  useEffect(() => {
-    if (appliedInitialRef.current || !initialCenter) return;
+    if (!flyTo || !mapReady) return;
     const map = mapRef.current;
-    if (!map || !mapReady) return;
-    appliedInitialRef.current = true;
-    map.jumpTo({ center: initialCenter, zoom: initialZoom ?? EUROPE_ZOOM });
-  }, [initialCenter, initialZoom, mapReady]);
+    const place = places.find((p) => p.id === flyTo.placeId);
+    if (!map || !place) return;
+    userMovedRef.current = true;
+    cancelStripCamera();
+    const m = markers.find((x) => x.place.id === place.id);
+    map.flyTo({
+      center: [place.coordinates.lng, place.coordinates.lat],
+      zoom: Math.max(map.getZoom(), 5.6),
+      duration: 1100,
+      essential: true,
+    });
+    if (m) {
+      map.once("moveend", () => expandMarker(m));
+    }
+  }, [flyTo, mapReady, places, markers, expandMarker, cancelStripCamera]);
+
+  // --- "Save map as image" (poster) ---
+  const [exporting, setExporting] = useState(false);
+  const exportPoster = useCallback(async () => {
+    const map = mapRef.current;
+    if (!map || exporting) return;
+    setExporting(true);
+    setLayersOpen(false);
+    onNotice?.(t("Saving image…"));
+    try {
+      // Let a camera move in flight (the strip → hero restore) finish first.
+      const deadline = performance.now() + 2500;
+      while (performance.now() < deadline && (stripCameraRef.current.pending || map.isMoving())) {
+        await new Promise((r) => window.setTimeout(r, 80));
+      }
+      const labelSides = new Map<string, "left" | "right" | null>();
+      for (const [id, e] of entriesRef.current) {
+        labelSides.set(
+          id,
+          e.el.classList.contains("atlas-marker--label-hidden")
+            ? null
+            : e.el.classList.contains("atlas-marker--label-left")
+              ? "left"
+              : "right"
+        );
+      }
+      const { renderPoster, downloadBlob } = await import("../lib/poster");
+      const blob = await renderPoster({
+        map,
+        markers: contentRef.current.markers,
+        wishes: contentRef.current.layers.wishlist ? wishMarkersRef.current : [],
+        labelSides,
+        theme: contentRef.current.theme,
+        title: posterTitle,
+        subtitle: posterSubtitle,
+      });
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadBlob(blob, posterTitle.replace(/[\\/:*?"<>|’']/g, "").replace(/\s+/g, "-") + "-" + stamp + ".png");
+      onNotice?.(t("Image saved"));
+    } catch (e) {
+      onNotice?.(t("Could not create the image: {error}", { error: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, onNotice, posterTitle, posterSubtitle]);
+
+  const lastExportNonce = useRef(exportNonce);
+  useEffect(() => {
+    if (exportNonce === lastExportNonce.current) return;
+    lastExportNonce.current = exportNonce;
+    if (mapReady) exportPoster();
+  }, [exportNonce, mapReady, exportPoster]);
+
+  const zoomBy = (delta: number) => {
+    const map = mapRef.current;
+    if (!map) return;
+    userMovedRef.current = true;
+    cancelStripCamera();
+    map.easeTo({ zoom: clamp(map.getZoom() + delta, map.getMinZoom(), map.getMaxZoom()), duration: 260 });
+  };
+
+  const resetView = () => {
+    setPreview(null);
+    cancelStripCamera();
+    frameAtlas(true);
+  };
+
+  const story = useMemo(
+    () =>
+      preview?.mode === "expanded"
+        ? getPlaceStory(preview.marker.place.id, places, visits, [], profile, media)
+        : null,
+    [preview, places, visits, profile, media]
+  );
 
   return (
     <div className="atlas-hero">
@@ -502,172 +990,463 @@ export default function HeroMap({
 
       {!overlayOpen ? (
         <div className="atlas-hero__hint" aria-hidden="true">
-          <span>Scroll to explore my journey</span>
-          <svg viewBox="0 0 16 16" width="14" height="14">
-            <path
-              d="M3 6l5 5 5-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <span>{t("Scroll to explore my journey")}</span>
+          <ChevronDown size={16} className="atlas-hero__hint-chevron" />
         </div>
       ) : null}
 
-      {!overlayOpen ? (
-        <button
-          type="button"
-          className={"atlas-hero__routes" + (routesOn ? " atlas-hero__routes--on" : "")}
-          onClick={onToggleRoutes}
-          aria-pressed={routesOn}
-          title={routesOn ? "Hide chronological routes" : "Show chronological routes"}
-        >
-          <svg
-            className="atlas-hero__routes-icon"
-            viewBox="0 0 20 12"
-            width="20"
-            height="12"
-            aria-hidden="true"
+      <div className="atlas-map-controls" role="group" aria-label={t("Map controls")}>
+        <div className="atlas-map-controls__group atlas-glass">
+          <button type="button" onClick={() => zoomBy(0.6)} aria-label={t("Zoom in")} title={t("Zoom in")}>
+            <PlusIcon size={16} />
+          </button>
+          <button type="button" onClick={() => zoomBy(-0.6)} aria-label={t("Zoom out")} title={t("Zoom out")}>
+            <MinusIcon size={16} />
+          </button>
+          <button type="button" onClick={resetView} aria-label={t("Reset view")} title={t("Reset view")}>
+            <RecenterIcon size={16} />
+          </button>
+        </div>
+        <div className="atlas-map-layers">
+          <button
+            type="button"
+            className={"atlas-map-controls__single atlas-glass" + (layersOpen ? " is-open" : "")}
+            onClick={() => setLayersOpen((o) => !o)}
+            aria-expanded={layersOpen}
+            aria-label={t("Map layers")}
+            title={t("Map layers")}
           >
-            <path
-              d="M2 6h16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
-            <circle cx="6.5" cy="6" r="1.6" fill="currentColor" />
-            <circle cx="13.5" cy="6" r="1.6" fill="currentColor" />
-          </svg>
-          <span className="atlas-hero__routes-label">Routes</span>
-          <span className="atlas-hero__routes-state">{routesOn ? "On" : "Off"}</span>
-        </button>
-      ) : null}
+            <LayersIcon size={17} />
+          </button>
+          {layersOpen ? (
+            <div className="atlas-map-layers__menu atlas-glass atlas-glass--menu" role="menu" aria-label={t("Map layers")}>
+              <div className="atlas-map-layers__title">{t("On the map")}</div>
+              <LayerToggle
+                icon={<RouteIcon size={16} />}
+                label={t("Routes")}
+                hint={t("Trips radiating from each home")}
+                on={layers.routes}
+                onChange={(v) => onLayersChange({ ...layers, routes: v })}
+              />
+              <LayerToggle
+                icon={<StarIcon size={16} />}
+                label={t("Wishlist")}
+                hint={t("Places I dream of")}
+                on={layers.wishlist}
+                onChange={(v) => onLayersChange({ ...layers, wishlist: v })}
+              />
+              <LayerToggle
+                icon={<span className="atlas-map-layers__swatch" />}
+                label={t("Countries")}
+                hint={t("A soft wash over visited countries")}
+                on={layers.countries}
+                onChange={(v) => onLayersChange({ ...layers, countries: v })}
+              />
+              <button
+                type="button"
+                role="menuitem"
+                className="atlas-map-layers__action"
+                onClick={exportPoster}
+                disabled={exporting}
+              >
+                <ImageIcon size={15} />
+                {exporting ? t("Saving image…") : t("Save map as image")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       {mapError ? (
         <div className="atlas-map-error">
-          <p>Yu&rsquo;s Atlas needs WebGL to render the map.</p>
+          <p>{t("This atlas needs WebGL to render the map.")}</p>
           <p className="atlas-map-error__detail">{mapError}</p>
         </div>
       ) : null}
 
       {preview && previewPixel ? (
-        <div
-          className={"atlas-preview atlas-preview--" + preview.mode}
-          style={{ left: previewPixel.x, top: previewPixel.y }}
-        >
-          {preview.mode === "expanded" ? (
-            <ExpandedPreview
-              marker={preview.marker}
-              visits={visits}
-              media={media}
-              onOpenDetail={() => openDetail(preview.marker)}
-            />
-          ) : (
-            <>
-              <div className="atlas-preview__name">{preview.marker.place.name}</div>
-              <div className="atlas-preview__meta">
-                {preview.marker.place.country}
-                {preview.marker.dateLabel ? " · " + preview.marker.dateLabel : ""}
-                {" · " + visitTypeLabel(preview.marker.visitType)}
-              </div>
-            </>
-          )}
-        </div>
+        preview.mode === "expanded" && story ? (
+          <MemoryCard
+            marker={preview.marker}
+            pixel={previewPixel}
+            container={containerRef.current}
+            photos={story.media.slice(0, 2)}
+            primaryVisit={story.primaryVisit}
+            onOpen={() => {
+              setPreview(null);
+              onOpenPlace?.(preview.marker.place.id);
+            }}
+            onClose={() => setPreview(null)}
+          />
+        ) : preview.mode === "micro" ? (
+          <div className="atlas-micro" style={{ left: previewPixel.x, top: previewPixel.y }} role="tooltip">
+            <span className="atlas-micro__name">{preview.marker.place.name}</span>
+            <span className="atlas-micro__meta">
+              {preview.marker.place.country}
+              {preview.marker.isCurrent
+                ? " · " + t("Living here")
+                : (preview.marker.dateLabel ? " · " + preview.marker.dateLabel : "") +
+                  " · " +
+                  visitTypeLabel(preview.marker.visitType)}
+            </span>
+          </div>
+        ) : null
       ) : null}
     </div>
   );
 }
 
-function ExpandedPreview({
-  marker,
-  visits,
-  media,
-  onOpenDetail,
+function LayerToggle({
+  icon,
+  label,
+  hint,
+  on,
+  onChange,
 }: {
-  marker: MapMarker;
-  visits: Visit[];
-  media: Media[];
-  onOpenDetail: () => void;
+  icon: React.ReactNode;
+  label: string;
+  hint: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
 }) {
-  const photo = getPrimaryMediaForPlace(marker.place.id, visits, [], media);
   return (
-    <>
-      {photo ? (
-        <img
-          className="atlas-preview__img"
-          src={photo.path}
-          alt={photo.caption ?? marker.place.name}
-          draggable={false}
-        />
-      ) : null}
-      <div className="atlas-preview__body">
-        <div className="atlas-preview__name">{marker.place.name}</div>
-        <div className="atlas-preview__meta">
-          {marker.place.country}
-          {marker.dateLabel ? " · " + marker.dateLabel : ""}
-          {" · " + visitTypeLabel(marker.visitType)}
-        </div>
-        {marker.withFriends ? <div className="atlas-preview__friends">With friends</div> : null}
-        <button type="button" className="atlas-preview__action" onClick={onOpenDetail}>
-          View memory
-          <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-            <path
-              d="M2 8h11M9 3.5 13.5 8 9 12.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </div>
-    </>
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={on}
+      className={"atlas-map-layers__item" + (on ? " is-on" : "")}
+      onClick={() => onChange(!on)}
+    >
+      <span className="atlas-map-layers__icon">{icon}</span>
+      <span className="atlas-map-layers__text">
+        <span className="atlas-map-layers__label">{label}</span>
+        <span className="atlas-map-layers__hint">{hint}</span>
+      </span>
+      <span className="atlas-switch" aria-hidden="true">
+        <span className="atlas-switch__knob" />
+      </span>
+    </button>
   );
 }
 
-function makeMarkerElement(m: MapMarker): HTMLDivElement {
+// Expanded "memory" card (reference: Bordeaux card): place + date, company,
+// up to two photographs, and the way into the full memory. Placed beside the
+// pin on whichever side has room, clamped inside the map.
+function MemoryCard({
+  marker,
+  pixel,
+  container,
+  photos,
+  primaryVisit,
+  onOpen,
+  onClose,
+}: {
+  marker: MapMarker;
+  pixel: { x: number; y: number };
+  container: HTMLElement | null;
+  photos: Media[];
+  primaryVisit: Visit | null;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [h, setH] = useState(260);
+  useEffect(() => {
+    if (cardRef.current) setH(cardRef.current.offsetHeight);
+  }, [marker, photos.length]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const W = container?.clientWidth ?? 1200;
+  const H = container?.clientHeight ?? 800;
+  const cardW = Math.min(320, W - 32);
+  const gap = 22;
+  const placeRight = pixel.x + gap + cardW <= W - 16 || pixel.x < W / 2;
+  const left = clamp(placeRight ? pixel.x + gap : pixel.x - gap - cardW, 16, W - cardW - 16);
+  const top = clamp(pixel.y - h / 2, 90, Math.max(90, H - h - 90));
+  const caretTop = clamp(pixel.y - top, 22, h - 22);
+
+  const place = marker.place;
+  const when = primaryVisit
+    ? marker.isCurrent
+      ? primaryVisit.startDate
+        ? t("Since {date}", { date: formatDateRange(primaryVisit.startDate) })
+        : t("Now")
+      : formatDateRange(primaryVisit.startDate, primaryVisit.endDate)
+    : marker.dateLabel;
+
+  return (
+    <div
+      ref={cardRef}
+      className={"atlas-memory-card" + (placeRight ? "" : " atlas-memory-card--left")}
+      style={{ left, top, width: cardW, "--caret-top": caretTop + "px" } as React.CSSProperties}
+      role="dialog"
+      aria-label={place.name + ", " + place.country}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="atlas-memory-card__head">
+        <span className="atlas-memory-card__place">
+          <PinIcon size={15} />
+          <span className="atlas-break">
+            {place.name}, {place.country}
+          </span>
+        </span>
+        {when ? <span className="atlas-memory-card__date atlas-date">{when}</span> : null}
+      </div>
+      <div className="atlas-memory-card__sub">
+        {marker.isCurrent ? (
+          <>
+            <HomeIcon size={14} /> {t("Living here")}
+          </>
+        ) : marker.withFriends ? (
+          <>
+            <PeopleIcon size={14} /> {t("With friends")} · {visitTypeLabel(marker.visitType)}
+          </>
+        ) : (
+          visitTypeLabel(marker.visitType)
+        )}
+        {!marker.isCurrent && primaryVisit && primaryVisit.visitType !== "lived" ? (
+          <span className="atlas-memory-card__transport">
+            · <TransportIcon mode={transportOf(primaryVisit)} size={13} /> {transportLabel(transportOf(primaryVisit))}
+          </span>
+        ) : null}
+      </div>
+      {photos.length > 0 ? (
+        <div className={"atlas-memory-card__photos atlas-memory-card__photos--" + photos.length}>
+          {photos.map((m) => (
+            <img
+              key={m.id}
+              className="atlas-photo"
+              src={mediaSrc(m, 640)}
+              alt={m.caption ?? place.name}
+              draggable={false}
+            />
+          ))}
+        </div>
+      ) : null}
+      {primaryVisit?.reflection ? (
+        <p className="atlas-memory-card__quote">{primaryVisit.reflection}</p>
+      ) : null}
+      <button type="button" className="atlas-memory-card__open" onClick={onOpen}>
+        <span>{t("View memory")}</span>
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  );
+}
+
+/** rgba(…, a) → rgb(…): the vehicle glyphs use the route ink at full strength. */
+function opaque(color: string): string {
+  const m = /rgba?\(([^,]+),([^,]+),([^,)]+)/.exec(color);
+  return m ? `rgb(${m[1].trim()}, ${m[2].trim()}, ${m[3].trim()})` : color;
+}
+
+type RouteLayer = {
+  id: string;
+  type: "line";
+  source: "routes";
+  filter: unknown[];
+  layout: Record<string, unknown>;
+  paint: Record<string, unknown>;
+};
+
+/** The route line layers, one style per transport (bottom to top). */
+function routeLayers(theme: AtlasTheme): RouteLayer[] {
+  const em = (on: number, off: number) => ["case", ["boolean", ["feature-state", "emphasized"], false], on, off];
+  const width = (a: number, b: number, c: number, boost: number) => [
+    "interpolate", ["linear"], ["zoom"],
+    3, em(a + boost, a),
+    7, em(b + boost, b),
+    11, em(c + boost, c),
+  ];
+  const mode = (m: Transport) => ["==", ["get", "mode"], m];
+  const road = ["in", ["get", "mode"], ["literal", ["bus", "car"]]];
+  const line = theme.routes.line;
+  return [
+    {
+      // Bus / drive: a soft road band…
+      id: "routes-road",
+      type: "line",
+      source: "routes",
+      filter: road,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": line, "line-width": width(3.2, 4.2, 5.8, 1.2), "line-opacity": em(0.62, 0.36) },
+    },
+    {
+      // …with a dashed centre line.
+      id: "routes-road-centre",
+      type: "line",
+      source: "routes",
+      filter: road,
+      layout: { "line-cap": "butt", "line-join": "round" },
+      paint: {
+        "line-color": theme.markers.labelHalo,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.7, 7, 0.9, 11, 1.2],
+        "line-dasharray": [2.6, 2.4],
+        "line-opacity": 0.95,
+      },
+    },
+    {
+      // Train: sleepers across the line (tiny dashes on a wide line)…
+      id: "routes-rail-ties",
+      type: "line",
+      source: "routes",
+      filter: mode("train"),
+      layout: { "line-cap": "butt", "line-join": "round" },
+      paint: {
+        "line-color": line,
+        "line-width": width(5.4, 6.6, 8.4, 1.2),
+        "line-dasharray": [0.26, 1.35],
+        "line-opacity": em(1, 0.9),
+      },
+    },
+    {
+      // …and the rail itself.
+      id: "routes-rail",
+      type: "line",
+      source: "routes",
+      filter: mode("train"),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": line, "line-width": width(1.2, 1.6, 2.2, 1.1), "line-opacity": em(1, 0.9) },
+    },
+    {
+      // Flight: a fine dashed arc, like an airline route map.
+      id: "routes-flight",
+      type: "line",
+      source: "routes",
+      filter: mode("plane"),
+      layout: { "line-cap": "butt", "line-join": "round" },
+      paint: {
+        "line-color": line,
+        "line-width": width(1.3, 1.7, 2.3, 1.1),
+        "line-dasharray": theme.routes.dash ?? [2.2, 1.8],
+        "line-opacity": em(0.95, 0.75),
+      },
+    },
+  ];
+}
+
+/** A vehicle glyph in the route ink with a halo, 15 px (plane) or 13 px, at
+ * pixelRatio 2. */
+function vehicleImage(mode: Transport, ink: string, halo: string): ImageData {
+  const size = 36;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext("2d");
+  if (!g) return new ImageData(size, size);
+  const glyph = new Path2D(TRANSPORT_GLYPH[mode]);
+  const px = mode === "plane" ? 30 : 26; // device px (15 / 13 css px)
+  g.translate((size - px) / 2, (size - px) / 2);
+  g.scale(px / 24, px / 24);
+  g.lineJoin = "round";
+  g.strokeStyle = halo;
+  g.lineWidth = 3.4;
+  g.stroke(glyph);
+  g.fillStyle = ink;
+  g.fill(glyph, "evenodd");
+  return g.getImageData(0, 0, size, size);
+}
+
+/** A seamless tile of fine diagonal hatching (16 px at pixelRatio 2). */
+function hatchImage(color: string): ImageData {
+  const s = 16;
+  const canvas = document.createElement("canvas");
+  canvas.width = s;
+  canvas.height = s;
+  const g = canvas.getContext("2d");
+  if (!g) return new ImageData(s, s);
+  g.strokeStyle = color;
+  g.lineWidth = 1.7;
+  g.beginPath();
+  for (const o of [-s, 0, s]) {
+    g.moveTo(o, s);
+    g.lineTo(o + s, 0);
+  }
+  g.stroke();
+  return g.getImageData(0, 0, s, s);
+}
+
+function makeMarkerElement(m: MapMarker): { el: HTMLDivElement; label: HTMLSpanElement | null } {
   const el = document.createElement("div");
   el.className =
     "atlas-marker atlas-marker--" + m.visitType + (m.isCurrent ? " atlas-marker--current" : "");
   el.setAttribute("role", "button");
-  // aria-label and tabindex are (re)applied by the caller after addTo(),
-  // because MapLibre overwrites the label and drops focusability there.
   if (m.isCurrent) {
-    const ring = document.createElement("span");
-    ring.className = "atlas-marker__ring";
-    el.appendChild(ring);
+    for (const cls of ["atlas-marker__pulse", "atlas-marker__ring"]) {
+      const s = document.createElement("span");
+      s.className = cls;
+      el.appendChild(s);
+    }
+  }
+  // A residence (lived Visit) that is not the current base gets a calm static
+  // ring so the map reads as clusters radiating from home bases (v1.3).
+  if (m.visitType === "lived" && !m.isCurrent) {
+    const home = document.createElement("span");
+    home.className = "atlas-marker__home";
+    el.appendChild(home);
+  }
+  // A small country flag planted on the place: a hairline pole rising from
+  // the pin with the flag at its top.
+  if (markerHasFlag(m)) {
+    const flag = document.createElement("span");
+    flag.className = "atlas-marker__flag";
+    flag.setAttribute("aria-hidden", "true");
+    const img = document.createElement("img");
+    img.src = "/flags/" + m.place.countryCode.toUpperCase() + ".svg";
+    img.alt = "";
+    img.draggable = false;
+    img.addEventListener("error", () => flag.remove());
+    flag.appendChild(img);
+    el.appendChild(flag);
   }
   const dot = document.createElement("span");
   dot.className = "atlas-marker__dot";
   el.appendChild(dot);
-  // The current location is the one marker whose label is visible by default
-  // (VISUAL_SPEC §4: "Current location: … label visible by default"); every
-  // other place only reveals its name through the hover/focus preview.
+
+  const label = document.createElement("span");
+  label.className = "atlas-marker__label";
+  label.setAttribute("aria-hidden", "true"); // the button's aria-label announces it
+  const name = document.createElement("span");
+  name.className = "atlas-marker__label-name";
+  name.textContent = m.place.name;
+  label.appendChild(name);
   if (m.isCurrent) {
-    const label = document.createElement("span");
-    label.className = "atlas-marker__label";
-    label.setAttribute("aria-hidden", "true"); // the button's own aria-label already announces this
-    const name = document.createElement("span");
-    name.className = "atlas-marker__label-name";
-    name.textContent = m.place.name;
     const country = document.createElement("span");
     country.className = "atlas-marker__label-country";
     country.textContent = m.place.country;
-    label.append(name, country);
-    el.appendChild(label);
+    label.appendChild(country);
   }
-  // A residence (lived Visit) that is not the current base gets a calm static
-  // ring so the map reads as clusters radiating from home bases (v1.3) —
-  // restrained, theme-aware, and never animated like the current marker.
-  if (m.visitType === "lived" && !m.isCurrent) {
-    const home = document.createElement("span");
-    home.className = "atlas-marker__home";
-    home.setAttribute("aria-hidden", "true");
-    el.appendChild(home);
-  }
-  return el;
+  el.appendChild(label);
+  return { el, label };
+}
+
+const STAR_SVG =
+  '<svg viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><path fill="currentColor" d="M12 2.6l2.85 5.95 6.55.8-4.83 4.5 1.25 6.5L12 17.15 6.18 20.35l1.25-6.5L2.6 9.35l6.55-.8z"/></svg>';
+
+/** A place on the wishlist: a star in a soft ring of the wish colour, its name
+ * beside it (placed by the label layout), when-to-go on hover. */
+function makeWishElement(w: WishMarker): { el: HTMLDivElement; label: HTMLSpanElement } {
+  const el = document.createElement("div");
+  el.className = "atlas-wishpin";
+  el.setAttribute("role", "button");
+  const dot = document.createElement("span");
+  dot.className = "atlas-wishpin__dot";
+  dot.innerHTML = STAR_SVG;
+  const label = document.createElement("span");
+  label.className = "atlas-wishpin__label";
+  label.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.textContent = w.place.name;
+  const meta = document.createElement("span");
+  meta.className = "atlas-wishpin__meta";
+  meta.textContent = w.label;
+  label.append(name, meta);
+  el.append(dot, label);
+  return { el, label };
 }

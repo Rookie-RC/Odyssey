@@ -34,13 +34,18 @@
 // Geometry: each segment becomes a restrained geographic arc — a great-circle
 // interpolation with a gentle perpendicular bulge (small for short hops, so
 // dense clusters stay calm; capped for long ones, so arcs stay elegant).
-import type { Place, Visit } from "./types";
+// Flights lift into a clearer flight-path curve; train, bus and car stay close
+// to the straight line (Visit.transport, lib/transport.ts).
+import type { Place, Transport, Visit } from "./types";
 import { dateTimeFromString, visitDateTime } from "./timeline";
+import { transportOf } from "./transport";
 
 export interface RouteSegment {
   id: string;
   from: Place;
   to: Place;
+  /** How the trip was travelled; styles the line (default plane). */
+  mode: Transport;
   /** Fractional-year bounds on the shared temporal axis: fromTime is when the
    * residence period began, toTime is when the trip happened. */
   fromTime: number;
@@ -55,11 +60,29 @@ export interface RouteTrajectory {
     type: "FeatureCollection";
     features: {
       type: "Feature";
-      properties: { segment: string };
+      properties: { segment: string; mode: Transport };
       geometry: { type: "LineString"; coordinates: [number, number][] };
     }[];
   };
+  /** The vehicle badge of each segment: its midpoint, and the heading there
+   * (degrees clockwise from north, on the map) for the plane to turn with. */
+  icons: {
+    type: "FeatureCollection";
+    features: {
+      type: "Feature";
+      properties: { segment: string; mode: Transport; bearing: number; minZoom: number };
+      geometry: { type: "Point"; coordinates: [number, number] };
+    }[];
+  };
 }
+
+/** A vehicle badge appears once its segment spans this many pixels on screen,
+ * so short hops never pile a vehicle onto the pins at either end. */
+const BADGE_MIN_PX = 72;
+
+/** How much each mode's line arcs: flights lift into a clear flight-path
+ * curve, ground travel stays close to the straight line. */
+const BEND: Record<Transport, number> = { plane: 1.8, train: 0.45, bus: 0.6, car: 0.6 };
 
 export interface ResidencePeriod {
   id: string;
@@ -144,6 +167,7 @@ export function getRouteTrajectory(
       id: home.place.id + "->" + place.id + "#" + v.id,
       from: home.place,
       to: place,
+      mode: transportOf(v),
       fromTime: home.startTime,
       toTime: t,
     });
@@ -152,23 +176,52 @@ export function getRouteTrajectory(
   // depend on order; this keeps diffs and tests deterministic.)
   segments.sort((a, b) => a.toTime - b.toTime || a.id.localeCompare(b.id));
 
+  const lines = segments.map((s) => ({ s, coords: arcBetween(s.from.coordinates, s.to.coordinates, BEND[s.mode]) }));
   return {
     segments,
     geojson: {
       type: "FeatureCollection",
-      features: segments.map((s) => ({
+      features: lines.map(({ s, coords }) => ({
         type: "Feature",
-        // Feature id enables MapLibre feature-state, which the map layer uses
-        // to subtly emphasize the focused residence → destination segment.
-        id: s.id,
-        properties: { segment: s.id },
-        geometry: {
-          type: "LineString",
-          coordinates: arcBetween(s.from.coordinates, s.to.coordinates),
-        },
+        // The `segment` property is promoted to the feature id on the map,
+        // where feature-state subtly emphasizes the focused segment.
+        properties: { segment: s.id, mode: s.mode },
+        geometry: { type: "LineString", coordinates: coords },
       })),
     },
+    icons: {
+      type: "FeatureCollection",
+      features: lines.map(({ s, coords }) => {
+        const mid = Math.floor(coords.length / 2);
+        const a = coords[Math.max(0, mid - 1)];
+        const b = coords[Math.min(coords.length - 1, mid + 1)];
+        // Screen length at zoom z ≈ span° / 360 × 512 × 2^z (512 px world).
+        const span = Math.max(1e-6, angularDistance(s.from.coordinates, s.to.coordinates));
+        const minZoom = Math.log2(BADGE_MIN_PX / ((span / 360) * 512));
+        return {
+          type: "Feature",
+          properties: { segment: s.id, mode: s.mode, bearing: mercatorBearing(a, b), minZoom: Math.round(minZoom * 100) / 100 },
+          geometry: { type: "Point", coordinates: coords[mid] },
+        };
+      }),
+    },
   };
+}
+
+/** Great-circle distance between two places, in degrees of arc. */
+function angularDistance(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
+  const d = dot(toVec3(a), toVec3(b));
+  return (Math.acos(Math.max(-1, Math.min(1, d))) * 180) / Math.PI;
+}
+
+/** Heading from a to b as drawn on a Web Mercator map, in degrees clockwise
+ * from north (what MapLibre's icon-rotate expects with map alignment). */
+export function mercatorBearing(a: [number, number], b: [number, number]): number {
+  const y = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+  const dx = ((b[0] - a[0]) * Math.PI) / 180;
+  const dy = y(b[1]) - y(a[1]);
+  const deg = (Math.atan2(dx, dy) * 180) / Math.PI;
+  return Math.round(((deg % 360) + 360) % 360);
 }
 
 // --- geographic arc geometry ------------------------------------------------
@@ -235,10 +288,12 @@ function slerp(a: Vec3, b: Vec3, t: number, angle: number): Vec3 {
   };
 }
 
-/** A restrained geographic arc between two Places (line string, lng/lat). */
+/** A restrained geographic arc between two Places (line string, lng/lat);
+ * `bend` scales how far it lifts off the great circle. */
 export function arcBetween(
   from: { lng: number; lat: number },
-  to: { lng: number; lat: number }
+  to: { lng: number; lat: number },
+  bend = 1
 ): [number, number][] {
   const a = toVec3(from);
   const b = toVec3(to);
@@ -262,7 +317,7 @@ export function arcBetween(
   // capped for long segments (arcs stay elegant). ~0.4° for a 300 km hop,
   // ~1.2° for a 900 km hop, capped around 1.7°.
   const bulge =
-    axis == null ? 0 : Math.min(Math.max(angle * 0.16, 0.004), 0.03);
+    axis == null ? 0 : Math.min(Math.max(angle * 0.16, 0.004), 0.03) * bend;
   const pts: [number, number][] = [];
   for (let i = 0; i <= ARC_STEPS; i++) {
     const t = i / ARC_STEPS;

@@ -1,10 +1,37 @@
-// Loads the theme's CARTO base style and adapts it toward the Yu's Atlas
-// Light/Night atmosphere defined in VISUAL_SPEC: warm parchment vs deep-navy
-// cinematic. The base tiles (sources, glyphs, sprites) are untouched; only
-// paint/layout values of known layers are overridden, so the adaptation is
-// resilient to CARTO style-sheet updates (missing layers are skipped).
+// Loads a CARTO base style and adapts it to the active theme's map palette
+// (themes/*.ts → theme.map). Positron (light) and Dark Matter (dark) share the
+// same layer ids, so a single palette-driven adapter serves every theme. The
+// base tiles (sources, glyphs, sprites) are untouched; only paint/layout of
+// known layers is overridden, so the adaptation stays resilient to CARTO
+// style-sheet updates (missing layers are skipped).
+//
+// On top of the base style the adapter adds, per theme:
+//   - shaded relief (AWS Terrain Tiles, terrarium encoding) beneath the water,
+//     so mountains give the hero map its cartographic texture while the sea
+//     stays calm;
+//   - "city lights" (Night): a soft glow on populated places taken from the
+//     base tiles' own place layer — no extra data;
+//   - sea/ocean names at the Europe-wide hero zoom (italic, quiet), the way an
+//     atlas page names its waters.
 import type { StyleSpecification } from "maplibre-gl";
-import type { ThemeId } from "../themes";
+import type { AtlasTheme, MapPalette } from "../themes";
+import { getLocale, type Locale } from "./i18n";
+
+const BASE_STYLE_URL: Record<AtlasTheme["map"]["base"], string> = {
+  light: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+  dark: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+};
+
+const TERRAIN_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+
+/** Layer ids our own content is inserted before (see HeroMap):
+ *  - country fill sits under the basemap water, so the coarse Natural Earth
+ *    polygons are trimmed by the precise OSM coastline;
+ *  - routes sit above roads/borders but below every label. */
+export const LAYER_BEFORE = {
+  countries: "waterway",
+  routes: "watername_ocean",
+};
 
 type LayerLike = {
   id: string;
@@ -15,84 +42,39 @@ type LayerLike = {
   layout?: Record<string, unknown>;
   paint?: Record<string, unknown>;
   minzoom?: number;
+  maxzoom?: number;
 };
 
 type StyleLike = {
+  sources?: Record<string, unknown>;
   layers?: LayerLike[];
 };
 
-// --- shared boundary treatment ---
-// The CARTO basemap renders international boundaries from its own `carto`
-// vector source (source-layer `boundary`, features with `admin_level`,
-// `maritime` and `disputed` properties). The original style's country border
-// is both nearly invisible against our parchment land (light theme) and
-// dashed at higher zooms — which reads as missing segments. We keep the
-// basemap's vector geometry and restyle it:
-//   - ordinary international borders: a continuous, solid line with enough
-//     contrast to read at Europe/world zoom;
-//   - disputed borders: a subtle dashed line, drawn by a thin overlay layer
-//     from the same source using the source's own `disputed` property;
-//   - state/county boundaries stay much weaker; maritime boundaries stay
-//     unrendered (sea, not land).
-function styleCountryBoundaries(style: StyleLike, lineColor: string): void {
-  const inner = style.layers?.find((l) => l.id === "boundary_country_inner");
-  // outline: the original 8px glow layer is kept transparent — the inner line
-  // is the boundary, and a halo would just muddy the editorial look.
-  paint(style, "boundary_country_outline", "line-color", "transparent");
-  if (!inner) return;
+const cache = new Map<string, Promise<StyleSpecification>>();
+const baseCache = new Map<string, Promise<StyleSpecification>>();
 
-  paint(style, "boundary_country_inner", "line-color", lineColor);
-  // Solid line (no dash gaps) for ordinary borders; the CARTO style dashes
-  // borders from zoom 7 on, which reads as missing segments.
-  paint(style, "boundary_country_inner", "line-dasharray", [1]);
-  // Ordinary layer excludes disputed segments so the dashed overlay below
-  // (same geometry) is the only thing drawing them.
-  inner.filter = [
-    "all",
-    ["==", "admin_level", 2],
-    ["==", "maritime", 0],
-    ["!=", "disputed", 1],
-  ];
-
-  // Disputed overlay: same vector source, dashed, slightly thinner.
-  const idx = style.layers?.findIndex((l) => l.id === inner.id) ?? -1;
-  if (idx >= 0) {
-    style.layers?.splice(idx + 1, 0, {
-      id: "boundary_country_disputed",
-      type: "line",
-      source: inner.source,
-      "source-layer": inner["source-layer"],
-      filter: [
-        "all",
-        ["==", "admin_level", 2],
-        ["==", "maritime", 0],
-        ["==", "disputed", 1],
-      ],
-      paint: {
-        "line-color": lineColor,
-        "line-width": 1.1,
-        "line-dasharray": [2, 2],
-        "line-offset": 0,
-      },
+function fetchBase(url: string): Promise<StyleSpecification> {
+  let p = baseCache.get(url);
+  if (!p) {
+    p = fetch(url).then((res) => {
+      if (!res.ok) throw new Error("failed to load map style: " + res.status);
+      return res.json() as Promise<StyleSpecification>;
     });
+    baseCache.set(url, p);
+    p.catch(() => baseCache.delete(url));
   }
+  return p;
 }
 
-const cache = new Map<string, Promise<StyleSpecification>>();
+export function baseStyleUrl(theme: AtlasTheme): string {
+  return BASE_STYLE_URL[theme.map.base];
+}
 
-export function loadThemeStyle(
-  themeId: ThemeId,
-  styleUrl: string
-): Promise<StyleSpecification> {
-  const key = themeId + "|" + styleUrl;
+export function loadThemeStyle(theme: AtlasTheme, locale: Locale = getLocale()): Promise<StyleSpecification> {
+  const key = theme.id + "|" + locale;
   let p = cache.get(key);
   if (!p) {
-    p = (async () => {
-      const res = await fetch(styleUrl);
-      if (!res.ok) throw new Error("failed to load map style: " + res.status);
-      const style = (await res.json()) as StyleSpecification;
-      return adaptBaseStyle(style, themeId);
-    })();
+    p = fetchBase(baseStyleUrl(theme)).then((style) => adaptBaseStyle(style, theme, locale));
     cache.set(key, p);
     p.catch(() => cache.delete(key));
   }
@@ -101,125 +83,196 @@ export function loadThemeStyle(
 
 // --- small mutation helpers ---
 
+function find(style: StyleLike, id: string): LayerLike | undefined {
+  return style.layers?.find((l) => l.id === id);
+}
+
 function paint(style: StyleLike, id: string, key: string, value: unknown): void {
-  const layer = style.layers?.find((l) => l.id === id);
+  const layer = find(style, id);
   if (!layer) return;
   layer.paint = layer.paint ?? {};
   layer.paint[key] = value;
 }
 
+function layout(style: StyleLike, id: string, key: string, value: unknown): void {
+  const layer = find(style, id);
+  if (!layer) return;
+  layer.layout = layer.layout ?? {};
+  layer.layout[key] = value;
+}
+
 // hideUntil defers a label/feature layer to a higher zoom so the hero view
 // stays quiet and editorial while zooming in still reveals detail.
 function hideUntil(style: StyleLike, id: string, minzoom: number): void {
-  const layer = style.layers?.find((l) => l.id === id);
-  if (!layer) return;
-  layer.minzoom = minzoom;
+  const layer = find(style, id);
+  if (layer) layer.minzoom = minzoom;
 }
 
-function setLabel(style: StyleLike, id: string, color: string, halo: string, haloWidth = 1): void {
+function setLabel(style: StyleLike, id: string, color: string, halo: string, haloWidth = 1.1): void {
   paint(style, id, "text-color", color);
   paint(style, id, "text-halo-color", halo);
   paint(style, id, "text-halo-width", haloWidth);
+  paint(style, id, "text-halo-blur", 0.4);
 }
 
 function setRoadFamily(style: StyleLike, prefix: string, fill: string, caseColor: string): void {
   for (const l of style.layers ?? []) {
-    if (!l.id.startsWith(prefix)) continue;
-    if (l.type !== "line") continue;
+    if (!l.id.startsWith(prefix) || l.type !== "line") continue;
     if (l.id.includes("fill")) paint(style, l.id, "line-color", fill);
     else if (l.id.includes("case")) paint(style, l.id, "line-color", caseColor);
   }
 }
 
-// --- theme adaptations ---
+function insertBefore(style: StyleLike, beforeId: string, layer: LayerLike): void {
+  const layers = style.layers ?? [];
+  const idx = layers.findIndex((l) => l.id === beforeId);
+  if (idx >= 0) layers.splice(idx, 0, layer);
+  else layers.push(layer);
+  style.layers = layers;
+}
 
-export function adaptBaseStyle(style: StyleSpecification, themeId: ThemeId): StyleSpecification {
-  const s = JSON.parse(JSON.stringify(style)) as StyleSpecification;
-  if (themeId === "night") adaptNight(s);
-  else adaptLight(s);
+// --- shared boundary treatment ---
+// International borders: a continuous solid line (the CARTO style dashes them
+// from zoom 7, which reads as missing segments); disputed borders: a subtle
+// dashed overlay drawn from the same source using its `disputed` property.
+function styleCountryBoundaries(style: StyleLike, color: string, width: number): void {
+  const inner = find(style, "boundary_country_inner");
+  paint(style, "boundary_country_outline", "line-color", "transparent");
+  if (!inner) return;
+  paint(style, "boundary_country_inner", "line-color", color);
+  paint(style, "boundary_country_inner", "line-dasharray", [1]);
+  paint(style, "boundary_country_inner", "line-width", [
+    "interpolate", ["linear"], ["zoom"], 3, width, 6, width * 1.4, 10, width * 2,
+  ]);
+  inner.filter = ["all", ["==", "admin_level", 2], ["==", "maritime", 0], ["!=", "disputed", 1]];
+  const idx = style.layers?.findIndex((l) => l.id === inner.id) ?? -1;
+  if (idx >= 0) {
+    style.layers?.splice(idx + 1, 0, {
+      id: "boundary_country_disputed",
+      type: "line",
+      source: inner.source,
+      "source-layer": inner["source-layer"],
+      filter: ["all", ["==", "admin_level", 2], ["==", "maritime", 0], ["==", "disputed", 1]],
+      paint: { "line-color": color, "line-width": width, "line-dasharray": [2, 2] },
+    });
+  }
+}
+
+// --- theme adaptation ---
+
+export function adaptBaseStyle(
+  style: StyleSpecification,
+  theme: AtlasTheme,
+  locale: Locale = "en"
+): StyleSpecification {
+  const s = JSON.parse(JSON.stringify(style)) as StyleSpecification & StyleLike;
+  applyPalette(s, theme.map.palette);
+  if (locale === "zh") useChineseNames(s);
+  addRelief(s, theme);
+  addCityLights(s, theme);
   return s;
 }
 
-// Deep-navy, cinematic/cartographic night: water and land move off pure black
-// into a navy family; labels soften to blue-gray; minor labels defer to zoom.
-function adaptNight(style: StyleLike): void {
-  const WATER = "#081422";
-  const LAND = "#0E1B2C";
-  const HALO = "#081220";
-
-  // Unify land/water toward a single deep-navy void so the map reads as a
-  // night sky with lights, not a flat political GIS map.
-  paint(style, "background", "background-color", "#0A1322");
-  for (const id of ["landcover", "park_national_park", "park_nature_reserve", "landuse"]) {
-    paint(style, id, "fill-color", LAND);
+// The CARTO tiles carry OSM's `name:zh`; in the Chinese interface, countries,
+// seas and cities are named in Chinese where a name exists (falling back to the
+// English, then the local name). MapLibre draws CJK ideographs with local
+// system fonts (localIdeographFontFamily), so no extra glyphs are downloaded.
+function useChineseNames(style: StyleLike): void {
+  // Prefer the Simplified-Chinese name: OSM's plain name:zh sometimes holds
+  // both scripts ("亞得里亞海 / 亚得里亚海").
+  const field = ["coalesce", ["get", "name:zh-Hans"], ["get", "name:zh"], ["get", "name_en"], ["get", "name"]];
+  for (const l of style.layers ?? []) {
+    if (l.type !== "symbol") continue;
+    if (!/^(place_|watername_|waterway_label)/.test(l.id)) continue;
+    layout(style, l.id, "text-field", field);
   }
-  paint(style, "landuse_residential", "fill-color", "rgba(8, 15, 26, 0.5)");
-  paint(style, "water", "fill-color", WATER);
-  paint(style, "waterway", "line-color", "rgba(30, 50, 76, 1)");
-  paint(style, "building", "fill-color", "rgba(18, 28, 44, 0.85)");
-  paint(style, "building-top", "fill-color", "rgba(20, 32, 50, 1)");
+}
 
-  // Boundaries: barely-there so the map stays a void, not a political map —
-  // except country borders, which stay legible (solid, clear blue-gray) so
-  // international borders never read as missing. State/county stay faint.
-  styleCountryBoundaries(style, "rgba(124, 151, 182, 0.62)");
-  paint(style, "boundary_state", "line-color", "rgba(64, 82, 104, 0.22)");
-  paint(style, "boundary_county", "line-color", "rgba(58, 74, 94, 0.14)");
+function applyPalette(style: StyleLike, p: MapPalette): void {
+  paint(style, "background", "background-color", p.background);
+  paint(style, "landcover", "fill-color", p.land);
+  paint(style, "landcover", "fill-opacity", 1);
+  for (const id of ["park_national_park", "park_nature_reserve"]) {
+    paint(style, id, "fill-color", p.park);
+  }
+  paint(style, "landuse", "fill-color", p.park);
+  paint(style, "landuse_residential", "fill-color", p.residential);
+  paint(style, "water", "fill-color", p.water);
+  paint(style, "water_shadow", "fill-color", p.water);
+  paint(style, "water_shadow", "fill-opacity", 0);
+  paint(style, "waterway", "line-color", p.waterway);
+  paint(style, "building", "fill-color", p.building);
+  paint(style, "building-top", "fill-color", p.building);
+  paint(style, "aeroway-runway", "line-color", p.roadCase);
+  paint(style, "aeroway-taxiway", "line-color", p.roadCase);
 
-  // Roads read as faint navy-gray veins.
-  setRoadFamily(style, "road", "#1A2C44", "#0E1B2E");
-  setRoadFamily(style, "bridge", "#1A2C44", "#0E1B2E");
-  setRoadFamily(style, "tunnel", "#1A2C44", "#0E1B2E");
+  styleCountryBoundaries(style, p.border, p.borderWidth);
+  paint(style, "boundary_state", "line-color", p.borderState);
+  paint(style, "boundary_county", "line-color", p.borderCounty);
 
-  // Water labels: quiet blue-gray.
-  setLabel(style, "waterway_label", "#5F7E9E", HALO);
-  setLabel(style, "watername_ocean", "#5E7C9E", HALO);
-  setLabel(style, "watername_sea", "#4E6C8C", HALO);
-  setLabel(style, "watername_lake", "#64839F", HALO);
-  setLabel(style, "watername_lake_line", "#64839F", HALO);
+  for (const prefix of ["road", "bridge", "tunnel"]) setRoadFamily(style, prefix, p.road, p.roadCase);
+  paint(style, "rail", "line-color", p.roadCase);
+  paint(style, "rail_dash", "line-color", p.road);
+  paint(style, "tunnel_rail", "line-color", p.roadCase);
+  paint(style, "tunnel_rail_dash", "line-color", p.road);
 
-  // Place labels: soft blue-gray, halos keyed to the navy water so text stays
-  // legible but never hot.
-  setLabel(style, "place_country_2", "#647C99", HALO);
-  setLabel(style, "place_country_1", "#6F87A3", HALO);
-  setLabel(style, "place_state", "#5A7591", HALO);
-  setLabel(style, "place_continent", "#728AA4", HALO);
-  setLabel(style, "place_city_r6", "#93A6BE", HALO);
-  setLabel(style, "place_city_r5", "#A3B6CC", HALO);
+  // Waters: an atlas names its seas. CARTO only shows sea names from zoom 5,
+  // above the Europe-wide hero framing, so they are brought forward and set
+  // in a spaced italic.
+  for (const id of ["waterway_label", "watername_ocean", "watername_sea", "watername_lake", "watername_lake_line"]) {
+    setLabel(style, id, p.labelWater, p.labelHalo, 0.8);
+  }
+  hideUntil(style, "watername_sea", 3.4);
+  const ocean = find(style, "watername_ocean");
+  if (ocean) ocean.maxzoom = 6;
+  for (const id of ["watername_ocean", "watername_sea"]) {
+    // OSM sea names concatenate every language ("North Sea / Nordsee / …");
+    // the English name keeps the atlas page readable.
+    layout(style, id, "text-field", ["coalesce", ["get", "name_en"], ["get", "name:latin"], ["get", "name"]]);
+    layout(style, id, "text-max-width", 8);
+    layout(style, id, "text-letter-spacing", 0.12);
+    layout(style, id, "text-size", ["interpolate", ["linear"], ["zoom"], 3, 11, 6, 13]);
+  }
+
+  setLabel(style, "place_country_2", p.labelCountry, p.labelHalo);
+  setLabel(style, "place_country_1", p.labelCountry, p.labelHalo);
+  setLabel(style, "place_continent", p.labelCountry, p.labelHalo);
+  setLabel(style, "place_state", p.labelMinor, p.labelHalo);
+  setLabel(style, "place_city_r6", p.labelCity, p.labelHalo);
+  setLabel(style, "place_city_r5", p.labelCity, p.labelHalo);
   for (const id of [
     "place_city_dot_r7", "place_city_dot_r4", "place_city_dot_r2", "place_city_dot_z7",
     "place_capital_dot_z7",
   ]) {
-    setLabel(style, id, "#97AAC2", HALO);
+    setLabel(style, id, p.labelCity, p.labelHalo);
   }
-  setLabel(style, "place_town", "#74879E", HALO);
-  setLabel(style, "place_villages", "#687B92", HALO);
-  setLabel(style, "place_suburbs", "#687B92", HALO);
-  setLabel(style, "place_hamlet", "#5F7289", HALO);
+  setLabel(style, "place_town", p.labelTown, p.labelHalo);
+  for (const id of ["place_villages", "place_suburbs", "place_hamlet"]) {
+    setLabel(style, id, p.labelMinor, p.labelHalo);
+  }
+  for (const id of ["roadname_minor", "roadname_sec", "roadname_pri", "roadname_major", "housenumber"]) {
+    setLabel(style, id, p.labelRoad, p.labelHalo);
+  }
+  setLabel(style, "poi_stadium", p.labelMinor, p.labelHalo);
+  setLabel(style, "poi_park", p.labelMinor, p.labelHalo);
 
-  // Road name labels: dim, deferred to higher zooms.
-  setLabel(style, "roadname_minor", "#6A7C91", HALO);
-  setLabel(style, "roadname_sec", "#7A8DA2", HALO);
-  setLabel(style, "roadname_pri", "#8A9CB2", HALO);
-  setLabel(style, "roadname_major", "#8A9CB2", HALO);
-  setLabel(style, "poi_stadium", "#5E7E6A", HALO);
-  setLabel(style, "poi_park", "#5E7E6A", HALO);
+  // Country names are uppercase and widely spaced, like an atlas plate.
+  for (const id of ["place_country_1", "place_country_2"]) {
+    layout(style, id, "text-letter-spacing", 0.18);
+    layout(style, id, "text-transform", "uppercase");
+    if (p.hideCountryLabels) layout(style, id, "visibility", "none");
+  }
 
   // Density: keep minor settlements, POIs, secondary states and small-country
-  // labels out of the hero viewport; they appear only once the user zooms in.
+  // labels out of the hero viewport; they appear only once the user zooms in
+  // (VISUAL_SPEC §3/§4: "avoid dense European text clutter"). Our own place
+  // markers carry the places the user actually cares about at that zoom.
   hideUntil(style, "place_hamlet", 10);
   hideUntil(style, "place_suburbs", 10);
   hideUntil(style, "place_villages", 10);
   hideUntil(style, "place_town", 8);
   hideUntil(style, "place_state", 6.5);
   hideUntil(style, "place_country_2", 5.5);
-  // Large-country names (GERMANY, POLAND, UKRAINE…) and major-city dots
-  // (Berlin, Vienna, Madrid, Kyiv…) default to minzoom 2/4/5, so they cover
-  // the Europe-wide hero framing in dense text (VISUAL_SPEC §3/§4: "avoid
-  // dense European text clutter", other labels "selective… reveal with hover
-  // / zoom"). Deferred to the same zoom as state/country_2 so the hero view
-  // stays quiet; our own place markers (not the basemap) carry the visited
-  // places the user actually cares about at that zoom.
   hideUntil(style, "place_country_1", 5.5);
   hideUntil(style, "place_city_dot_r2", 6.5);
   hideUntil(style, "place_city_dot_r4", 6.5);
@@ -230,74 +283,73 @@ function adaptNight(style: StyleLike): void {
   hideUntil(style, "roadname_pri", 10);
 }
 
-// Warm, quiet, editorial light: parchment land, pale blue water, labels with
-// enough contrast to read but few enough to stay calm.
-function adaptLight(style: StyleLike): void {
-  const HALO = "#F7F4EC";
+// Shaded relief from open elevation tiles (Mapzen/AWS Terrain Tiles, no key).
+// Inserted beneath the waterways/water so only land carries relief.
+function addRelief(style: StyleLike, theme: AtlasTheme): void {
+  const h = theme.map.hillshade;
+  if (!h) return;
+  style.sources = style.sources ?? {};
+  style.sources.terrain = {
+    type: "raster-dem",
+    tiles: [TERRAIN_TILES],
+    encoding: "terrarium",
+    tileSize: 256,
+    maxzoom: 11,
+    attribution: "Terrain: Mapzen, AWS Terrain Tiles",
+  };
+  insertBefore(style, "waterway", {
+    id: "atlas-relief",
+    type: "hillshade",
+    source: "terrain",
+    paint: {
+      "hillshade-shadow-color": h.shadow,
+      "hillshade-highlight-color": h.highlight,
+      "hillshade-accent-color": h.accent,
+      "hillshade-exaggeration": h.exaggeration,
+      "hillshade-illumination-direction": 315,
+    },
+  });
+}
 
-  paint(style, "background", "background-color", "#F6F3EA");
-  for (const id of ["landcover", "park_national_park", "park_nature_reserve", "landuse"]) {
-    paint(style, id, "fill-color", "#EDE9DC");
-  }
-  paint(style, "landuse_residential", "fill-color", "rgba(224, 221, 211, 0.55)");
-  paint(style, "water", "fill-color", "#DBE7EF");
-  paint(style, "waterway", "line-color", "#BFD2DC");
-  paint(style, "building", "fill-color", "#EAE6DB");
-  paint(style, "building-top", "fill-color", "#EDE9DF");
-
-  // Boundaries: country borders get a clearly visible warm-taupe line (solid,
-  // disputed dashed) so international borders are continuous and legible on
-  // the parchment land; state/county stay faint.
-  styleCountryBoundaries(style, "#C7B89F");
-  paint(style, "boundary_state", "line-color", "#E1D7C4");
-  paint(style, "boundary_county", "line-color", "#E8DECE");
-
-  setRoadFamily(style, "road", "#FFFFFF", "#E2DED2");
-  setRoadFamily(style, "bridge", "#FFFFFF", "#E2DED2");
-  setRoadFamily(style, "tunnel", "#EDE9DF", "#E2DED2");
-
-  setLabel(style, "waterway_label", "#8FA6B2", HALO);
-  setLabel(style, "watername_ocean", "#9FB0BC", HALO);
-  setLabel(style, "watername_sea", "#9FB0BC", HALO);
-  setLabel(style, "watername_lake", "#8CA3B0", HALO);
-  setLabel(style, "watername_lake_line", "#8CA3B0", HALO);
-
-  setLabel(style, "place_country_2", "#8A97A3", HALO);
-  setLabel(style, "place_country_1", "#73828F", HALO);
-  setLabel(style, "place_state", "#97A4AE", HALO);
-  setLabel(style, "place_continent", "#8B99A6", HALO);
-  setLabel(style, "place_city_r6", "#5F6C79", HALO);
-  setLabel(style, "place_city_r5", "#5F6C79", HALO);
-  for (const id of [
-    "place_city_dot_r7", "place_city_dot_r4", "place_city_dot_r2", "place_city_dot_z7",
-    "place_capital_dot_z7",
-  ]) {
-    setLabel(style, id, "#5F6C79", HALO);
-  }
-  setLabel(style, "place_town", "#6B7885", HALO);
-  setLabel(style, "place_villages", "#8A97A3", HALO);
-  setLabel(style, "place_suburbs", "#8A97A3", HALO);
-  setLabel(style, "place_hamlet", "#8A97A3", HALO);
-
-  setLabel(style, "roadname_minor", "#8F999E", HALO);
-  setLabel(style, "roadname_sec", "#8F999E", HALO);
-  setLabel(style, "roadname_pri", "#8F999E", HALO);
-  setLabel(style, "roadname_major", "#8F999E", HALO);
-  setLabel(style, "poi_stadium", "#8BA08C", HALO);
-  setLabel(style, "poi_park", "#8BA08C", HALO);
-
-  hideUntil(style, "place_hamlet", 10);
-  hideUntil(style, "place_suburbs", 10);
-  hideUntil(style, "place_villages", 10);
-  hideUntil(style, "place_town", 8);
-  hideUntil(style, "place_state", 6.5);
-  hideUntil(style, "place_country_2", 5.5);
-  hideUntil(style, "place_country_1", 5.5);
-  hideUntil(style, "place_city_dot_r2", 6.5);
-  hideUntil(style, "place_city_dot_r4", 6.5);
-  hideUntil(style, "poi_stadium", 13);
-  hideUntil(style, "poi_park", 13);
-  hideUntil(style, "roadname_minor", 12);
-  hideUntil(style, "roadname_sec", 11);
-  hideUntil(style, "roadname_pri", 10);
+// Night "city lights": two circle layers (soft glow + tiny core) on the base
+// tiles' populated places, sized by importance and growing gently with zoom.
+function addCityLights(style: StyleLike, theme: AtlasTheme): void {
+  const cl = theme.map.cityLights;
+  if (!cl) return;
+  const source = "carto";
+  const filter = ["in", ["get", "class"], ["literal", ["city", "town", "village"]]];
+  // Lower rank = more important. Missing rank reads as a small place.
+  const weight = [
+    "interpolate", ["linear"], ["coalesce", ["get", "rank"], 12],
+    1, 1, 6, 0.65, 12, 0.35,
+  ];
+  insertBefore(style, LAYER_BEFORE.routes, {
+    id: "atlas-city-glow",
+    type: "circle",
+    source,
+    "source-layer": "place",
+    filter,
+    paint: {
+      "circle-color": cl.color,
+      "circle-radius": [
+        "interpolate", ["linear"], ["zoom"],
+        3, ["*", 7, weight], 6, ["*", 13, weight], 10, ["*", 20, weight],
+      ],
+      "circle-blur": 1,
+      "circle-opacity": ["*", cl.opacity * 0.8, weight],
+    },
+  });
+  insertBefore(style, LAYER_BEFORE.routes, {
+    id: "atlas-city-core",
+    type: "circle",
+    source,
+    "source-layer": "place",
+    filter,
+    paint: {
+      "circle-color": cl.core,
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, ["*", 1.2, weight], 8, ["*", 2.2, weight]],
+      "circle-blur": 0.4,
+      "circle-opacity": ["*", cl.opacity, weight],
+    },
+  });
 }
