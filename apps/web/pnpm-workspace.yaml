@@ -1,0 +1,4 @@
+# pnpm build-script policy. esbuild (a Vitest dependency) ships its platform
+# binary as an optional dependency, so its postinstall script is not needed.
+allowBuilds:
+  esbuild: false
