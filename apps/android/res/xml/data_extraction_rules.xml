@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: records to the cloud backup, everything on a direct
+     phone-to-phone transfer. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="atlas-data/data/" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="atlas-data/" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's cloud backup is capped at 25 MB per app, so only the Atlas's
+     records go there (places, visits, wishes, profile, settings) — not
+     photos or .atlas backups. Use Manage Atlas → Export for a full copy. -->
+<full-backup-content>
+    <include domain="file" path="atlas-data/data/" />
+</full-backup-content>
