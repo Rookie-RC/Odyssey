@@ -6,6 +6,7 @@
 import type maplibregl from "maplibre-gl";
 import type { AtlasTheme } from "../themes";
 import { markerHasFlag, type MapMarker, type WishMarker } from "./map-data";
+import { androidBridge, androidSave } from "./native";
 
 export interface PosterInput {
   map: maplibregl.Map;
@@ -226,6 +227,13 @@ export async function renderPoster(input: PosterInput): Promise<Blob> {
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {
+  // In the Android app a blob: link cannot be saved; the bridge writes the
+  // file to Downloads and tells the person where.
+  const android = androidBridge();
+  if (android) {
+    androidSave(android, blob, filename).catch((e) => console.error("save failed", e));
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

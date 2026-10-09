@@ -190,6 +190,7 @@ export const ZH: Record<string, string> = {
   "Whole journey": "整个旅程",
   "Image copied": "图片已复制",
   "Could not copy the image": "无法复制图片",
+  "Could not share the image": "无法分享图片",
   "Ticket for {place}": "{place}的票根",
   Share: "分享",
   "Share as a ticket": "生成票根分享",

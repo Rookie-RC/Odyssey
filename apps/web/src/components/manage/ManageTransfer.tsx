@@ -9,6 +9,7 @@ import type { BackupInfo } from "../../lib/api";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, Card, EmptyState } from "./FormUI";
 import { getLocale, t } from "../../lib/i18n";
+import { downloadBlob } from "../../lib/poster";
 
 function formatBytes(n: number): string {
   if (n < 1024) return n + " B";
@@ -22,16 +23,6 @@ function formatWhen(iso: string): string {
   return d.toLocaleString(getLocale() === "zh" ? "zh-CN" : undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
-}
 
 export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
   const { repo, notify, reload } = ctx;
@@ -89,7 +80,7 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
         .toISOString()
         .replace(/[-:T]/g, "")
         .slice(0, 14);
-      downloadBlob(blob, "yu-atlas-" + stamp + ".atlas");
+      downloadBlob(blob, "odyssey-" + stamp + ".atlas");
       setMsg("ok", t("Export complete — the .atlas file was downloaded."));
     } catch (e) {
       setMsg("error", e instanceof Error ? e.message : String(e));

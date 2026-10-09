@@ -18,6 +18,7 @@ import {
 } from "../lib/share";
 import { renderTicket, type CountryShapes } from "../lib/ticket";
 import { downloadBlob } from "../lib/poster";
+import { androidBridge, androidShare } from "../lib/native";
 import { formatMonthYear, visitTypeLabel } from "../lib/timeline";
 import { t, tn, useLocale } from "../lib/i18n";
 import { Btn, Select } from "./manage/FormUI";
@@ -59,6 +60,7 @@ function canCopyImages(): boolean {
 }
 
 function canShareFiles(): boolean {
+  if (androidBridge()) return true; // the Android app's system share sheet
   try {
     const probe = new File([new Blob()], "ticket.png", { type: "image/png" });
     return typeof navigator.canShare === "function" && navigator.canShare({ files: [probe] });
@@ -186,6 +188,11 @@ export default function ShareDialog({
   };
   const share = async () => {
     if (!blob) return;
+    const android = androidBridge();
+    if (android) {
+      androidShare(android, blob, fileName, wordmark).catch(() => onNotice(t("Could not share the image")));
+      return;
+    }
     try {
       await navigator.share({ files: [new File([blob], fileName, { type: "image/png" })], title: wordmark });
     } catch {

@@ -541,6 +541,56 @@ export default function AtlasApp() {
     showToast,
   ]);
 
+  // Android back button (apps/android calls window.odysseyBack): close the
+  // topmost layer, leave Manage Atlas, then return to the top of the page.
+  // False lets the app go to the background. Layers that own the keyboard
+  // (lightbox, share, inline editors) close through their own Escape; an open
+  // Manage form is never thrown away by a stray back press.
+  useEffect(() => {
+    const w = window as unknown as { odysseyBack?: () => boolean };
+    w.odysseyBack = () => {
+      if (paletteOpen) {
+        setPaletteOpen(false);
+        return true;
+      }
+      if (shortcutsOpen) {
+        setShortcutsOpen(false);
+        return true;
+      }
+      if (share) {
+        setShare(null);
+        return true;
+      }
+      if (document.querySelector("[data-owns-keyboard]")) {
+        (document.activeElement ?? document.body).dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+        );
+        return true;
+      }
+      if (overlay) {
+        closeOverlay();
+        return true;
+      }
+      if (view === "manage") {
+        if (document.querySelector(".atlas-manage .atlas-entity-form")) {
+          showToast(t("You have unsaved changes — save or cancel them first."));
+        } else {
+          setView("atlas");
+          setManageAdd(null);
+        }
+        return true;
+      }
+      if (window.scrollY > 0) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      delete w.odysseyBack;
+    };
+  }, [paletteOpen, shortcutsOpen, share, overlay, closeOverlay, view, showToast]);
+
   // Lock page scroll while an overlay or Manage Atlas is open.
   useEffect(() => {
     const locked = overlay != null || closingOverlay || view === "manage";
