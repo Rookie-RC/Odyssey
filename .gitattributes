@@ -1,0 +1,4 @@
+# Keep LF in the repository and in every checkout. Git for Windows defaults
+# to core.autocrlf=true, which would check the build scripts out with CRLF
+# and break them in bash.
+* text=auto eol=lf
