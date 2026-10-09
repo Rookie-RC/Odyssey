@@ -1,0 +1,46 @@
+# systemd unit for the Atlas cloud service (docs/DEPLOY.md).
+#
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin atlas
+#   sudo install -m 0755 bin/atlas /opt/atlas/atlas
+#   sudo cp deploy/atlas.service /etc/systemd/system/atlas.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now atlas
+#   journalctl -u atlas -f
+#
+# Replace https://atlas.example.com with the site's real origin.
+
+[Unit]
+Description=Atlas cloud service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=atlas
+Group=atlas
+# Creates /var/lib/atlas owned by the atlas user: every account's data lives here.
+StateDirectory=atlas
+StateDirectoryMode=0700
+ExecStart=/opt/atlas/atlas -mode cloud -data /var/lib/atlas \
+  -host 127.0.0.1 -port 4317 \
+  -public-origin https://atlas.example.com \
+  -trust-proxy -user-quota-mb 500
+# Optional: a fixed session key instead of the generated /var/lib/atlas/secret.key
+# (a file with ATLAS_SESSION_SECRET=<at least 32 random characters>, mode 0600).
+# EnvironmentFile=/etc/atlas/atlas.env
+Restart=on-failure
+RestartSec=3
+
+# Hardening: the service can only write its own state directory (and a private /tmp).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

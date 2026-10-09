@@ -151,6 +151,32 @@ The runtime:
 http://127.0.0.1:4317
 ```
 
+## Run as a website (cloud mode)
+
+The same binary can serve many people, each with a private Atlas behind an
+account (email + password):
+
+```bash
+./bin/atlas -mode cloud -data /var/lib/atlas \
+  -public-origin https://atlas.example.com -trust-proxy
+```
+
+`-data` is the root for every account (`users.json`, `secret.key`,
+`users/<id>/` — each a complete atlas-data directory). It never opens a
+browser or starts LAN sharing; put it behind a TLS reverse proxy. Flags:
+`-public-origin` (comma-separated origins the site is served from),
+`-allow-signup` (default true), `-user-quota-mb` (default 500),
+`-trust-proxy` (client IP/scheme from a proxy on the same machine). The
+session key comes from `ATLAS_SESSION_SECRET` or is generated into
+`<data>/secret.key`.
+
+For frontend development against cloud mode, run the runtime with
+`-mode cloud -data /tmp/atlas-cloud -public-origin http://localhost:3000`
+and `pnpm dev` as usual.
+
+Deployment guide (VPS, systemd, Caddy, backups, pre-launch checklist):
+[docs/DEPLOY.md](docs/DEPLOY.md) (中文). Example configs in `deploy/`.
+
 ## Data directory
 
 Atlas keeps the application binary and user data strictly separate

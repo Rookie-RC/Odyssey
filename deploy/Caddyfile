@@ -1,0 +1,23 @@
+# Caddy in front of the Atlas cloud service (docs/DEPLOY.md).
+# Caddy obtains and renews the HTTPS certificate automatically; point the
+# domain's DNS A/AAAA record at this server first. Replace atlas.example.com.
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl reload caddy
+
+atlas.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# Atlas imports (.atlas packages) can be up to 512 MB.
+	request_body {
+		max_size 520MB
+	}
+
+	# Caddy sets X-Forwarded-For / X-Forwarded-Proto itself (and drops
+	# client-supplied values), which the runtime reads with -trust-proxy.
+	reverse_proxy 127.0.0.1:4317
+}
