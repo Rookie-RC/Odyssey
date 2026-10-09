@@ -33,6 +33,15 @@ as one portable `.atlas` file.
 - **Manage Atlas** — add/edit places, visits, wishes and media with online place
   search; export/import, automatic backups with one-click restore, New Atlas;
   read-only **sharing on your local network** with a QR code.
+- **Activities** — tag what a trip was for (skiing, citywalk, picnic, northern
+  lights … 16 in all); the first one becomes the place's pin on the map, and a
+  night in passing shows a moon.
+- **Study abroad** — when you arrived, your trips home and the final return:
+  "Day N" abroad, days actually spent abroad, the countries and places of each
+  stay, and milestones plus a band on the Journey Timeline.
+- **Website or app** — run it locally, or as a multi-user website
+  (`-mode cloud`, [docs/DEPLOY.md](docs/DEPLOY.md)); installable on a phone's
+  home screen (PWA). Where it is heading: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 中文简介
 
@@ -45,6 +54,9 @@ Yu's Atlas 是一个本地优先的个人旅行地图集：打开即是一张全
 - **⌘K 搜索与命令**、键盘快捷键（按 `?` 查看）、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
 - **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」、个人主页（整个旅程或点国旗）和 ⌘K；可下载、复制或调用系统分享。图片在本机生成，不会上传。
 - **管理地图集**：在线搜索地点添加到访与心愿、上传照片、导入导出、自动备份与一键恢复、**局域网只读共享**（附二维码）。
+- **玩法图标**：每次到访可以标记滑雪、冲浪、Citywalk、看展、野餐、追极光等 16 种玩法，第一个玩法就是这个地点在地图上的图标；只是路过住一晚的地点显示月亮。
+- **留学时光**：记录每段留学的抵达日期、中间的回国假期和最终回国时间，自动算出「留学第 N 天」、实际在外天数、期间去过的国家和城市；时间线上标出抵达、回国和结束留学。
+- **网站与手机**：既能本地运行，也能以 `-mode cloud` 部署成多用户网站（见 [docs/DEPLOY.md](docs/DEPLOY.md)）；手机上可「添加到主屏幕」像 App 一样使用。产品路线见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 开发：`cd apps/runtime && go run ./cmd/atlas -data ../../examples/atlas-data` 与 `cd apps/web && pnpm dev`；构建：`./scripts/build.sh`；测试：`pnpm test` 与 `go test ./...`。
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## Phase 9 — a website for students abroad
+
+The Atlas becomes something classmates can use: a website as well as a
+local program, comfortable on a phone, and shaped around studying abroad.
+Direction and next steps: `docs/ROADMAP.md`.
+
+### Website
+- Cloud mode (`-mode cloud`): email accounts, one private Atlas per user,
+  argon2id passwords, signed session cookies, per-user storage quota, rate
+  limits, Host/Origin checks; sign-in screen and account settings (sign out
+  everywhere, change password, delete account). Local mode is unchanged.
+  Deployment guide: `docs/DEPLOY.md`, `deploy/`.
+- Installable web app (PWA): manifest, icons, iOS web-app tags.
+- Manage Atlas on phones: section tabs on top, full-width rows.
+
+### Study abroad
+- Activities on visits (16, with their own line icons); the primary one is
+  the place's pin on the map; a bare stopover shows a moon.
+- Study-abroad periods on the Profile: arrival, trips home, final return;
+  "Day N", days abroad, countries and places per stay; Timeline milestones
+  and a band for the time abroad.
+
+### Fixes
+- Saving the profile no longer drops fields the form does not edit.
+- `ATLAS_RUNTIME` moves the dev proxy without making the browser call the
+  runtime cross-origin (cloud sign-in looped with `NEXT_PUBLIC_API_BASE`).
+
 ## Phase 8 — design & experience
 
 The Claude Design redesign (`docs/Yu's Atlas page redesign.zip`) carried
