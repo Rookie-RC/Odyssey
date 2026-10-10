@@ -1272,7 +1272,7 @@ body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
   border-color: #fff;
 }
 
-/* --- Small dialogs (shortcuts) --- */
+/* --- Small dialogs (search, share) --- */
 .atlas-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -1306,45 +1306,6 @@ body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
 .atlas-dialog__head h2 {
   margin: 0;
   font-size: 26px;
-}
-
-.atlas-shortcuts__groups {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 32px;
-  padding: 10px 26px 26px;
-}
-
-.atlas-shortcuts__groups section:last-child {
-  grid-column: 1 / -1;
-}
-
-.atlas-shortcuts__title {
-  margin: 14px 0 8px;
-  font-size: 10.5px;
-  color: var(--text-secondary);
-}
-
-.atlas-shortcuts__groups ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.atlas-shortcuts__groups li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 13.5px;
-  color: var(--text-primary);
-}
-
-.atlas-shortcuts__keys {
-  display: inline-flex;
-  gap: 4px;
 }
 
 /* --- Responsive: bottom sheets on small screens --- */
@@ -1394,9 +1355,6 @@ body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
   }
   .atlas-detail__body {
     padding: 20px 20px 36px;
-  }
-  .atlas-shortcuts__groups {
-    grid-template-columns: 1fr;
   }
   .atlas-lightbox__nav {
     display: none;

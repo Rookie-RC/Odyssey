@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { AtlasTheme, ThemePreference } from "../themes";
 import type { Profile } from "../lib/types";
 import ThemePicker from "./ThemePicker";
@@ -43,10 +42,6 @@ export default function Topbar({
   onOpenSearch,
   onExpandMap,
 }: TopbarProps) {
-  // Decided after mount: the static export is rendered without a browser, and
-  // a different first client render would discard the server HTML.
-  const [isMac, setIsMac] = useState(false);
-  useEffect(() => setIsMac(/Mac|iPhone|iPad/.test(navigator.platform)), []);
   return (
     <header className="atlas-topbar">
       <button type="button" className="atlas-topbar__brand" onClick={onExpandMap} aria-label={t("{wordmark} — back to the map", { wordmark })}>
@@ -65,16 +60,14 @@ export default function Topbar({
           className="atlas-chip-btn atlas-glass atlas-topbar__search"
           onClick={onOpenSearch}
           aria-label={t("Search places and memories")}
-          title={t("Search (/)")}
         >
           <SearchIcon size={16} />
           <span className="atlas-topbar__search-label">{t("Search")}</span>
-          <span className="atlas-kbd atlas-topbar__search-kbd">{isMac ? "⌘K" : "Ctrl K"}</span>
         </button>
 
         <ThemePicker preference={themePreference} active={theme} onChange={onThemeChange} glass />
 
-        <button type="button" className="atlas-profile-pill atlas-glass" onClick={onOpenProfile} title={t("Profile (P)")}>
+        <button type="button" className="atlas-profile-pill atlas-glass" onClick={onOpenProfile}>
           {profile?.avatar ? (
             <img className="atlas-profile-pill__avatar atlas-photo" src={profile.avatar} alt="" draggable={false} />
           ) : (

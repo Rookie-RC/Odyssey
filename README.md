@@ -24,13 +24,13 @@ development, and as a multi-user website (`-mode cloud`).
   gallery with a full-screen lightbox, prev/next through the journey.
 - **Five themes + Auto** — Light, Night, Journal, Minimal and Film change colour,
   type, texture, map style, markers and photo treatment (never your data).
-- **English / 简体中文** interface, ⌘K search & commands, keyboard shortcuts.
+- **English / 简体中文** interface; search across places, memories and wishes.
 - **Save map as image** — a poster of the map as it looks right now (pins,
-  labels, routes, theme) with a caption band, from the map layers menu or ⌘K.
+  labels, routes, theme) with a caption band, from the map layers menu.
 - **Share as a ticket** — a ticket-stub image in your theme: one trip as a
   boarding pass (train / bus / drive tickets follow its transport), a country
   as a multi-city pass with its outline, or the whole journey as an atlas pass.
-  From *Share* on a place, the profile (journey, or a country's flag) or ⌘K;
+  From *Share* on a place or the profile (journey, or a country's flag);
   download, copy or send through the system share sheet. Drawn locally.
 - **Manage Atlas** — add/edit places, visits, wishes and media with online place
   search; export/import, automatic backups with one-click restore, New Atlas;
@@ -56,9 +56,9 @@ Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一�
 - **五套主题 + 自动**：浅色、夜间（城市灯火）、手账（米色纸与墨迹）、极简（生成色与朱印）、胶片（颗粒与日期印记）。主题会改变配色、字体、纹理、地图风格与照片处理，但不改变数据。
 - **地图**：去过的地点插一面小国旗，去过的国家实心着色、想去的国家斜线标出；每次旅行可选交通方式（飞机为默认、火车、大巴、自驾），路线分别画成虚线航线、铁轨、公路，中点显示对应的交通工具。
 - **液态玻璃（Liquid Glass）**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的玻璃，在 Chrome / Edge 和安卓 App 中还会折射下方的地图；内容本身仍是纸面。
-- **中英文界面**：在个人主页、设置或 ⌘K 中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
-- **⌘K 搜索与命令**、键盘快捷键（按 `?` 查看）、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
-- **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」、个人主页（整个旅程或点国旗）和 ⌘K；可下载、复制或调用系统分享。图片在本机生成，不会上传。
+- **中英文界面**：在个人主页或设置中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
+- **搜索**地点、回忆与心愿、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
+- **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」和个人主页（整个旅程或点国旗）；可下载、复制或调用系统分享。图片在本机生成，不会上传。
 - **管理地图集**：在线搜索地点添加到访与心愿、上传照片、导入导出、自动备份与一键恢复、**局域网只读共享**（附二维码）。
 - **玩法图标**：每次到访可以标记滑雪、冲浪、Citywalk、看展、野餐、追极光等 16 种玩法，第一个玩法就是这个地点在地图上的图标；只是路过住一晚的地点显示月亮。
 - **留学时光**：记录每段留学的抵达日期、中间的回国假期和最终回国时间，自动算出「留学第 N 天」、实际在外天数、期间去过的国家和城市；时间线上标出抵达、回国和结束留学。
@@ -492,27 +492,21 @@ Garamond, JetBrains Mono), radii, shadows, paper/grain textures, photo filter,
 map palette, relief, city lights, glass, markers, routes and two season palettes (line
 colours and legible season ink). `applyTheme()` writes them as CSS variables
 and snapshots them so the next load paints the right theme before React
-hydrates. Switch with the palette button, **T**, ⌘K, Profile or Settings.
+hydrates. Switch with the palette button, Profile or Settings.
 
 ### Language
 
-English or 简体中文 (or Auto, following the system) from Profile, Settings or
-⌘K. Interface strings, dates (`2025年11月10日–15日`), seasons and visit types
+English or 简体中文 (or Auto, following the system) from Profile or
+Settings. Interface strings, dates (`2025年11月10日–15日`), seasons and visit types
 are localized; your own words — place names, reflections, notes — are always
 shown as written. Strings are keyed by their English text (`lib/i18n.ts`);
 translations live in `lib/i18n-zh.ts` and `lib/i18n-zh-manage.ts`.
 
 ### Keyboard
 
-| Keys | Action |
-|---|---|
-| ⌘K / Ctrl K, `/` | search places, memories, wishes and commands (Shift+Enter: show on map) |
-| `M` `J` `W` | jump to map / journey / where next |
-| `I` · `P` | all ideas · profile |
-| `T` · `R` | next theme · routes on/off |
-| ← → | move through time (timeline focused) / previous–next place (detail open) |
-| Ctrl + wheel | zoom the map |
-| `?` · Esc | shortcuts · close |
+There are no global shortcuts: the app is made for touch first. On a
+computer, Esc closes what is open, ← → move through time (timeline focused)
+or to the previous / next place (detail open), and Ctrl + wheel zooms the map.
 
 ## Sharing on your local network
 

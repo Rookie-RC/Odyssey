@@ -25,11 +25,10 @@ import PlaceDetailSheet from "./PlaceDetailSheet";
 import ProfileDrawer from "./ProfileDrawer";
 import IdeasBoard from "./IdeasBoard";
 import CommandPalette, { type PaletteCommand } from "./CommandPalette";
-import ShortcutsDialog from "./ShortcutsDialog";
 import ShareDialog, { type ShareRequest } from "./ShareDialog";
 import Topbar from "./Topbar";
 import ManageAtlas from "./manage/ManageAtlas";
-import { HeartIcon, KeyboardIcon, WifiIcon } from "./Icons";
+import { HeartIcon, WifiIcon } from "./Icons";
 import {
   THEME_ORDER,
   applyTheme,
@@ -55,13 +54,6 @@ const SEASONS: Season[] = ["spring", "summer", "autumn", "winter"];
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
-}
-
-function isTypingTarget(t: EventTarget | null): boolean {
-  const el = t as HTMLElement | null;
-  if (!el) return false;
-  const tag = el.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
 
 /** Runs `fn` once a smooth scroll back to the top has arrived (so the hero has
@@ -124,7 +116,6 @@ export default function AtlasApp() {
   const [overlay, setOverlay] = useState<ActiveOverlay>(null);
   const [closingOverlay, setClosingOverlay] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Share as a ticket (a trip, a country, the whole journey).
   const [share, setShare] = useState<ShareRequest | null>(null);
   const closeShare = useCallback(() => setShare(null), []);
@@ -344,14 +335,6 @@ export default function AtlasApp() {
     [saveSettings]
   );
 
-  const cycleTheme = useCallback(() => {
-    const order: ThemePreference[] = [...THEME_ORDER];
-    const cur = themePref === "auto" ? theme.id : themePref;
-    const next = order[(order.indexOf(cur) + 1) % order.length];
-    changeTheme(next);
-    showToast(t("Theme · {name}", { name: t(themes[next as keyof typeof themes].label) }));
-  }, [themePref, theme.id, changeTheme, showToast]);
-
   const changeLayers = useCallback(
     (next: MapLayers) => {
       setLayers(next);
@@ -464,82 +447,15 @@ export default function AtlasApp() {
 
   const clearSyncFocus = useCallback(() => setSyncFocus(null), []);
 
-  // --- keyboard: Escape, palette, shortcuts ---
+  // --- keyboard: Escape closes the open overlay ---
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "k") {
-        // The palette belongs to the Atlas view, and a lightbox, editor or
-        // dialog that owns the keyboard keeps it (their Escape and arrow
-        // handlers would otherwise act underneath the palette).
-        if (!paletteOpen && (view !== "atlas" || document.querySelector("[data-owns-keyboard]"))) return;
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-        return;
-      }
-      if (paletteOpen || shortcutsOpen || share) return; // those dialogs own the keyboard
-      if (e.key === "Escape") {
-        if (overlay) closeOverlay();
-        return;
-      }
-      if (view !== "atlas" || overlay || mod || e.altKey || isTypingTarget(e.target)) return;
-      switch (e.key) {
-        case "/":
-          e.preventDefault();
-          setPaletteOpen(true);
-          break;
-        case "?":
-          e.preventDefault();
-          setShortcutsOpen(true);
-          break;
-        case "t":
-        case "T":
-          cycleTheme();
-          break;
-        case "p":
-        case "P":
-          openProfile();
-          break;
-        case "m":
-        case "M":
-          scrollToSection("map");
-          break;
-        case "j":
-        case "J":
-          scrollToSection("journey");
-          break;
-        case "w":
-        case "W":
-          scrollToSection("wherenext");
-          break;
-        case "r":
-        case "R":
-          changeLayers({ ...layers, routes: !layers.routes });
-          showToast(layers.routes ? t("Routes hidden") : t("Routes shown"));
-          break;
-        case "i":
-        case "I":
-          openIdeas();
-          break;
-      }
+      if (paletteOpen || share) return; // those dialogs own the keyboard
+      if (e.key === "Escape" && overlay) closeOverlay();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [
-    overlay,
-    closeOverlay,
-    paletteOpen,
-    shortcutsOpen,
-    share,
-    view,
-    cycleTheme,
-    openProfile,
-    openIdeas,
-    scrollToSection,
-    changeLayers,
-    layers,
-    showToast,
-  ]);
+  }, [overlay, closeOverlay, paletteOpen, share]);
 
   // Android back button (apps/android calls window.odysseyBack): close the
   // topmost layer, leave Manage Atlas, then return to the top of the page.
@@ -551,10 +467,6 @@ export default function AtlasApp() {
     w.odysseyBack = () => {
       if (paletteOpen) {
         setPaletteOpen(false);
-        return true;
-      }
-      if (shortcutsOpen) {
-        setShortcutsOpen(false);
         return true;
       }
       if (share) {
@@ -589,7 +501,7 @@ export default function AtlasApp() {
     return () => {
       delete w.odysseyBack;
     };
-  }, [paletteOpen, shortcutsOpen, share, overlay, closeOverlay, view, showToast]);
+  }, [paletteOpen, share, overlay, closeOverlay, view, showToast]);
 
   // Lock page scroll while an overlay or Manage Atlas is open.
   useEffect(() => {
@@ -638,7 +550,7 @@ export default function AtlasApp() {
 
   const placeOverlayExists = overlay?.type !== "place" || places.some((p) => p.id === overlay.id);
   // A deleted or unknown ?place= would otherwise hold an invisible overlay
-  // (page scroll locked, shortcuts off) with nothing on screen.
+  // (page scroll locked) with nothing on screen.
   useEffect(() => {
     if (loaded && !placeOverlayExists) {
       cancelPendingClose();
@@ -656,11 +568,11 @@ export default function AtlasApp() {
   const commands = useMemo<PaletteCommand[]>(() => {
     const go = t("Go to");
     const list: PaletteCommand[] = [
-      { id: "go-map", group: go, label: t("The map"), hint: "M", run: () => scrollToSection("map") },
-      { id: "go-journey", group: go, label: t("My journey"), hint: "J", run: () => scrollToSection("journey") },
-      { id: "go-wherenext", group: go, label: t("Where next"), hint: "W", run: () => scrollToSection("wherenext") },
-      { id: "ideas", group: go, label: t("All ideas"), hint: "I", run: () => openIdeas() },
-      { id: "profile", group: go, label: t("Profile"), hint: "P", run: openProfile },
+      { id: "go-map", group: go, label: t("The map"), run: () => scrollToSection("map") },
+      { id: "go-journey", group: go, label: t("My journey"), run: () => scrollToSection("journey") },
+      { id: "go-wherenext", group: go, label: t("Where next"), run: () => scrollToSection("wherenext") },
+      { id: "ideas", group: go, label: t("All ideas"), run: () => openIdeas() },
+      { id: "profile", group: go, label: t("Profile"), run: openProfile },
     ];
     if (writable) {
       list.push({ id: "manage", group: go, label: t("Manage Atlas"), run: () => openManage() });
@@ -694,7 +606,6 @@ export default function AtlasApp() {
         id: "layer-routes",
         group: t("Map"),
         label: layers.routes ? t("Hide routes") : t("Show routes"),
-        hint: "R",
         run: () => changeLayers({ ...layers, routes: !layers.routes }),
       },
       {
@@ -719,8 +630,7 @@ export default function AtlasApp() {
           scrollToSection("map");
           whenAtTop(() => setExportNonce((n) => n + 1));
         },
-      },
-      { id: "shortcuts", group: t("Help"), label: t("Keyboard shortcuts"), hint: "?", run: () => setShortcutsOpen(true) }
+      }
     );
     if (runtime?.mode === "cloud" && runtime.user) {
       list.push({ id: "sign-out", group: t("Account"), label: t("Sign out"), detail: runtime.user.email, run: () => signOut() });
@@ -826,9 +736,6 @@ export default function AtlasApp() {
             {t("for memories")}
           </div>
           <div className="atlas-footer__meta">
-            <button type="button" onClick={() => setShortcutsOpen(true)}>
-              <KeyboardIcon size={14} /> {t("Shortcuts")}
-            </button>
             {remote ? (
               <span className="atlas-footer__remote">
                 <WifiIcon size={14} /> {t("Shared on your local network · view only")}
@@ -932,8 +839,6 @@ export default function AtlasApp() {
           }}
         />
       ) : null}
-
-      {shortcutsOpen ? <ShortcutsDialog onClose={() => setShortcutsOpen(false)} /> : null}
 
       {share ? (
         <ShareDialog

@@ -100,7 +100,6 @@ export default function ThemePicker({
         aria-label={t("Theme: {name}", {
           name: preference === "auto" ? t("Auto ({theme})", { theme: t(active.label) }) : t(active.label),
         })}
-        title={t("Theme (T)")}
         onClick={() => setOpen((o) => !o)}
       >
         <PaletteIcon size={17} />
@@ -111,9 +110,6 @@ export default function ThemePicker({
           role="dialog" aria-label={t("Choose a theme")}>
           <div className="atlas-theme-popover__head">
             <span className="atlas-eyebrow">{t("Theme")}</span>
-            <span className="atlas-theme-popover__hint">
-              <span className="atlas-kbd">T</span> {t("cycles")}
-            </span>
           </div>
           {grid}
         </div>

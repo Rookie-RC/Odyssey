@@ -249,13 +249,6 @@ export const ExternalIcon = (p: IconProps) => (
   </Svg>
 );
 
-export const KeyboardIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <rect x="2.2" y="5" width="15.6" height="10" rx="2" />
-    <path d="M5.5 8.2h.01M8.5 8.2h.01M11.5 8.2h.01M14.5 8.2h.01M6.5 11.8h7" />
-  </Svg>
-);
-
 export const SettingsIcon = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="10" cy="10" r="2.6" />

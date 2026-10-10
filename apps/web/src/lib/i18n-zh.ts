@@ -50,9 +50,7 @@ export const ZH: Record<string, string> = {
   "Warm grain and date stamps": "温暖颗粒与日期印记",
   "Follows your system: Light or Night": "跟随系统：浅色或夜间",
   "Choose a theme": "选择主题",
-  cycles: "切换",
   "Theme: {name}": "主题：{name}",
-  "Theme (T)": "主题 (T)",
   "Themes change colour, type, texture, map style and photo treatment — never your data.":
     "主题会改变配色、字体、纹理、地图风格与照片处理——但绝不改变你的数据。",
 
@@ -60,23 +58,17 @@ export const ZH: Record<string, string> = {
   Language: "语言",
   "Interface language": "界面语言",
   "Follows your system": "跟随系统",
-  "Language · {name}": "语言 · {name}",
 
   // --- top bar / chrome ---
   "Expand map": "展开地图",
   Search: "搜索",
-  "Search (/)": "搜索 (/)",
   "Search places and memories": "搜索地点与回忆",
   Profile: "个人主页",
-  "Profile (P)": "个人主页 (P)",
   "{wordmark} — back to the map": "{wordmark}——回到地图",
   "Built with": "用",
   "for memories": "为回忆而建",
-  Shortcuts: "快捷键",
   "Shared on your local network · view only": "通过局域网共享 · 仅可查看",
   "Theme · {name}": "主题 · {name}",
-  "Routes hidden": "路线已隐藏",
-  "Routes shown": "路线已显示",
 
   // --- hero map ---
   "Scroll to explore my journey": "向下滚动，探索我的旅程",
@@ -341,7 +333,6 @@ export const ZH: Record<string, string> = {
   Place: "地点",
   "Wishlist · {when}": "心愿 · {when}",
   "Go to": "前往",
-  Help: "帮助",
   "The map": "地图",
   "Auto (system)": "自动（跟随系统）",
   "Follows Light / Night": "跟随浅色 / 夜间",
@@ -351,24 +342,8 @@ export const ZH: Record<string, string> = {
   "Hide wishlist pins": "隐藏心愿标记",
   "Show visited countries": "显示去过的国家",
   "Hide visited countries": "隐藏去过的国家",
-  "Keyboard shortcuts": "键盘快捷键",
   "Save map as image": "保存地图为图片",
   "Saving image…": "正在生成图片…",
   "Image saved": "图片已保存",
   "Could not create the image: {error}": "无法生成图片：{error}",
-
-  // --- shortcuts ---
-  Anywhere: "任何地方",
-  Atlas: "地图集",
-  "Timeline & places": "时间线与地点",
-  "Search places, memories and commands": "搜索地点、回忆与命令",
-  "This list": "本列表",
-  "Close what is open": "关闭当前打开的内容",
-  "Back to the map": "回到地图",
-  "Next theme": "下一个主题",
-  "Routes on / off": "开关路线",
-  "Move through time (timeline focused)": "在时间中移动（时间线获得焦点时）",
-  "Back to now (timeline focused)": "回到现在（时间线获得焦点时）",
-  "Previous / next place (detail open)": "上一个 / 下一个地点（详情打开时）",
-  "Zoom the map": "缩放地图",
 };
