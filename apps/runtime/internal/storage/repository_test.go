@@ -66,7 +66,7 @@ func TestCollectionsRoundTrip(t *testing.T) {
 	media := []domain.Media{{ID: "m1", Type: "image", Source: domain.MediaSourceLocal, Path: "/media/bordeaux/bourse.jpg", Caption: "Bourse"}}
 	profile := domain.Profile{Name: "Yu", Bio: "travels slowly", Interests: []string{"islands"}}
 	on := true
-	settings := domain.Settings{Theme: "journal", LANSharing: true, ShowWishlist: &on, HideCountries: true}
+	settings := domain.Settings{Theme: "journal", ShowRoutes: true, ShowWishlist: &on, HideCountries: true}
 
 	must := func(err error) {
 		t.Helper()

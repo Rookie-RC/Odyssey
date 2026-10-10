@@ -317,29 +317,6 @@ html[data-theme="film"] .atlas-date {
   color: #e0524a;
 }
 
-.atlas-footer__meta {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-}
-
-.atlas-footer__meta button {
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  color: inherit;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.atlas-footer__meta button:hover {
-  color: var(--text-secondary);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -27,7 +27,7 @@ import SearchPanel from "./SearchPanel";
 import ShareDialog, { type ShareRequest } from "./ShareDialog";
 import Topbar from "./Topbar";
 import ManageAtlas from "./manage/ManageAtlas";
-import { HeartIcon, WifiIcon } from "./Icons";
+import { HeartIcon } from "./Icons";
 import {
   applyTheme,
   parseThemePreference,
@@ -140,7 +140,7 @@ export default function AtlasApp() {
       return;
     }
     api.saveSettings(next).catch(() => {
-      // read-only / LAN viewers cannot persist; the choice still applies locally
+      // a read-only runtime cannot persist; the choice still applies locally
     });
   }, []);
 
@@ -561,7 +561,6 @@ export default function AtlasApp() {
 
   const overlayOpen = overlay != null || closingOverlay;
 
-  const remote = runtime?.remote === true;
   const posterSubtitle = useMemo(
     () => atlasFactsLine(atlasFacts(places, visits, wishlist), false),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -634,13 +633,6 @@ export default function AtlasApp() {
               <HeartIcon size={14} />
             </span>
             {t("for memories")}
-          </div>
-          <div className="atlas-footer__meta">
-            {remote ? (
-              <span className="atlas-footer__remote">
-                <WifiIcon size={14} /> {t("Shared on your local network · view only")}
-              </span>
-            ) : null}
           </div>
         </footer>
       </main>

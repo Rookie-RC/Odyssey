@@ -4,13 +4,14 @@ package api
 //
 // The runtime can be reached in three ways, and each gets a different answer:
 //
-//  1. From this computer, over the loopback listener (127.0.0.1:PORT). This is
-//     the owner: full read/write access (unless the whole runtime was started
+//  1. From this device, over the loopback listener (127.0.0.1:PORT): the phone
+//     app's WebView, or a browser on a development computer. This is the
+//     owner: full read/write access (unless the whole runtime was started
 //     with -readonly).
-//  2. From another device on the local network, over the optional LAN
-//     listeners (192.168.x.y:PORT, only while LAN sharing is on). This is a
-//     guest: it may look at the Atlas (frontend, /media, read-only API) and
-//     nothing else — "editing must only be available from localhost".
+//  2. From another device, which only happens when the runtime was bound to
+//     a non-loopback address with -host. This is a guest: it may look at the
+//     Atlas (frontend, /media, read-only API) and nothing else — editing
+//     stays on the owner's device.
 //  3. Indirectly, by a web page open in the owner's own browser that aims
 //     requests at the loopback port: cross-site request forgery (a form or a
 //     no-cors fetch POSTing to http://127.0.0.1:4317/api/...) or DNS
@@ -33,20 +34,20 @@ import (
 )
 
 // remoteReadOnlyMsg is the error every write (and every editing-only
-// endpoint) returns to a LAN client. The frontend can show it verbatim.
-const remoteReadOnlyMsg = "read-only: editing is only available on this computer"
+// endpoint) returns to a remote client. The frontend can show it verbatim.
+const remoteReadOnlyMsg = "read-only: editing is only available on the owner's device"
 
 // IsRemote reports whether r did NOT arrive over loopback, i.e. it came from
-// another device through a LAN listener (or any non-loopback bind).
+// another device through a non-loopback bind.
 //
 // Both ends of the connection are checked:
 //
 //   - the local address the connection was accepted on
 //     (http.LocalAddrContextKey, set by net/http for every real connection):
-//     a request accepted by a 192.168.x.y listener is remote even if its
-//     peer address looks local — e.g. this same computer opening the LAN URL
-//     is deliberately treated like any other LAN viewer, so "remote" always
-//     means "came in through the sharing listener";
+//     a request accepted on a 192.168.x.y address is remote even if its
+//     peer address looks local — e.g. this same device opening its own
+//     network address is treated like any other viewer, so "remote" always
+//     means "came in through a non-loopback address";
 //   - the peer address (r.RemoteAddr): a request is only local when the
 //     peer is loopback too.
 //
@@ -93,7 +94,7 @@ func isWriteMethod(method string) bool {
 	return true
 }
 
-// remoteAllowed is the whole LAN policy: a remote client may only GET/HEAD,
+// remoteAllowed is the whole remote policy: a remote client may only GET/HEAD,
 // and never the editing-only endpoints even with GET —
 //
 //   - /api/geocode/* proxies searches to an online provider on the owner's
@@ -128,17 +129,16 @@ func remoteAllowed(r *http.Request) bool {
 //   - "localhost" (any port): browsers resolve it to loopback themselves and
 //     never ask DNS, so an attacker cannot rebind it. Covers the Next.js dev
 //     proxy as well (it forwards either localhost:3000 or 127.0.0.1:4317).
-//   - any IP literal (any port): 127.0.0.1, [::1], and — for LAN sharing —
-//     the LAN address a guest typed or scanned, e.g. 192.168.1.23:4317. An
-//     IP literal cannot be rebound: if the Host is an IP, the page's origin
-//     *is* that IP, so the page was served by us (or by nobody). This is
-//     what lets legitimate LAN GETs through while still blocking names.
+//   - any IP literal (any port): 127.0.0.1, [::1], or the network address of
+//     a runtime bound with -host, e.g. 192.168.1.23:4317. An IP literal
+//     cannot be rebound: if the Host is an IP, the page's origin *is* that
+//     IP, so the page was served by us (or by nobody).
 //   - an empty Host (HTTP/1.0 clients such as scripts): browsers always send
 //     Host, so this can never be a browser-driven attack.
 //
-// Rejected: every other name. That includes this computer's own hostname or
-// mDNS name (my-pc.local) — the runtime advertises LAN URLs by IP, so that is
-// a deliberate, documented limitation rather than a hole worth opening.
+// Rejected: every other name. That includes the device's own hostname or
+// mDNS name (my-pc.local) — a deliberate, documented limitation rather than
+// a hole worth opening.
 func allowedHost(hostport string) bool {
 	if hostport == "" {
 		return true
@@ -178,9 +178,9 @@ func isLoopbackOrigin(origin string) bool {
 //
 //  1. Host check, for every request — a rebinding attacker must not even
 //     read the frontend or the user's photos.
-//  2. Remote (LAN) requests: GET/HEAD of viewer-safe paths only; everything
+//  2. Remote requests: GET/HEAD of viewer-safe paths only; everything
 //     else gets 403 {"error": remoteReadOnlyMsg}. No CORS headers are ever
-//     sent to remote clients: the LAN app is served same-origin by this
+//     sent to remote clients: the app is served same-origin by this
 //     runtime, so they never need any.
 //  3. Local requests:
 //     - CORS: reflect only a loopback Origin. This exists solely for the
@@ -194,7 +194,7 @@ func isLoopbackOrigin(origin string) bool {
 //     send Origin on cross-origin requests and on every non-GET/HEAD
 //     request, so the absence of Origin means a non-browser client
 //     (curl, scripts), which is fine. This also refuses writes relayed by
-//     the Next.js dev proxy from a page opened via a LAN address
+//     the Next.js dev proxy from a page opened via a network address
 //     (Origin http://192.168.x.y:3000), keeping editing local in dev too.
 func Protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

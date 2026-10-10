@@ -5,7 +5,6 @@
 // geocoding provider). No speculative options.
 import { useEffect, useState } from "react";
 import { api, type RuntimeInfo } from "../../lib/api";
-import QrCode from "./QrCode";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, Card, Field } from "./FormUI";
 import MiniMap from "./MiniMap";
@@ -101,13 +100,8 @@ export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
         </div>
       </Card>
 
-      {/* Cloud mode: the account instead of LAN sharing and the data
-          directory, which only exist for the runtime on this computer. */}
-      {cloud ? (
-        <AccountPanel runtime={runtime} notify={notify} />
-      ) : (
-        <LanSharingCard runtime={runtime} settings={settings} notify={notify} reload={reload} onError={setMessage} />
-      )}
+      {/* Cloud mode: the account. */}
+      {cloud ? <AccountPanel runtime={runtime} notify={notify} /> : null}
 
       <Card>
         <h3 className="atlas-manage-card__title">{t("Runtime")}</h3>
@@ -137,109 +131,5 @@ export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
         </Field>
       ) : null}
     </div>
-  );
-}
-
-// Read-only LAN sharing (PRODUCT_SPEC §4): other devices on the same network
-// can open the Atlas, but editing stays on this computer. The runtime binds the
-// extra listeners live; this card only flips the setting and shows the URLs.
-function LanSharingCard({
-  runtime,
-  settings,
-  notify,
-  reload,
-  onError,
-}: {
-  runtime: RuntimeInfo | null;
-  settings: ManageContext["settings"];
-  notify: (m: string) => void;
-  reload: () => void;
-  onError: (m: string) => void;
-}) {
-  const [rt, setRt] = useState<RuntimeInfo | null>(runtime);
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.getRuntime().then(setRt).catch(() => {});
-  }, []);
-
-  const enabled = rt?.lan?.enabled ?? false;
-  const urls = rt?.lan?.urls ?? [];
-
-  const toggle = async () => {
-    setBusy(true);
-    onError("");
-    try {
-      const latest = await api.getSettings().catch(() => settings ?? {});
-      await api.saveSettings({ ...latest, lanSharing: !enabled });
-      const next = await api.getRuntime();
-      setRt(next);
-      // Keep the Atlas' own settings copy current, so a later save (theme,
-      // map layers) never writes the old lanSharing value back.
-      reload();
-      notify(next.lan?.enabled ? t("Sharing on your local network (view only).") : t("Local network sharing is off."));
-    } catch (e) {
-      onError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const copy = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(url);
-      window.setTimeout(() => setCopied(null), 1600);
-    } catch {
-      // clipboard unavailable: the URL is visible and selectable anyway
-    }
-  };
-
-  return (
-    <Card>
-      <div className="atlas-lan__head">
-        <div>
-          <h3 className="atlas-manage-card__title">{t("Share on local network")}</h3>
-          <p className="atlas-form-hint">
-            {t(
-              "Let phones and other computers on the same Wi-Fi open this Atlas — view only. Editing stays on this computer."
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          className="atlas-lan__switch"
-          onClick={toggle}
-          disabled={busy || !rt}
-        >
-          <span className={"atlas-switch" + (enabled ? " atlas-switch--on" : "")} aria-hidden="true">
-            <span className="atlas-switch__knob" />
-          </span>
-          <span>{busy ? "…" : enabled ? t("On") : t("Off")}</span>
-        </button>
-      </div>
-      {rt?.lan?.error ? <p className="atlas-locpicker__error">{rt.lan.error}</p> : null}
-      {enabled && urls.length > 0 ? (
-        <div className="atlas-lan__urls">
-          {urls.map((u) => (
-            <div key={u} className="atlas-lan__url">
-              <QrCode value={u} size={132} />
-              <div className="atlas-lan__url-text">
-                <span className="atlas-lan__address">{u}</span>
-                <span className="atlas-form-hint">{t("Scan with a phone camera, or type the address.")}</span>
-                <Btn onClick={() => copy(u)}>{copied === u ? t("Copied") : t("Copy link")}</Btn>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : enabled ? (
-        <p className="atlas-form-hint">
-          {t("No local network address found — is this computer connected to Wi-Fi or Ethernet?")}
-        </p>
-      ) : null}
-    </Card>
   );
 }

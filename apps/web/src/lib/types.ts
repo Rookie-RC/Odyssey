@@ -152,7 +152,6 @@ export interface Settings {
   theme?: string;
   geocodingProvider?: string;
   defaultMapPosition?: { lat: number; lng: number };
-  lanSharing?: boolean;
   /** Chronological route layer visibility on the Hero Map (v1.2). */
   showRoutes?: boolean;
   /** Wishlist pins on the Hero Map (off by default: VISUAL_SPEC §3 keeps

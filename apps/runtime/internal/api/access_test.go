@@ -19,13 +19,13 @@ func TestIsRemote(t *testing.T) {
 		{"loopback v4", tcp("127.0.0.1"), "127.0.0.1:50000", false},
 		{"loopback v6", tcp("::1"), "[::1]:50000", false},
 		{"v4-mapped loopback peer", tcp("127.0.0.1"), "[::ffff:127.0.0.1]:50000", false},
-		{"LAN listener, LAN peer", tcp("192.168.1.23"), "192.168.1.50:50000", true},
-		// This computer opening its own LAN URL is a LAN viewer too.
-		{"LAN listener, own LAN address", tcp("192.168.1.23"), "192.168.1.23:50000", true},
-		{"LAN listener, loopback-looking peer", tcp("192.168.1.23"), "127.0.0.1:50000", true},
-		{"wildcard bind, LAN peer", tcp("10.0.0.5"), "10.0.0.9:50000", true},
+		{"network address, network peer", tcp("192.168.1.23"), "192.168.1.50:50000", true},
+		// This device opening its own network address is remote too.
+		{"network address, own network address", tcp("192.168.1.23"), "192.168.1.23:50000", true},
+		{"network address, loopback-looking peer", tcp("192.168.1.23"), "127.0.0.1:50000", true},
+		{"wildcard bind, network peer", tcp("10.0.0.5"), "10.0.0.9:50000", true},
 		{"no local addr, loopback peer", nil, "127.0.0.1:50000", false},
-		{"no local addr, LAN peer", nil, "192.168.1.50:50000", true},
+		{"no local addr, network peer", nil, "192.168.1.50:50000", true},
 		{"unparseable peer", tcp("127.0.0.1"), "pipe", true},
 		{"empty peer", nil, "", true},
 	}
@@ -51,7 +51,7 @@ func TestAllowedHost(t *testing.T) {
 		"LOCALHOST:3000":     true,
 		"[::1]:4317":         true,
 		"[::1]":              true,
-		"192.168.1.23:4317":  true, // LAN guests use the IP URL
+		"192.168.1.23:4317":  true, // other devices use the IP URL
 		"10.0.0.5:4317":      true,
 		"":                   true, // HTTP/1.0 without Host — never a browser
 		"evil.example:4317":  false,
@@ -114,13 +114,14 @@ func TestProtectDNSRebinding(t *testing.T) {
 	wantStatus(t, do(t, h, "GET", "/api/places", nil, withHost("[::1]:4317")), http.StatusOK)
 }
 
-// TestProtectLAN: LAN GETs addressed to the LAN IP pass; everything else
-// from the LAN is read-only — including the frontend and /media.
-func TestProtectLAN(t *testing.T) {
+// TestProtectRemote: GETs from another device addressed to the network IP
+// pass; everything else from another device is read-only — including the
+// frontend and /media.
+func TestProtectRemote(t *testing.T) {
 	h := protectedStack(t)
 	for _, p := range []string{"/", "/index.html", "/media/bordeaux/bourse.jpg", "/api/places", "/api/runtime"} {
-		wantStatus(t, do(t, h, "GET", p, nil, fromLAN), http.StatusOK)
-		wantStatus(t, do(t, h, "HEAD", p, nil, fromLAN), http.StatusOK)
+		wantStatus(t, do(t, h, "GET", p, nil, fromNetwork), http.StatusOK)
+		wantStatus(t, do(t, h, "HEAD", p, nil, fromNetwork), http.StatusOK)
 	}
 	for _, c := range []struct{ method, path string }{
 		{"POST", "/"},
@@ -131,7 +132,7 @@ func TestProtectLAN(t *testing.T) {
 		{"GET", "/api/atlas/backups"},
 		{"GET", "/api/atlas"},
 	} {
-		w := do(t, h, c.method, c.path, nil, fromLAN)
+		w := do(t, h, c.method, c.path, nil, fromNetwork)
 		if w.Code != http.StatusForbidden {
 			t.Errorf("remote %s %s: status %d, want 403", c.method, c.path, w.Code)
 			continue
@@ -142,12 +143,12 @@ func TestProtectLAN(t *testing.T) {
 	}
 	// Remote clients never get CORS headers, even with a loopback Origin
 	// (their "localhost" is a different machine).
-	w := do(t, h, "GET", "/api/places", nil, fromLAN, withHeader("Origin", "http://localhost:3000"))
+	w := do(t, h, "GET", "/api/places", nil, fromNetwork, withHeader("Origin", "http://localhost:3000"))
 	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
 		t.Errorf("remote got Access-Control-Allow-Origin %q", got)
 	}
-	// A rebinding name is refused for LAN clients as well.
-	wantStatus(t, do(t, h, "GET", "/", nil, fromLAN, withHost("evil.example:4317")), http.StatusForbidden)
+	// A rebinding name is refused for remote clients as well.
+	wantStatus(t, do(t, h, "GET", "/", nil, fromNetwork, withHost("evil.example:4317")), http.StatusForbidden)
 }
 
 // TestProtectCSRFAndCORS: local writes carrying a foreign Origin are refused

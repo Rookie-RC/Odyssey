@@ -66,7 +66,6 @@ export const ZH: Record<string, string> = {
   "{wordmark} — back to the map": "{wordmark}——回到地图",
   "Built with": "用",
   "for memories": "为回忆而建",
-  "Shared on your local network · view only": "通过局域网共享 · 仅可查看",
   "Theme · {name}": "主题 · {name}",
 
   // --- hero map ---
@@ -279,9 +278,9 @@ export const ZH: Record<string, string> = {
   "Recent memories": "最近的回忆",
   Interests: "兴趣",
   Links: "链接",
+  "This atlas is read-only.": "此地图集为只读。",
   "Edit profile": "编辑资料",
   "Manage Atlas": "管理地图集",
-  "This atlas is shared read-only.": "此地图集以只读方式共享。",
   "Uploading…": "上传中…",
   "Replace photo": "更换照片",
   "Upload photo": "上传照片",

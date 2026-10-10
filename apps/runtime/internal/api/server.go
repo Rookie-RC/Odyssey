@@ -22,7 +22,6 @@ import (
 	"github.com/yuatlas/runtime/internal/atlas"
 	"github.com/yuatlas/runtime/internal/domain"
 	"github.com/yuatlas/runtime/internal/geocode"
-	"github.com/yuatlas/runtime/internal/lan"
 	"github.com/yuatlas/runtime/internal/storage"
 )
 
@@ -51,44 +50,27 @@ type Server struct {
 	// separate mutex and so could still race with unrelated CRUD requests.
 	writeMu sync.Mutex
 
-	// lan controls the optional LAN-sharing listeners (nil when the runtime
-	// has none, e.g. in tests). Set once via SetLAN before serving.
-	lan LANController
-
-	// noLANGate turns off the remote (LAN) read-only gate in Handler; see
-	// DisableLANGate.
-	noLANGate bool
-}
-
-// LANController is what the API needs from the LAN-sharing listeners
-// (implemented by *lan.Manager): report their state for GET /api/runtime and
-// switch them when PUT /api/settings flips lanSharing.
-type LANController interface {
-	SetEnabled(on bool) lan.Status
-	Status() lan.Status
+	// noRemoteGate turns off the remote read-only gate in Handler; see
+	// DisableRemoteGate.
+	noRemoteGate bool
 }
 
 func NewServer(store *storage.Repository, geocoder *geocode.Manager, dataDir string, port int, writable bool) *Server {
 	return &Server{store: store, geocoder: geocoder, dataDir: dataDir, port: port, provider: geocoder.ProviderID(), writable: writable}
 }
 
-// SetLAN attaches the LAN-sharing controller. The controller serves the full
-// handler tree (which includes this API), so it can only be created after the
-// Server; call SetLAN before the first request is served.
-func (s *Server) SetLAN(c LANController) { s.lan = c }
-
-// DisableLANGate turns off the remote (LAN) read-only gate in Handler. Cloud
+// DisableRemoteGate turns off the remote read-only gate in Handler. Cloud
 // mode serves every client over the network and owns access control itself
 // (sessions, per-user routing — internal/cloud), so "not loopback" means
 // nothing there. Call before serving.
-func (s *Server) DisableLANGate() { s.noLANGate = true }
+func (s *Server) DisableRemoteGate() { s.noRemoteGate = true }
 
 // Handler returns the API mux. Host/Origin/CORS checks are applied around
 // the whole runtime by Protect (see access.go), wired in main.
 //
 // Two gates run before any handler:
 //
-//   - Remote (LAN) clients may only read: every POST/PUT/DELETE and every
+//   - Remote clients (not on this device) may only read: every POST/PUT/DELETE and every
 //     /api/geocode/* and /api/atlas/* call gets 403 with remoteReadOnlyMsg.
 //     Protect enforces the same rule; repeating it here means the API can
 //     never be mounted without it.
@@ -137,7 +119,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/atlas/backups/{name}", s.handleDeleteBackup)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.noLANGate && IsRemote(r) && !remoteAllowed(r) {
+		if !s.noRemoteGate && IsRemote(r) && !remoteAllowed(r) {
 			writeError(w, http.StatusForbidden, remoteReadOnlyMsg)
 			return
 		}
@@ -165,29 +147,19 @@ func decodeBody(r *http.Request, v any) error {
 }
 
 // handleRuntime reports how this runtime is serving *this request*:
+// writable is false for clients on another device and in -readonly mode, so
+// the frontend hides all editing UI.
 //
-//   - remote: the request came from another device via LAN sharing;
-//   - writable: editing is possible for this client — false for remote
-//     clients and in -readonly mode, so the frontend hides all editing UI;
-//   - lan: the LAN-sharing state ({enabled, urls, error}), so the owner can
-//     see (and show, e.g. as text or a QR code) the URLs guests should open.
-//
-// dataDir — an absolute path on the owner's computer, typically containing
-// their user name — is only reported to local clients; a LAN guest has no
-// use for it.
+// dataDir — an absolute path on the owner's device, typically containing
+// their user name — is only reported to local clients. The Android app also
+// uses it to recognise a runtime it started earlier for the same data.
 func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 	remote := IsRemote(r)
-	lanStatus := lan.Status{URLs: []string{}}
-	if s.lan != nil {
-		lanStatus = s.lan.Status()
-	}
 	resp := map[string]any{
 		"mode":              "local",
 		"writable":          s.writable && !remote,
-		"remote":            remote,
 		"port":              s.port,
 		"geocodingProvider": s.provider,
-		"lan":               lanStatus,
 	}
 	if !remote {
 		resp["dataDir"] = s.dataDir
@@ -1005,20 +977,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	// The previously stored value decides whether lanSharing was flipped
-	// (an unreadable file counts as all-defaults, i.e. sharing off).
-	prev, _ := s.store.LoadSettings()
 	if err := s.store.SaveSettings(settings); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	// LAN sharing follows the setting live, but only when this request
-	// actually changes the stored value. The frontend saves the whole
-	// settings object for every preference (theme, routes …); comparing
-	// against the live listener state instead would let an unrelated theme
-	// change switch off sharing that was forced on with -lan.
-	if s.lan != nil && settings.LANSharing != prev.LANSharing {
-		s.lan.SetEnabled(settings.LANSharing)
 	}
 	writeJSON(w, http.StatusOK, settings)
 }
@@ -1179,7 +1140,7 @@ func (s *Server) handleNewAtlas(w http.ResponseWriter, r *http.Request) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 
-	// Preferences (theme, map toggles, LAN sharing …) carry over to the new
+	// Preferences (theme, map toggles …) carry over to the new
 	// Atlas; an unreadable settings file simply means defaults.
 	prev, _ := s.store.LoadSettings()
 	backupRel, err := atlas.NewAtlas(s.dataDir, prev)

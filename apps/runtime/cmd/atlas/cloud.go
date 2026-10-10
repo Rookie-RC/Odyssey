@@ -30,9 +30,8 @@ type cloudOptions struct {
 
 // runCloud serves the multi-user web service (internal/cloud): the same
 // embedded frontend, with accounts and one Atlas per user under
-// <data>/users/<id>/. Unlike local mode it never opens a browser, never
-// starts LAN listeners and never falls back to another port (a reverse
-// proxy points at a fixed one). See docs/DEPLOY.md.
+// <data>/users/<id>/. Unlike local mode it never opens a browser and never
+// falls back to another port (a reverse proxy points at a fixed one). See docs/DEPLOY.md.
 func runCloud(o cloudOptions) {
 	root := o.dataDir
 	if root == "" {

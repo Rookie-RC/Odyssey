@@ -33,8 +33,7 @@ development, and as a multi-user website (`-mode cloud`).
   From *Share* on a place or the profile (journey, or a country's flag);
   download, copy or send through the system share sheet. Drawn locally.
 - **Manage Atlas** — add/edit places, visits, wishes and media with online place
-  search; export/import, automatic backups with one-click restore, New Atlas;
-  read-only **sharing on your local network** with a QR code.
+  search; export/import, automatic backups with one-click restore, New Atlas.
 - **Activities** — tag what a trip was for (skiing, citywalk, picnic, northern
   lights … 16 in all); the first one becomes the place's pin on the map, and a
   night in passing shows a moon.
@@ -59,7 +58,7 @@ Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一�
 - **中英文界面**：在个人主页或设置中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
 - **搜索**地点、回忆与心愿、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
 - **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」和个人主页（整个旅程或点国旗）；可下载、复制或调用系统分享。图片在本机生成，不会上传。
-- **管理地图集**：在线搜索地点添加到访与心愿、上传照片、导入导出、自动备份与一键恢复、**局域网只读共享**（附二维码）。
+- **管理地图集**：在线搜索地点添加到访与心愿、上传照片、导入导出、自动备份与一键恢复。
 - **玩法图标**：每次到访可以标记滑雪、冲浪、Citywalk、看展、野餐、追极光等 16 种玩法，第一个玩法就是这个地点在地图上的图标；只是路过住一晚的地点显示月亮。
 - **留学时光**：记录每段留学的抵达日期、中间的回国假期和最终回国时间，自动算出「留学第 N 天」、实际在外天数、期间去过的国家和城市；时间线上标出抵达、回国和结束留学。
 - **手机 App 优先**：安卓 App 在手机上运行，数据只在手机里；选照片、保存到「下载」、系统分享和返回键都接入了安卓（安装与构建见 [apps/android/README.md](apps/android/README.md)）。同一个程序也能以 `-mode cloud` 部署成多用户网站（见 [docs/DEPLOY.md](docs/DEPLOY.md)），作为备选形态保留。产品路线见 [docs/ROADMAP.md](docs/ROADMAP.md)。
@@ -160,7 +159,7 @@ mode only.)
 ```bash
 cd apps/web && pnpm test        # Vitest: timeline, routes, map data, map-style adapter,
                                 #         date formats (en/zh), theme contrast guard
-cd apps/runtime && go test ./... # storage, API, LAN access policy, thumbnails, backups
+cd apps/runtime && go test ./... # storage, API, access policy, thumbnails, backups
 ```
 
 The theme test is a legibility guard: every theme must keep primary text at
@@ -211,7 +210,7 @@ each with a private Atlas behind an account (email + password):
 
 `-data` is the root for every account (`users.json`, `secret.key`,
 `users/<id>/` — each a complete atlas-data directory). It never opens a
-browser or starts LAN sharing; put it behind a TLS reverse proxy. Flags:
+browser; put it behind a TLS reverse proxy. Flags:
 `-public-origin` (comma-separated origins the site is served from),
 `-allow-signup` (default true), `-user-quota-mb` (default 500),
 `-trust-proxy` (client IP/scheme from a proxy on the same machine). The
@@ -264,7 +263,7 @@ cross-compiles a Linux build from it). There is no desktop release any more
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/runtime` | mode, `writable`, port, data dir, provider, `remote` (request came over LAN), `lan: {enabled, urls[], error?}` |
+| GET | `/api/runtime` | mode, `writable`, port, data dir (local clients only), provider |
 | GET / PUT | `/api/profile` | read / write profile |
 | GET / POST | `/api/places` | list / create places |
 | PUT / DELETE | `/api/places/:id` | update / delete a place |
@@ -275,7 +274,7 @@ cross-compiles a Linux build from it). There is no desktop release any more
 | GET / POST | `/api/media` | list media / upload an image (multipart) |
 | PUT / DELETE | `/api/media/:id` | update caption & credits / delete |
 | GET | `/media/<path>?w=320` | a photo; `w` ∈ 160/320/640/960/1280/1920 serves a cached, EXIF-oriented JPEG thumbnail |
-| GET / PUT | `/api/settings` | read / write settings (theme, language, map layers, LAN sharing — applied live) |
+| GET / PUT | `/api/settings` | read / write settings (theme, language, map layers) |
 | GET | `/api/geocode/search?q=...` | online place search (normalized) |
 | GET | `/api/geocode/reverse?lat=...&lng=...` | reverse geocoding |
 | POST | `/api/atlas/export` | download the whole Atlas as a `.atlas` file |
@@ -285,7 +284,8 @@ cross-compiles a Linux build from it). There is no desktop release any more
 | POST | `/api/atlas/backups/:name/restore` | restore a backup (the current Atlas is backed up first) |
 | DELETE | `/api/atlas/backups/:name` | delete a backup |
 
-Requests from other devices on the LAN are **read-only**: only GET/HEAD of the
+The runtime listens on 127.0.0.1 only. If it is bound to a network address
+with `-host`, requests from other devices are **read-only**: only GET/HEAD of the
 frontend, `/media/*` and read-only API endpoints; every write, geocoding and
 `/api/atlas/*` call gets `403`. Writes are also refused when their `Origin` is
 not loopback, and the runtime only accepts `localhost` / IP-literal `Host`
@@ -507,14 +507,6 @@ translations live in `lib/i18n-zh.ts` and `lib/i18n-zh-manage.ts`.
 There are no global shortcuts: the app is made for touch first. On a
 computer, Esc closes what is open, ← → move through time (timeline focused)
 or to the previous / next place (detail open), and Ctrl + wheel zooms the map.
-
-## Sharing on your local network
-
-Manage Atlas → Settings → *Share on local network* (or start with `-lan`).
-The runtime additionally listens on this computer's private IPv4 addresses on
-the same port and shows each URL with a QR code. Other devices get a read-only
-Atlas; editing stays on this computer. Turning it off closes those listeners
-immediately.
 
 ## Backups
 

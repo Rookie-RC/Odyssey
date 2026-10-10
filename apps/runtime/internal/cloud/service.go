@@ -275,7 +275,7 @@ func (s *Service) tenant(id string) (*tenant, bool) {
 		return nil, false
 	}
 	srv := api.NewServer(repo, s.cfg.Geocoder, dir, 0, true)
-	srv.DisableLANGate()
+	srv.DisableRemoteGate()
 	t := &tenant{
 		dir:    dir,
 		thumbs: s.thumbDir(id),

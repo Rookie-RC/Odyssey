@@ -361,7 +361,7 @@ export default function ProfileDrawer({
                     </button>
                   </>
                 ) : (
-                  <p className="atlas-profile__readonly">{t("This atlas is shared read-only.")}</p>
+                  <p className="atlas-profile__readonly">{t("This atlas is read-only.")}</p>
                 )}
               </div>
             </>

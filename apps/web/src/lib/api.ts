@@ -37,18 +37,14 @@ export interface RuntimeInfo {
   /** "local": one Atlas on this computer; "cloud": the multi-user web
    * service, one Atlas per signed-in account (docs/DEPLOY.md). */
   mode: "local" | "cloud";
-  /** False for read-only runtimes, for every request arriving over LAN, and
-   * in cloud mode while signed out. */
+  /** False for read-only runtimes, for requests from another device, and in
+   * cloud mode while signed out. */
   writable: boolean;
   /** Local mode only. */
   port?: number;
-  /** Local mode only, and only for this computer (never LAN guests). */
+  /** Local mode only, and only for clients on this device. */
   dataDir?: string;
   geocodingProvider: string;
-  /** True when this browser reaches the runtime over the local network. */
-  remote?: boolean;
-  /** Read-only LAN sharing (PRODUCT_SPEC §4). Local mode only. */
-  lan?: { enabled: boolean; urls: string[]; error?: string };
   /** Cloud mode: whether this browser has a session, and for whom. */
   authenticated?: boolean;
   user?: AccountUser;

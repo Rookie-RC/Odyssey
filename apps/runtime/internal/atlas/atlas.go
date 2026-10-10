@@ -513,11 +513,9 @@ func writeFileAtomic(p string, content []byte) error {
 //
 // Appearance and machine-behaviour preferences from prev (the current
 // settings) carry over so a new Atlas still looks and behaves the way the
-// user set this computer up: the theme (any theme id, kept verbatim), the
-// interface language, the geocoding provider, the map display toggles (routes, wishlist pins,
-// country fill) and LAN sharing (which the runtime is currently applying
-// live; resetting only the stored flag would desynchronize the two). The
-// default map position is content — it frames the old Atlas's places — and is
+// user set this device up: the theme (any theme id, kept verbatim), the
+// interface language, the geocoding provider and the map display toggles
+// (routes, wishlist pins, country fill). The default map position is content — it frames the old Atlas's places — and is
 // reset with the rest of the data.
 func NewAtlas(dataDir string, prev domain.Settings) (string, error) {
 	backupRel, err := Backup(dataDir)
@@ -527,7 +525,6 @@ func NewAtlas(dataDir string, prev domain.Settings) (string, error) {
 	settings := domain.Settings{
 		Theme:             prev.Theme,
 		GeocodingProvider: prev.GeocodingProvider,
-		LANSharing:        prev.LANSharing,
 		ShowRoutes:        prev.ShowRoutes,
 		ShowWishlist:      prev.ShowWishlist,
 		HideCountries:     prev.HideCountries,

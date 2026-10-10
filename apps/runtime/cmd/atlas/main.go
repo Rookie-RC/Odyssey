@@ -26,7 +26,6 @@ import (
 	"github.com/yuatlas/runtime/internal/api"
 	"github.com/yuatlas/runtime/internal/config"
 	"github.com/yuatlas/runtime/internal/geocode"
-	"github.com/yuatlas/runtime/internal/lan"
 	"github.com/yuatlas/runtime/internal/media"
 	"github.com/yuatlas/runtime/internal/storage"
 )
@@ -38,7 +37,6 @@ func main() {
 		host        = flag.String("host", "127.0.0.1", "bind address")
 		openBrowser = flag.Bool("open-browser", true, "open the default browser on startup")
 		readonly    = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
-		lanShare    = flag.Bool("lan", false, "share read-only on the local network at startup, regardless of the lanSharing setting")
 
 		mode         = flag.String("mode", "local", "local: one Atlas on this computer; cloud: multi-user web service (accounts, one Atlas per user)")
 		publicOrigin = flag.String("public-origin", "", "cloud: comma-separated origins the frontend is served from, e.g. https://atlas.example.com")
@@ -99,26 +97,12 @@ func main() {
 	mux.Handle("/media/", media.NewHandler(dir, media.NewThumbnailer(thumbDir)))
 	mux.Handle("/", staticHandler())
 
-	// One handler tree for every listener. api.Protect applies the Host
-	// (DNS-rebinding), Origin (CSRF) and CORS rules for local clients and the
-	// read-only policy for LAN clients — whether a request is local or
-	// remote is decided per request from the connection's addresses, so the
-	// loopback and LAN listeners can share it.
+	// api.Protect applies the Host (DNS-rebinding), Origin (CSRF) and CORS
+	// rules, and keeps any client that is not on this device read-only.
 	root := api.Protect(mux)
 
 	url := fmt.Sprintf("http://127.0.0.1:%d", actualPort)
 	httpServer := &http.Server{Handler: root}
-
-	// LAN sharing (PRODUCT_SPEC §4): extra listeners on this computer's
-	// private IPv4 addresses, same port, same handler. On at startup when
-	// the stored setting says so or -lan forces it; toggled live afterwards
-	// by PUT /api/settings. Bind failures are recorded, never fatal.
-	lanMgr := lan.NewManager(actualPort, root)
-	srv.SetLAN(lanMgr)
-	startLAN := *lanShare
-	if settings, err := repo.LoadSettings(); err == nil && settings.LANSharing {
-		startLAN = true
-	}
 
 	go func() {
 		log.Printf("Odyssey runtime listening on %s", url)
@@ -133,10 +117,6 @@ func main() {
 		}
 	}()
 
-	if startLAN {
-		lanMgr.SetEnabled(true) // logs the LAN URLs or the bind error
-	}
-
 	if *openBrowser {
 		openBrowserURL(url)
 	}
@@ -148,7 +128,6 @@ func main() {
 	log.Println("shutting down")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = lanMgr.Shutdown(ctx)
 	_ = httpServer.Shutdown(ctx)
 }
 

@@ -294,10 +294,7 @@ type Settings struct {
 	Theme              string       `json:"theme,omitempty"`
 	GeocodingProvider  string       `json:"geocodingProvider,omitempty"`
 	DefaultMapPosition *Coordinates `json:"defaultMapPosition,omitempty"`
-	// LANSharing switches read-only sharing on the local network (PRODUCT_SPEC
-	// §4). The runtime applies changes live when PUT /api/settings flips it.
-	LANSharing bool `json:"lanSharing,omitempty"`
-	ShowRoutes bool `json:"showRoutes,omitempty"`
+	ShowRoutes         bool         `json:"showRoutes,omitempty"`
 	// ShowWishlist shows Wishlist pins and hatched wishlist countries on the
 	// hero map. Unset means shown (the default); an explicit false is kept.
 	ShowWishlist *bool `json:"showWishlist,omitempty"`

@@ -12,13 +12,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/yuatlas/runtime/internal/atlas"
 	"github.com/yuatlas/runtime/internal/domain"
 	"github.com/yuatlas/runtime/internal/geocode"
-	"github.com/yuatlas/runtime/internal/lan"
 	"github.com/yuatlas/runtime/internal/storage"
 )
 
@@ -33,31 +31,6 @@ func (stubGeocoder) Search(context.Context, string, geocode.SearchOptions) ([]ge
 }
 func (stubGeocoder) Reverse(context.Context, float64, float64) (*geocode.Result, error) {
 	return &geocode.Result{Name: "Bordeaux", Provider: "stub"}, nil
-}
-
-// fakeLAN records SetEnabled calls.
-type fakeLAN struct {
-	mu    sync.Mutex
-	calls []bool
-	state lan.Status
-}
-
-func (f *fakeLAN) SetEnabled(on bool) lan.Status {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls = append(f.calls, on)
-	f.state.Enabled = on
-	f.state.URLs = []string{}
-	if on {
-		f.state.URLs = []string{"http://192.168.1.23:4317"}
-	}
-	return f.state
-}
-
-func (f *fakeLAN) Status() lan.Status {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.state
 }
 
 func newTestServer(t *testing.T, writable bool) (*Server, string) {
@@ -82,9 +55,10 @@ func fromLoopback(r *http.Request) *http.Request {
 		&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4317}))
 }
 
-// fromLAN simulates a phone on the Wi-Fi: accepted on the LAN listener
-// 192.168.1.23:4317, peer 192.168.1.50.
-func fromLAN(r *http.Request) *http.Request {
+// fromNetwork simulates another device on the Wi-Fi reaching a runtime
+// bound to its network address: accepted on 192.168.1.23:4317, peer
+// 192.168.1.50.
+func fromNetwork(r *http.Request) *http.Request {
 	r.RemoteAddr = "192.168.1.50:52000"
 	r.Host = "192.168.1.23:4317"
 	return r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey,
@@ -348,7 +322,7 @@ func TestReadonlyRejectsWrites(t *testing.T) {
 	}
 }
 
-// --- LAN (remote) clients ---
+// --- remote clients (another device) ---
 
 func TestRemoteClientsAreReadOnly(t *testing.T) {
 	s, _ := newTestServer(t, true)
@@ -357,7 +331,7 @@ func TestRemoteClientsAreReadOnly(t *testing.T) {
 
 	// Viewing works.
 	for _, p := range []string{"/api/places", "/api/visits", "/api/wishlist", "/api/media", "/api/profile", "/api/settings", "/api/runtime"} {
-		wantStatus(t, do(t, h, "GET", p, nil, fromLAN), http.StatusOK)
+		wantStatus(t, do(t, h, "GET", p, nil, fromNetwork), http.StatusOK)
 	}
 
 	// Every write, every geocode call and every atlas call is refused.
@@ -379,7 +353,7 @@ func TestRemoteClientsAreReadOnly(t *testing.T) {
 		{"POST", "/api/atlas/backups/x.atlas/restore"},
 		{"DELETE", "/api/atlas/backups/x.atlas"},
 	} {
-		w := do(t, h, c.method, c.path, bordeaux, fromLAN)
+		w := do(t, h, c.method, c.path, bordeaux, fromNetwork)
 		if w.Code != http.StatusForbidden {
 			t.Errorf("remote %s %s: status %d, want 403", c.method, c.path, w.Code)
 			continue
@@ -397,71 +371,27 @@ func TestRemoteClientsAreReadOnly(t *testing.T) {
 	wantStatus(t, do(t, h, "GET", "/api/geocode/search?q=Bordeaux", nil), http.StatusOK)
 }
 
-func TestRuntimeReportsRemoteAndLAN(t *testing.T) {
+func TestRuntimeReportsWritableAndDataDir(t *testing.T) {
 	s, dir := newTestServer(t, true)
 	h := s.Handler()
 
-	// No LAN controller: lan is present, disabled, with an empty URL list
-	// (never null).
-	w := do(t, h, "GET", "/api/runtime", nil)
-	if !strings.Contains(w.Body.String(), `"lan":{"enabled":false,"urls":[]}`) {
-		t.Errorf("runtime without LAN = %s", w.Body.String())
-	}
-
-	ctl := &fakeLAN{state: lan.Status{Enabled: true, URLs: []string{"http://192.168.1.23:4317"}}}
-	s.SetLAN(ctl)
-
 	type runtimeInfo struct {
-		Mode     string     `json:"mode"`
-		Writable bool       `json:"writable"`
-		Remote   bool       `json:"remote"`
-		Port     int        `json:"port"`
-		DataDir  *string    `json:"dataDir"`
-		LAN      lan.Status `json:"lan"`
+		Mode     string  `json:"mode"`
+		Writable bool    `json:"writable"`
+		Port     int     `json:"port"`
+		DataDir  *string `json:"dataDir"`
 	}
 	local := decode[runtimeInfo](t, do(t, h, "GET", "/api/runtime", nil))
-	if local.Remote || !local.Writable || local.DataDir == nil || *local.DataDir != dir || local.Port != 4317 {
+	if !local.Writable || local.DataDir == nil || *local.DataDir != dir || local.Port != 4317 || local.Mode != "local" {
 		t.Errorf("local runtime = %+v", local)
 	}
-	if !local.LAN.Enabled || len(local.LAN.URLs) != 1 || local.LAN.URLs[0] != "http://192.168.1.23:4317" {
-		t.Errorf("local runtime lan = %+v", local.LAN)
-	}
 
-	remote := decode[runtimeInfo](t, do(t, h, "GET", "/api/runtime", nil, fromLAN))
-	if !remote.Remote || remote.Writable {
-		t.Errorf("remote runtime = %+v (want remote=true, writable=false)", remote)
+	remote := decode[runtimeInfo](t, do(t, h, "GET", "/api/runtime", nil, fromNetwork))
+	if remote.Writable {
+		t.Errorf("remote runtime = %+v (want writable=false)", remote)
 	}
 	if remote.DataDir != nil {
-		t.Errorf("dataDir leaked to a LAN client: %q", *remote.DataDir)
-	}
-	if !remote.LAN.Enabled {
-		t.Errorf("remote runtime lan = %+v", remote.LAN)
-	}
-}
-
-// TestSettingsToggleLAN: PUT /api/settings switches LAN sharing live, but
-// only when lanSharing actually changes — saving another preference must not
-// touch it (e.g. sharing forced on with -lan while the stored flag is false).
-func TestSettingsToggleLAN(t *testing.T) {
-	s, _ := newTestServer(t, true)
-	ctl := &fakeLAN{}
-	s.SetLAN(ctl)
-	h := s.Handler()
-
-	wantStatus(t, do(t, h, "PUT", "/api/settings", domain.Settings{Theme: "night"}), http.StatusOK)
-	if len(ctl.calls) != 0 {
-		t.Fatalf("theme change toggled LAN: %v", ctl.calls)
-	}
-	wantStatus(t, do(t, h, "PUT", "/api/settings", domain.Settings{Theme: "night", LANSharing: true}), http.StatusOK)
-	wantStatus(t, do(t, h, "PUT", "/api/settings", domain.Settings{Theme: "light", LANSharing: true}), http.StatusOK)
-	wantStatus(t, do(t, h, "PUT", "/api/settings", domain.Settings{Theme: "light"}), http.StatusOK)
-	if want := []bool{true, false}; len(ctl.calls) != 2 || ctl.calls[0] != want[0] || ctl.calls[1] != want[1] {
-		t.Fatalf("SetEnabled calls = %v, want %v", ctl.calls, want)
-	}
-	// A LAN client cannot flip it.
-	wantStatus(t, do(t, h, "PUT", "/api/settings", domain.Settings{LANSharing: true}, fromLAN), http.StatusForbidden)
-	if len(ctl.calls) != 2 {
-		t.Fatalf("remote request toggled LAN: %v", ctl.calls)
+		t.Errorf("dataDir leaked to a remote client: %q", *remote.DataDir)
 	}
 }
 

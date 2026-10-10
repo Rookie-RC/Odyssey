@@ -236,19 +236,6 @@ export const ZH_MANAGE: Record<string, string> = {
   "(read-only)": "（只读）",
   "Configured provider": "已配置的服务",
   "Machine config lives in runtime-config.json.": "本机配置位于 runtime-config.json。",
-  "Share on local network": "在局域网共享",
-  "Let phones and other computers on the same Wi-Fi open this Atlas — view only. Editing stays on this computer.":
-    "让同一 Wi-Fi 下的手机和其他电脑打开这个地图集——仅可查看。编辑仍只能在这台电脑上进行。",
-  "Sharing on your local network (view only).": "正在局域网共享（仅可查看）。",
-  "Local network sharing is off.": "局域网共享已关闭。",
-  On: "开",
-  Off: "关",
-  "Scan with a phone camera, or type the address.": "用手机相机扫码，或手动输入地址。",
-  Copied: "已复制",
-  "Copy link": "复制链接",
-  "No local network address found — is this computer connected to Wi-Fi or Ethernet?":
-    "未找到局域网地址——这台电脑连上 Wi-Fi 或以太网了吗？",
-  "QR code for {url}": "{url} 的二维码",
 
   // --- import / export ---
   "Your whole Atlas travels as one portable .atlas file — structured data and media together. Backups are automatic before any replacement.":

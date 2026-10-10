@@ -309,13 +309,6 @@ export const HomeIcon = (p: IconProps) => (
   </Svg>
 );
 
-export const WifiIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M2.8 7.6a10.2 10.2 0 0 1 14.4 0M5.4 10.4a6.4 6.4 0 0 1 9.2 0M8 13.2a2.7 2.7 0 0 1 4 0" />
-    <circle cx="10" cy="15.8" r=".6" fill="currentColor" />
-  </Svg>
-);
-
 export function InspirationIcon({ type, ...p }: IconProps & { type: InspirationType }) {
   switch (type) {
     case "video":
