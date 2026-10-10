@@ -1,63 +1,15 @@
-/* Hero Map: fullscreen → contextual strip (PRODUCT_SPEC §18, VISUAL_SPEC §6).
+/* The map is a permanent full-screen layer; the other tabs are pages laid
+   over it (styles/tabs.css), so its camera and markers survive a switch. */
 
-   The sticky shell reserves 100vh of document flow and stays pinned. Inside
-   it, .atlas-map-clip shrinks from the full viewport to a rounded inset strip
-   as the page scrolls (height, inset, radius written by AtlasApp's rAF loop),
-   while .atlas-map-band — a ground-coloured band behind the strip — keeps the
-   Journey from showing through around it. "Space making room for time". */
-
-.atlas-map-sticky {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100svh;
-  z-index: 30;
-  pointer-events: none;
-}
-
-.atlas-map-band {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 0;
-  background: var(--bg);
-  pointer-events: none;
-  border-bottom: 1px solid transparent;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-html.atlas-collapsed .atlas-map-band {
-  border-bottom-color: var(--border);
-  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.3);
-}
-
-.atlas-map-clip {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 100vh;
+.atlas-map-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
   overflow: hidden;
-  pointer-events: auto;
   background: var(--map-bg, var(--bg));
-  transition: box-shadow 0.3s ease;
-  /* isolate so the rounded corners clip the WebGL canvas in every engine */
-  isolation: isolate;
-  transform: translateZ(0);
 }
 
-html.atlas-collapsed .atlas-map-clip {
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-
-.atlas-main {
-  position: relative;
-  z-index: 10;
-  min-height: 100vh;
-}
-
-/* --- Hero (fills its clip parent) --- */
+/* --- Hero (fills the map layer) --- */
 .atlas-hero {
   position: relative;
   width: 100%;
@@ -82,35 +34,6 @@ html.atlas-collapsed .atlas-map-clip {
   background: var(--map-tint, none);
   mix-blend-mode: var(--map-tint-blend, normal);
   pointer-events: none;
-}
-
-/* "Scroll to explore my journey" — only meaningful on the first viewport. */
-.atlas-hero__hint {
-  position: absolute;
-  left: 50%;
-  bottom: calc(34px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  font-size: 13.5px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-secondary);
-  text-shadow: 0 0 8px var(--marker-label-halo), 0 0 3px var(--marker-label-halo);
-  pointer-events: none;
-  opacity: calc(1 - var(--hero-scroll, 0) * 5);
-}
-
-.atlas-hero__hint-chevron {
-  animation: atlas-bounce-y 1.9s ease-in-out infinite;
-}
-
-@keyframes atlas-bounce-y {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(4px); }
 }
 
 /* --- Markers ----------------------------------------------------------------
@@ -172,12 +95,6 @@ html.atlas-collapsed .atlas-map-clip {
 .atlas-marker:hover .atlas-marker__flag,
 .atlas-marker:focus-visible .atlas-marker__flag {
   transform: scale(1.12);
-}
-
-/* The strip stays calm: flags fold away while the map is collapsed. */
-html.atlas-collapsed .atlas-marker__flag {
-  opacity: 0;
-  transform: scaleY(0.4);
 }
 
 .atlas-marker--day_trip .atlas-marker__dot {
@@ -259,17 +176,6 @@ html.atlas-collapsed .atlas-marker__flag {
 .atlas-marker--overnight.atlas-marker--label-left .atlas-marker__label {
   left: auto;
   right: 15px;
-}
-
-/* The collapsed strip stays calm: badges shrink back towards dots. */
-html.atlas-collapsed .atlas-marker.atlas-marker--activity .atlas-marker__dot {
-  width: 15px;
-  height: 15px;
-  border-width: 1.5px;
-}
-
-html.atlas-collapsed .atlas-marker--activity .atlas-marker__dot svg {
-  transform: scale(0.7);
 }
 
 /* Past residence: calm static ring (never animated like the current base). */
@@ -430,10 +336,6 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   color: var(--text-secondary);
 }
 
-html.atlas-collapsed .atlas-marker__label-country {
-  display: none;
-}
-
 /* Wishlist pins (optional layer): hollow, dashed — a place not yet visited. */
 .atlas-wishpin {
   position: relative;
@@ -524,10 +426,6 @@ html.atlas-collapsed .atlas-marker__label-country {
 .atlas-wishpin:hover .atlas-wishpin__meta,
 .atlas-wishpin:focus-visible .atlas-wishpin__meta {
   opacity: 1;
-}
-
-html.atlas-collapsed .atlas-wishpin__dot {
-  transform: translate(-50%, -50%) scale(0.8);
 }
 
 /* --- Micro preview (hover/focus) --- */
@@ -721,18 +619,13 @@ html.atlas-collapsed .atlas-wishpin__dot {
 .atlas-map-controls {
   position: absolute;
   right: var(--gutter);
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  /* above the tab bar and the map credits */
+  bottom: calc(124px + env(safe-area-inset-bottom, 0px));
   z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
-  opacity: calc(1 - var(--hero-scroll, 0) * 4);
-  transition: opacity 0.2s ease;
-}
-
-html.atlas-collapsed .atlas-map-controls {
-  visibility: hidden;
 }
 
 .atlas-map-controls__group,
@@ -895,12 +788,9 @@ html.atlas-collapsed .atlas-map-controls {
 }
 
 /* --- MapLibre chrome themed to the Atlas --- */
-.atlas-hero .maplibregl-ctrl-bottom-right {
-  opacity: calc(1 - var(--hero-scroll, 0) * 4);
-}
-
 .atlas-hero .maplibregl-ctrl-bottom-right .maplibregl-ctrl.maplibregl-ctrl-attrib {
-  margin: 0 var(--gutter) 10px 0;
+  /* just above the tab bar */
+  margin: 0 var(--gutter) calc(88px + env(safe-area-inset-bottom, 0px)) 0;
   /* Frosted like the glass controls above it (too small to refract). */
   background: var(--glass-tint);
   color: var(--text-secondary);
@@ -922,34 +812,6 @@ html.atlas-collapsed .atlas-map-controls {
 
 html[data-mode="dark"] .atlas-hero .maplibregl-ctrl-attrib-button {
   filter: invert(1);
-}
-
-html.atlas-collapsed .atlas-hero .maplibregl-ctrl-attrib {
-  display: none;
-}
-
-/* Touch: "use two fingers to move the map" (cooperative gestures). A solid
-   pill like the map controls (it sits over labels) instead of MapLibre's
-   dimmed map, and only after a sideways drag (HeroMap adds .atlas-pan-hint);
-   a vertical swipe just scrolls the page. */
-.atlas-hero .maplibregl-cooperative-gesture-screen {
-  visibility: hidden;
-  background: none;
-  font-size: 14px;
-}
-
-.atlas-hero .atlas-pan-hint .maplibregl-cooperative-gesture-screen {
-  visibility: visible;
-}
-
-.atlas-hero .maplibregl-cooperative-gesture-screen .maplibregl-mobile-message {
-  padding: 10px 18px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-primary);
-  font-weight: 500;
-  box-shadow: var(--shadow-md);
 }
 
 /* --- WebGL error fallback --- */

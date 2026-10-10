@@ -24,17 +24,6 @@
   to { opacity: 0; }
 }
 
-/* The page behind an open sheet recedes very slightly (§13.3: ~96–98%). */
-.atlas-main,
-.atlas-map-clip {
-  transition: transform 0.4s var(--ease-out), filter 0.4s ease;
-}
-
-body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
-  transform: scale(0.985);
-  transform-origin: 50% 30vh;
-}
-
 .atlas-sheet {
   position: absolute;
   top: 10px;
@@ -1358,9 +1347,6 @@ body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
   }
   .atlas-lightbox__nav {
     display: none;
-  }
-  body:has(.atlas-overlay:not(.atlas-overlay--closing)) .atlas-main {
-    transform: none;
   }
 }
 

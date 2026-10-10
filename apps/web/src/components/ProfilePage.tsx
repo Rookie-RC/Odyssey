@@ -10,10 +10,10 @@ import ThemePicker from "./ThemePicker";
 import LanguagePicker from "./LanguagePicker";
 import { t, type LocalePreference } from "../lib/i18n";
 import { profileInitials } from "./Topbar";
-import { ArrowRight, CloseIcon, ExternalIcon, HomeIcon, ImageIcon, SettingsIcon, TicketIcon } from "./Icons";
+import { ArrowRight, ExternalIcon, HomeIcon, ImageIcon, SettingsIcon, TicketIcon } from "./Icons";
 import { AbroadEditor, AbroadSummaryList, abroadFromDraft, abroadToDraft, type AbroadDraft } from "./AbroadSection";
 
-interface ProfileDrawerProps {
+interface ProfilePageProps {
   profile: Profile | null;
   places: Place[];
   visits: Visit[];
@@ -25,8 +25,6 @@ interface ProfileDrawerProps {
   onLocaleChange: (pref: LocalePreference) => void;
   /** Runtime reports whether local editing is available (PRODUCT_SPEC §25). */
   writable: boolean;
-  closing: boolean;
-  onClose: () => void;
   onManage: () => void;
   /** Share as a ticket: the whole journey, or one country (its flag). */
   onShare?: (scope: "journey" | "country", country?: string) => void;
@@ -49,9 +47,9 @@ interface Draft {
   abroad: AbroadDraft[];
 }
 
-/** Right-side drawer, visually subordinate to the Atlas (VISUAL_SPEC §14).
- * Profile and Place Detail never stack. */
-export default function ProfileDrawer({
+/** The "Me" tab: who, where from, studying abroad, recent memories, and the
+ * app's preferences (theme, language) with the way into Manage Atlas. */
+export default function ProfilePage({
   profile,
   places,
   visits,
@@ -62,26 +60,15 @@ export default function ProfileDrawer({
   localePreference,
   onLocaleChange,
   writable,
-  closing,
-  onClose,
   onManage,
   onShare,
   onProfileSaved,
   onOpenPlace,
-}: ProfileDrawerProps) {
+}: ProfilePageProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
-
-  const shellRef = useRef<HTMLDivElement | null>(null);
-
-  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null;
-    shellRef.current?.focus();
-    return () => prev?.focus?.();
-  }, []);
 
   const name = profile?.name?.trim() || t("Traveler");
   const basePlace = profile?.currentBase?.placeId ? getPlace(places, profile.currentBase.placeId) : null;
@@ -116,7 +103,7 @@ export default function ProfileDrawer({
     setMessage("");
   };
 
-  // While editing, Escape leaves the form (the drawer stays open); with unsaved
+  // While editing, Escape leaves the form; with unsaved
   // changes it keeps them and asks to save or cancel instead.
   useEffect(() => {
     if (!editing) return;
@@ -177,36 +164,8 @@ export default function ProfileDrawer({
   };
 
   return (
-    <div
-      className={"atlas-overlay" + (closing ? " atlas-overlay--closing" : "")}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={shellRef}
-        tabIndex={-1}
-        className={"atlas-sheet atlas-profile" + (closing ? " atlas-sheet--closing" : "")}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("Profile")}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="atlas-sheet__grabber" aria-hidden="true" />
-        <div className="atlas-sheet__toolbar">
-          <span className="atlas-eyebrow atlas-profile__eyebrow">{t("Profile")}</span>
-          <button
-            ref={closeBtnRef}
-            type="button"
-            className="atlas-icon-btn atlas-icon-btn--sm"
-            onClick={onClose}
-            aria-label={t("Close")}
-          >
-            <CloseIcon size={15} />
-          </button>
-        </div>
-
-        <div className="atlas-sheet__scroll atlas-profile__scroll">
+    <div className="atlas-profile">
+        <div className="atlas-profile__scroll">
           <div className="atlas-profile__identity">
             {(editing ? draft?.avatar : profile?.avatar) ? (
               <img
@@ -380,7 +339,6 @@ export default function ProfileDrawer({
 
           {message ? <p className="atlas-profile__message">{message}</p> : null}
         </div>
-      </div>
     </div>
   );
 }

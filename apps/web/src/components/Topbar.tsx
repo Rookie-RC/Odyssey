@@ -1,15 +1,11 @@
 "use client";
 
-import type { Profile } from "../lib/types";
-import { CompassRose, ExpandIcon, SearchIcon } from "./Icons";
+import { CompassRose, SearchIcon } from "./Icons";
 import { t } from "../lib/i18n";
 
 interface TopbarProps {
-  profile: Profile | null;
   wordmark: string;
-  onOpenProfile: () => void;
   onOpenSearch: () => void;
-  onExpandMap: () => void;
 }
 
 export function profileInitials(name?: string): string {
@@ -22,31 +18,17 @@ export function profileInitials(name?: string): string {
     .toUpperCase();
 }
 
-/** Minimal floating chrome (VISUAL_SPEC §3: no large header). The wordmark
- * belongs to the fullscreen map and fades as the map collapses; the actions
- * stay reachable and settle over the contextual strip, where "Expand map"
- * joins them. Visibility is driven by CSS from --hero-scroll, so scrolling
- * never re-renders React. */
-export default function Topbar({
-  profile,
-  wordmark,
-  onOpenProfile,
-  onOpenSearch,
-  onExpandMap,
-}: TopbarProps) {
+/** The map's floating chrome (VISUAL_SPEC §3: no large header): the wordmark
+ * and search. The sections live in the tab bar at the bottom. */
+export default function Topbar({ wordmark, onOpenSearch }: TopbarProps) {
   return (
     <header className="atlas-topbar">
-      <button type="button" className="atlas-topbar__brand" onClick={onExpandMap} aria-label={t("{wordmark} — back to the map", { wordmark })}>
+      <div className="atlas-topbar__brand">
         <CompassRose size={26} className="atlas-topbar__rose" />
         <span className="atlas-wordmark">{wordmark}</span>
-      </button>
+      </div>
 
       <div className="atlas-topbar__actions">
-        <button type="button" className="atlas-chip-btn atlas-glass atlas-topbar__expand" onClick={onExpandMap}>
-          <ExpandIcon size={15} />
-          <span>{t("Expand map")}</span>
-        </button>
-
         <button
           type="button"
           className="atlas-chip-btn atlas-glass atlas-topbar__search"
@@ -55,17 +37,6 @@ export default function Topbar({
         >
           <SearchIcon size={16} />
           <span className="atlas-topbar__search-label">{t("Search")}</span>
-        </button>
-
-        <button type="button" className="atlas-profile-pill atlas-glass" onClick={onOpenProfile}>
-          {profile?.avatar ? (
-            <img className="atlas-profile-pill__avatar atlas-photo" src={profile.avatar} alt="" draggable={false} />
-          ) : (
-            <span className="atlas-profile-pill__avatar atlas-profile-pill__avatar--initials" aria-hidden="true">
-              {profileInitials(profile?.name)}
-            </span>
-          )}
-          <span className="atlas-profile-pill__label">{profile?.name?.trim() || t("Profile")}</span>
         </button>
       </div>
     </header>

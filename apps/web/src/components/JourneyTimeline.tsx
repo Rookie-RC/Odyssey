@@ -892,7 +892,7 @@ function NodeColumn({
 
 // --- Anchored preview card ---
 // Cards hang below the line, so the preview opens above the node when there
-// is room (never under the collapsed map strip), else below — shifted
+// is room, else below — shifted
 // sideways until it clears the node's own card.
 
 const PREVIEW_GAP = 16;

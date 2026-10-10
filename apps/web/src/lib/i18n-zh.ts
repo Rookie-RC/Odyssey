@@ -51,18 +51,13 @@ export const ZH: Record<string, string> = {
   "Interface language": "界面语言",
 
   // --- top bar / chrome ---
-  "Expand map": "展开地图",
   Search: "搜索",
   "Search places and memories": "搜索地点与回忆",
-  Profile: "个人主页",
-  "{wordmark} — back to the map": "{wordmark}——回到地图",
   "Built with": "用",
   "for memories": "为回忆而建",
   "Theme · {name}": "主题 · {name}",
 
   // --- hero map ---
-  "Scroll to explore my journey": "向下滚动，探索我的旅程",
-  "Use two fingers to move the map": "用两根手指移动地图",
   "Map controls": "地图控件",
   "Zoom in": "放大",
   "Zoom out": "缩小",
@@ -104,6 +99,10 @@ export const ZH: Record<string, string> = {
 
   // --- where next ---
   "Where next": "下一站",
+  Journey: "旅程",
+  Me: "我的",
+  Sections: "栏目",
+  "Record a trip": "记录一次旅程",
   "Dreaming ahead. One season, many possibilities.": "向前憧憬。一个季节，无数可能。",
   Season: "季节",
   "View all ideas": "查看全部心愿",

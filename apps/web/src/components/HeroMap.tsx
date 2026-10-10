@@ -26,7 +26,6 @@ import { getLocale, t, useLocale } from "../lib/i18n";
 import type { SyncFocus } from "../lib/sync";
 import type { AtlasTheme } from "../themes";
 import {
-  ChevronDown,
   ChevronRight,
   LayersIcon,
   MinusIcon,
@@ -80,8 +79,9 @@ interface HeroMapProps {
   countriesGeo: CountryCollection | null;
   theme: AtlasTheme;
   media: Media[];
-  /** True while an overlay (place detail / profile / ideas) is open or closing. */
-  overlayOpen: boolean;
+  /** True while something covers the map: an overlay (place detail, ideas)
+   * or another tab. Closes the map's own preview and layers menu. */
+  obscured: boolean;
   layers: MapLayers;
   onLayersChange: (next: MapLayers) => void;
   /** Shared Map ↔ Timeline focus (v1.3). The map responds when the Timeline
@@ -101,8 +101,6 @@ interface HeroMapProps {
   /** Caption for "Save map as image". */
   posterTitle: string;
   posterSubtitle: string;
-  /** Imperative "save map as image" request; nonce re-triggers. */
-  exportNonce?: number;
   onNotice?: (message: string) => void;
   /** False until Settings (theme, language, default position) are known; the
    * map is created only then, so it never paints the wrong basemap first. */
@@ -131,12 +129,6 @@ function webglAvailable(): boolean {
   }
 }
 
-/** Phones and tablets. Hover counts as well as the pointer: the Android
- *  emulator, for one, reports a fine pointer that cannot hover. */
-function touchFirst(): boolean {
-  return window.matchMedia("(hover: none), (pointer: coarse)").matches;
-}
-
 export default function HeroMap({
   places,
   visits,
@@ -145,7 +137,7 @@ export default function HeroMap({
   countriesGeo,
   theme,
   media,
-  overlayOpen,
+  obscured,
   layers,
   onLayersChange,
   focus = null,
@@ -157,7 +149,6 @@ export default function HeroMap({
   flyTo,
   posterTitle,
   posterSubtitle,
-  exportNonce = 0,
   onNotice,
   ready = true,
 }: HeroMapProps) {
@@ -172,24 +163,6 @@ export default function HeroMap({
   const previewRef = useRef<PreviewState | null>(null);
   const userMovedRef = useRef(false);
   const appliedThemeRef = useRef<string | null>(null);
-  // Strip camera (collapse → base, expand → back): the view to return to and
-  // the move waiting for the canvas to settle. A camera move the user asks for
-  // (drag, "show on map") cancels it.
-  const stripCameraRef = useRef<{
-    saved: { center: maplibregl.LngLat; zoom: number } | null;
-    pending: (() => void) | null;
-    timer: number | null;
-    /** The move in flight, re-aimed if the canvas resizes under it. */
-    active: { center: maplibregl.LngLatLike; zoom: number; end: number } | null;
-  }>({ saved: null, pending: null, timer: null, active: null });
-  const cancelStripCamera = useCallback(() => {
-    const cam = stripCameraRef.current;
-    if (cam.timer != null) window.clearTimeout(cam.timer);
-    cam.timer = null;
-    cam.pending = null;
-    cam.saved = null;
-    cam.active = null;
-  }, []);
   // True between a style's `style.load` and the next setStyle. Style-bound
   // layers are (re)added on this rather than isStyleLoaded(), which stays false
   // until every tile and the sprite have arrived — so additions right after a
@@ -219,7 +192,7 @@ export default function HeroMap({
   const wishCodes = useMemo(() => wishlistCountryCodes(places, visits, wishlist), [places, visits, wishlist]);
   // Residence-based route trajectory, derived in the domain layer (lib/routes)
   // and memoized: it only changes when Places/Visits change, never on map
-  // moves or the hero collapse scroll.
+  // moves.
   const trajectory = useMemo(() => getRouteTrajectory(places, visits), [places, visits]);
 
   // Latest values for map callbacks (kept stable across renders).
@@ -227,26 +200,13 @@ export default function HeroMap({
   contentRef.current = { theme, countryCodes, wishCodes, countriesGeo, layers, trajectory, markers };
   previewRef.current = preview;
 
-  // An overlay supersedes the map preview and the layers menu.
+  // An overlay or another tab supersedes the map preview and the layers menu.
   useEffect(() => {
-    if (overlayOpen) {
+    if (obscured) {
       setPreview(null);
       setLayersOpen(false);
     }
-  }, [overlayOpen]);
-
-  // The page scroll drives the hero collapse (PRODUCT_SPEC §18): once the map
-  // shrinks toward the strip, a marker's projected position is meaningless,
-  // so a lingering preview would float detached over the Journey.
-  useEffect(() => {
-    if (!preview && !layersOpen) return;
-    const onScroll = () => {
-      setPreview(null);
-      setLayersOpen(false);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [preview, layersOpen]);
+  }, [obscured]);
 
   // --- preview helpers (stable) ---
   const projectPreview = useCallback((m: MapMarker) => {
@@ -292,7 +252,6 @@ export default function HeroMap({
   const layoutLabels = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
-    const collapsed = document.documentElement.classList.contains("atlas-collapsed");
     const entries = Array.from(entriesRef.current.values());
     const W = map.getCanvas().clientWidth;
     const H = map.getCanvas().clientHeight;
@@ -309,7 +268,7 @@ export default function HeroMap({
     const wishes = wishEntriesRef.current.map((w) => ({ w, p: map.project(w.lngLat) }));
     // Vehicle badges on the routes (only those drawn at this zoom).
     const { layers: shown, trajectory: tr } = contentRef.current;
-    if (shown.routes && !collapsed) {
+    if (shown.routes) {
       // Zoom-dependent filters are evaluated at integer zoom levels.
       const z = Math.floor(map.getZoom());
       for (const f of tr.icons.features) {
@@ -319,10 +278,10 @@ export default function HeroMap({
       }
     }
     for (const { p } of wishes) taken.push({ x: p.x - 9, y: p.y - 9, w: 18, h: 18 });
-    // Floating chrome (map controls, top-bar actions) is an obstacle too, so a
-    // label never slides underneath a button.
+    // Floating chrome (map controls, top bar, tab bar) is an obstacle too, so
+    // a label never slides underneath a button.
     const box = map.getContainer().getBoundingClientRect();
-    for (const sel of [".atlas-map-controls", ".atlas-topbar__actions"]) {
+    for (const sel of [".atlas-map-controls", ".atlas-topbar__actions", ".atlas-tabbar"]) {
       const el = document.querySelector(sel);
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -343,8 +302,7 @@ export default function HeroMap({
       const left: Rect = { x: p.x - off - w, y: p.y - h / 2, w, h };
       const inView = (r: Rect) => r.x >= 4 && r.x + r.w <= W - 4 && r.y >= 4 && r.y + r.h <= H - 4;
       let side: "right" | "left" | null = null;
-      if (collapsed && !e.isCurrent) side = null;
-      else if (!hits(right) && (inView(right) || !inView(left))) side = "right";
+      if (!hits(right) && (inView(right) || !inView(left))) side = "right";
       else if (!hits(left) && inView(left)) side = "left";
       else if (e.isCurrent) side = "right"; // the current label is always shown
       e.el.classList.toggle("atlas-marker--label-left", side === "left");
@@ -359,8 +317,7 @@ export default function HeroMap({
       const left: Rect = { x: p.x - 13 - lw, y: p.y - h / 2, w: lw, h };
       const inView = (r: Rect) => r.x >= 4 && r.x + r.w <= W - 4 && r.y >= 4 && r.y + r.h <= H - 4;
       let side: "right" | "left" | null = null;
-      if (collapsed) side = null;
-      else if (!hits(right) && inView(right)) side = "right";
+      if (!hits(right) && inView(right)) side = "right";
       else if (!hits(left) && inView(left)) side = "left";
       w.el.classList.toggle("atlas-wishpin--label-left", side === "left");
       w.el.classList.toggle("atlas-wishpin--label-hidden", side === null);
@@ -400,7 +357,8 @@ export default function HeroMap({
       const H = map.getCanvas().clientHeight;
       const padding = {
         top: Math.round(H * 0.16) + 40,
-        bottom: Math.round(H * 0.16) + 60,
+        // the tab bar floats over the bottom of the map
+        bottom: Math.round(H * 0.12) + 110,
         left: Math.round(W * 0.14),
         right: Math.round(W * 0.14),
       };
@@ -504,8 +462,7 @@ export default function HeroMap({
       );
     }
     map.setLayoutProperty("routes-icons", "icon-image", ["concat", "atlas-mode-", ["get", "mode"], "-" + theme.id]);
-    const collapsed = document.documentElement.classList.contains("atlas-collapsed");
-    map.setLayoutProperty("routes-icons", "visibility", layers.routes && !collapsed ? "visible" : "none");
+    map.setLayoutProperty("routes-icons", "visibility", layers.routes ? "visible" : "none");
     scheduleLabels(); // vehicle badges are label obstacles
   }, [scheduleLabels]);
 
@@ -535,15 +492,8 @@ export default function HeroMap({
           style,
           center: initialCenter ?? EUROPE_CENTER,
           zoom: initialZoom ?? EUROPE_ZOOM,
-          // Wheel input over the hero map must scroll the page (it drives the
-          // collapse/expand transition), so scroll zoom is disabled; zoom is
-          // explicit intent: Ctrl+wheel (scoped below) or the +/− controls.
-          scrollZoom: false,
-          // The touch equivalent: one finger scrolls the page (the hero fills
-          // the screen, so there is nowhere else to swipe) and two fingers
-          // move the map.
-          cooperativeGestures: touchFirst(),
-          locale: { "CooperativeGesturesHandler.MobileHelpText": t("Use two fingers to move the map") },
+          // The map has its own tab: one finger pans, a pinch or the wheel zooms.
+          scrollZoom: true,
           // A flat 2D atlas: rotation and pitch are disabled at the gesture
           // level and clamped so the camera can never leave 2D.
           dragRotate: false,
@@ -594,7 +544,9 @@ export default function HeroMap({
       });
       map.on("dragstart", () => {
         userMovedRef.current = true;
-        cancelStripCamera();
+      });
+      map.on("zoomstart", (e) => {
+        if (e.originalEvent) userMovedRef.current = true;
       });
       map.on("move", () => {
         const prev = previewRef.current;
@@ -630,9 +582,6 @@ export default function HeroMap({
     // No map yet: creation reads the latest theme itself once it is ready.
     if (!map || appliedThemeRef.current === key) return;
     appliedThemeRef.current = key;
-    // MapLibre writes the two-finger hint once, at creation.
-    const hint = map.getCanvasContainer().querySelector(".maplibregl-mobile-message");
-    if (hint) hint.textContent = t("Use two fingers to move the map");
     let cancelled = false;
     loadThemeStyle(theme)
       .then((style) => {
@@ -713,90 +662,6 @@ export default function HeroMap({
     return () => window.clearTimeout(t);
   }, [theme.id, scheduleLabels]);
 
-  // Collapsing to the strip hides secondary labels and, as a subtle camera
-  // adjustment (VISUAL_SPEC §6), centres the strip on the current base so the
-  // contextual band always shows "where I am now". Expanding restores the
-  // camera the user left.
-  const currentLngLat = useMemo(() => {
-    const m = markers.find((x) => x.isCurrent);
-    return m ? ([m.place.coordinates.lng, m.place.coordinates.lat] as [number, number]) : null;
-  }, [markers]);
-  const currentRef = useRef(currentLngLat);
-  currentRef.current = currentLngLat;
-  useEffect(() => {
-    let collapsed = document.documentElement.classList.contains("atlas-collapsed");
-    let tracked: maplibregl.Map | null = null;
-    const cam = stripCameraRef.current;
-    // MapLibre animates the camera against a screen point taken at the start,
-    // so a canvas changing size underneath lands it somewhere else entirely.
-    // The move therefore waits until the canvas has stopped resizing with the
-    // scroll, and is re-aimed from where it is if a resize still catches it.
-    const move = (map: maplibregl.Map, center: maplibregl.LngLatLike, zoom: number, duration: number) => {
-      cam.active = { center, zoom, end: performance.now() + duration };
-      map.easeTo({ center, zoom, duration });
-    };
-    const arm = () => {
-      if (cam.timer != null) window.clearTimeout(cam.timer);
-      cam.timer = window.setTimeout(() => {
-        cam.timer = null;
-        const run = cam.pending;
-        cam.pending = null;
-        run?.();
-      }, 160);
-    };
-    const onResize = () => {
-      if (cam.pending) arm();
-      const a = cam.active;
-      const map = tracked;
-      if (!a || !map) return;
-      const left = a.end - performance.now();
-      if (left <= 0 && !map.isMoving()) {
-        cam.active = null;
-        return;
-      }
-      map.easeTo({ center: a.center, zoom: a.zoom, duration: Math.max(120, left), easing: (k) => 1 - (1 - k) * (1 - k) });
-    };
-    const obs = new MutationObserver(() => {
-      scheduleLabels();
-      const now = document.documentElement.classList.contains("atlas-collapsed");
-      if (now === collapsed) return;
-      collapsed = now;
-      const map = mapRef.current;
-      // Vehicles stay off the strip; its routes are context, not detail.
-      if (map?.getLayer("routes-icons")) {
-        const show = !now && contentRef.current.layers.routes;
-        map.setLayoutProperty("routes-icons", "visibility", show ? "visible" : "none");
-      }
-      const target = currentRef.current;
-      if (!map || !target) return;
-      if (tracked !== map) {
-        tracked?.off("resize", onResize);
-        map.on("resize", onResize);
-        tracked = map;
-      }
-      if (now) {
-        // Keep the view to return to, even if the strip formed again before
-        // the previous restore ran.
-        if (!cam.saved) cam.saved = { center: map.getCenter(), zoom: map.getZoom() };
-        const zoom = Math.max(3.4, cam.saved.zoom - 0.4);
-        cam.pending = () => move(map, target, zoom, 700);
-      } else if (cam.saved) {
-        const back = cam.saved;
-        cam.pending = () => {
-          cam.saved = null;
-          move(map, back.center, back.zoom, 600);
-        };
-      }
-      arm();
-    });
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => {
-      obs.disconnect();
-      tracked?.off("resize", onResize);
-      if (cam.timer != null) window.clearTimeout(cam.timer);
-    };
-  }, [scheduleLabels]);
-
   // --- wishlist pins (optional layer) ---
   useEffect(() => {
     const map = mapRef.current;
@@ -840,61 +705,6 @@ export default function HeroMap({
     scheduleLabels();
   }, [mapReady, markers, initialCenter, frameAtlas, scheduleLabels]);
 
-  // --- scoped Ctrl+wheel zoom (⌘+wheel on a Mac; a trackpad pinch arrives as Ctrl) ---
-  // Plain wheel scrolls the page (driving the hero collapse); Ctrl+wheel over
-  // the map zooms around the cursor and suppresses the browser's page zoom.
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      const map = mapRef.current;
-      if (!map) return;
-      e.preventDefault();
-      userMovedRef.current = true;
-      cancelStripCamera();
-      const value = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * 40 : e.deltaY;
-      if (value === 0) return;
-      const rate = 1 / 200;
-      let scale = 2 / (1 + Math.exp(-Math.abs(value * rate)));
-      if (value > 0) scale = 1 / scale;
-      const zoom = clamp(map.getZoom() * scale, map.getMinZoom(), map.getMaxZoom());
-      const rect = map.getCanvasContainer().getBoundingClientRect();
-      const around = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-      map.easeTo({ zoom, duration: 0, around });
-    };
-    container.addEventListener("wheel", onWheel, { passive: false });
-    return () => container.removeEventListener("wheel", onWheel);
-  }, [cancelStripCamera]);
-
-  // --- touch: the two-finger hint, for sideways drags only ---
-  // MapLibre raises it on every one-finger drag, including a plain vertical
-  // swipe that is scrolling the page. Only a sideways drag is an attempt to
-  // move the map; the class stays until the next touch so the hint can fade.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReady || !map.cooperativeGestures.isEnabled()) return;
-    const canvas = map.getCanvasContainer();
-    let start: { x: number; y: number } | null = null;
-    const onTouchStart = (e: TouchEvent) => {
-      canvas.classList.remove("atlas-pan-hint");
-      const p = e.touches[0];
-      start = e.touches.length === 1 && p ? { x: p.clientX, y: p.clientY } : null;
-    };
-    const onBlocked = (e: { originalEvent: Event }) => {
-      const p = (e.originalEvent as TouchEvent).touches?.[0];
-      if (!start || !p) return;
-      const dx = Math.abs(p.clientX - start.x);
-      if (dx > 8 && dx > Math.abs(p.clientY - start.y)) canvas.classList.add("atlas-pan-hint");
-    };
-    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-    map.on("cooperativegestureprevented", onBlocked);
-    return () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      map.off("cooperativegestureprevented", onBlocked);
-    };
-  }, [mapReady]);
-
   // --- Map ↔ Timeline synchronization (v1.3): marker emphasis ---
   useEffect(() => {
     const focusPlaceId = focus && entriesRef.current.has(focus.placeId) ? focus.placeId : null;
@@ -904,14 +714,13 @@ export default function HeroMap({
   }, [focus, markers, mapReady]);
 
   // --- Map ↔ Timeline synchronization (v1.3): restrained camera ---
-  // Only a timeline-initiated focus moves the camera, only when the Place is
-  // not comfortably visible, and never while the map is a collapsed strip.
+  // Only a timeline-initiated focus moves the camera, and only when the Place
+  // is not comfortably visible.
   useEffect(() => {
     if (!focus || focus.source !== "timeline" || !mapReady) return;
     const map = mapRef.current;
     const place = places.find((p) => p.id === focus.placeId);
     if (!map || !place || !entriesRef.current.has(focus.placeId)) return;
-    if (document.documentElement.classList.contains("atlas-collapsed")) return;
     const p = map.project([place.coordinates.lng, place.coordinates.lat]);
     const w = map.getCanvas().clientWidth;
     const h = map.getCanvas().clientHeight;
@@ -944,7 +753,6 @@ export default function HeroMap({
     const place = places.find((p) => p.id === flyTo.placeId);
     if (!map || !place) return;
     userMovedRef.current = true;
-    cancelStripCamera();
     const m = markers.find((x) => x.place.id === place.id);
     map.flyTo({
       center: [place.coordinates.lng, place.coordinates.lat],
@@ -955,7 +763,7 @@ export default function HeroMap({
     if (m) {
       map.once("moveend", () => expandMarker(m));
     }
-  }, [flyTo, mapReady, places, markers, expandMarker, cancelStripCamera]);
+  }, [flyTo, mapReady, places, markers, expandMarker]);
 
   // --- "Save map as image" (poster) ---
   const [exporting, setExporting] = useState(false);
@@ -966,9 +774,9 @@ export default function HeroMap({
     setLayersOpen(false);
     onNotice?.(t("Saving image…"));
     try {
-      // Let a camera move in flight (the strip → hero restore) finish first.
+      // Let a camera move in flight finish first.
       const deadline = performance.now() + 2500;
-      while (performance.now() < deadline && (stripCameraRef.current.pending || map.isMoving())) {
+      while (performance.now() < deadline && map.isMoving()) {
         await new Promise((r) => window.setTimeout(r, 80));
       }
       const labelSides = new Map<string, "left" | "right" | null>();
@@ -1002,24 +810,15 @@ export default function HeroMap({
     }
   }, [exporting, onNotice, posterTitle, posterSubtitle]);
 
-  const lastExportNonce = useRef(exportNonce);
-  useEffect(() => {
-    if (exportNonce === lastExportNonce.current) return;
-    lastExportNonce.current = exportNonce;
-    if (mapReady) exportPoster();
-  }, [exportNonce, mapReady, exportPoster]);
-
   const zoomBy = (delta: number) => {
     const map = mapRef.current;
     if (!map) return;
     userMovedRef.current = true;
-    cancelStripCamera();
     map.easeTo({ zoom: clamp(map.getZoom() + delta, map.getMinZoom(), map.getMaxZoom()), duration: 260 });
   };
 
   const resetView = () => {
     setPreview(null);
-    cancelStripCamera();
     frameAtlas(true);
   };
 
@@ -1035,13 +834,6 @@ export default function HeroMap({
     <div className="atlas-hero">
       <div ref={containerRef} className="atlas-hero__map" />
       <div className="atlas-hero__tint" aria-hidden="true" />
-
-      {!overlayOpen ? (
-        <div className="atlas-hero__hint" aria-hidden="true">
-          <span>{t("Scroll to explore my journey")}</span>
-          <ChevronDown size={16} className="atlas-hero__hint-chevron" />
-        </div>
-      ) : null}
 
       <div className="atlas-map-controls" role="group" aria-label={t("Map controls")}>
         <div className="atlas-map-controls__group atlas-glass">

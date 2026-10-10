@@ -1,7 +1,5 @@
-/* Top bar: wordmark (left) + quiet actions (right), floating over the map.
-   --hero-scroll (0 → 1, written by AtlasApp's scroll loop) fades the
-   wordmark away as the map collapses; html.atlas-collapsed reveals
-   "Expand map" once the contextual strip has formed. */
+/* Top bar on the map tab: wordmark (left) + search (right), floating over
+   the map. */
 
 .atlas-topbar {
   position: fixed;
@@ -25,19 +23,9 @@
   display: inline-flex;
   align-items: center;
   gap: 11px;
+  min-width: 0;
   padding: 4px 6px 4px 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
   color: var(--text-primary);
-  opacity: calc(1 - var(--hero-scroll, 0) * 3);
-  transform: translateY(calc(var(--hero-scroll, 0) * -14px));
-  transition: color 0.3s ease;
-}
-
-html.atlas-collapsed .atlas-topbar__brand {
-  pointer-events: none;
-  visibility: hidden;
 }
 
 .atlas-topbar__rose {
@@ -60,7 +48,6 @@ html.atlas-collapsed .atlas-topbar__brand {
   align-items: center;
   gap: 8px;
   margin-left: auto;
-  transform: translateY(calc(var(--hero-scroll, 0) * 2px));
 }
 
 /* Pill chip button (search, theme, expand map) */
@@ -106,73 +93,6 @@ html.atlas-collapsed .atlas-topbar__brand {
 .atlas-topbar__search-label {
   color: var(--text-secondary);
   margin-right: 6px;
-}
-
-.atlas-topbar__expand {
-  padding: 0 14px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-}
-
-html.atlas-collapsed .atlas-topbar__expand {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-}
-
-/* Profile pill: avatar + name (reference: header right). */
-.atlas-profile-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  height: 40px;
-  padding: 3px 16px 3px 3px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--shadow-md);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 550;
-  color: var(--text-primary);
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s var(--ease-out);
-}
-
-.atlas-profile-pill:hover {
-  border-color: var(--border-strong);
-  background: var(--surface);
-}
-
-.atlas-profile-pill:active {
-  transform: scale(0.98);
-}
-
-.atlas-profile-pill__avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex: none;
-}
-
-.atlas-profile-pill__avatar--initials {
-  display: grid;
-  place-items: center;
-  background: var(--now);
-  color: var(--on-accent);
-  font-size: 12.5px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.atlas-profile-pill__label {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* --- Theme picker ---------------------------------------------------------- */
@@ -269,17 +189,12 @@ html.atlas-collapsed .atlas-topbar__expand {
   .atlas-wordmark {
     font-size: 22px;
   }
-  .atlas-topbar__search-label,
-  .atlas-profile-pill__label,
-  .atlas-topbar__expand span {
+  .atlas-topbar__search-label {
     display: none;
   }
-  .atlas-topbar__search,
-  .atlas-topbar__expand {
+  .atlas-topbar__search {
     padding: 0;
-    width: 38px;
-  }
-  .atlas-profile-pill {
-    padding: 3px;
+    width: 44px;
+    height: 44px;
   }
 }
