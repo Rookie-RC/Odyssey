@@ -80,6 +80,7 @@ export const ZH: Record<string, string> = {
 
   // --- hero map ---
   "Scroll to explore my journey": "向下滚动，探索我的旅程",
+  "Use two fingers to move the map": "用两根手指移动地图",
   "Map controls": "地图控件",
   "Zoom in": "放大",
   "Zoom out": "缩小",

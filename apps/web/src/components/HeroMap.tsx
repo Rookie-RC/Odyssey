@@ -131,6 +131,12 @@ function webglAvailable(): boolean {
   }
 }
 
+/** Phones and tablets. Hover counts as well as the pointer: the Android
+ *  emulator, for one, reports a fine pointer that cannot hover. */
+function touchFirst(): boolean {
+  return window.matchMedia("(hover: none), (pointer: coarse)").matches;
+}
+
 export default function HeroMap({
   places,
   visits,
@@ -533,6 +539,11 @@ export default function HeroMap({
           // collapse/expand transition), so scroll zoom is disabled; zoom is
           // explicit intent: Ctrl+wheel (scoped below) or the +/− controls.
           scrollZoom: false,
+          // The touch equivalent: one finger scrolls the page (the hero fills
+          // the screen, so there is nowhere else to swipe) and two fingers
+          // move the map.
+          cooperativeGestures: touchFirst(),
+          locale: { "CooperativeGesturesHandler.MobileHelpText": t("Use two fingers to move the map") },
           // A flat 2D atlas: rotation and pitch are disabled at the gesture
           // level and clamped so the camera can never leave 2D.
           dragRotate: false,
@@ -619,6 +630,9 @@ export default function HeroMap({
     // No map yet: creation reads the latest theme itself once it is ready.
     if (!map || appliedThemeRef.current === key) return;
     appliedThemeRef.current = key;
+    // MapLibre writes the two-finger hint once, at creation.
+    const hint = map.getCanvasContainer().querySelector(".maplibregl-mobile-message");
+    if (hint) hint.textContent = t("Use two fingers to move the map");
     let cancelled = false;
     loadThemeStyle(theme)
       .then((style) => {
@@ -852,6 +866,34 @@ export default function HeroMap({
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
   }, [cancelStripCamera]);
+
+  // --- touch: the two-finger hint, for sideways drags only ---
+  // MapLibre raises it on every one-finger drag, including a plain vertical
+  // swipe that is scrolling the page. Only a sideways drag is an attempt to
+  // move the map; the class stays until the next touch so the hint can fade.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !map.cooperativeGestures.isEnabled()) return;
+    const canvas = map.getCanvasContainer();
+    let start: { x: number; y: number } | null = null;
+    const onTouchStart = (e: TouchEvent) => {
+      canvas.classList.remove("atlas-pan-hint");
+      const p = e.touches[0];
+      start = e.touches.length === 1 && p ? { x: p.clientX, y: p.clientY } : null;
+    };
+    const onBlocked = (e: { originalEvent: Event }) => {
+      const p = (e.originalEvent as TouchEvent).touches?.[0];
+      if (!start || !p) return;
+      const dx = Math.abs(p.clientX - start.x);
+      if (dx > 8 && dx > Math.abs(p.clientY - start.y)) canvas.classList.add("atlas-pan-hint");
+    };
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    map.on("cooperativegestureprevented", onBlocked);
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      map.off("cooperativegestureprevented", onBlocked);
+    };
+  }, [mapReady]);
 
   // --- Map ↔ Timeline synchronization (v1.3): marker emphasis ---
   useEffect(() => {

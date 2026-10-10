@@ -936,6 +936,30 @@ html.atlas-collapsed .atlas-hero .maplibregl-ctrl-attrib {
   display: none;
 }
 
+/* Touch: "use two fingers to move the map" (cooperative gestures). A solid
+   pill like the map controls (it sits over labels) instead of MapLibre's
+   dimmed map, and only after a sideways drag (HeroMap adds .atlas-pan-hint);
+   a vertical swipe just scrolls the page. */
+.atlas-hero .maplibregl-cooperative-gesture-screen {
+  visibility: hidden;
+  background: none;
+  font-size: 14px;
+}
+
+.atlas-hero .atlas-pan-hint .maplibregl-cooperative-gesture-screen {
+  visibility: visible;
+}
+
+.atlas-hero .maplibregl-cooperative-gesture-screen .maplibregl-mobile-message {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: var(--shadow-md);
+}
+
 /* --- WebGL error fallback --- */
 .atlas-map-error {
   position: absolute;
