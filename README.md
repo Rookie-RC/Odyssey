@@ -417,7 +417,7 @@ the phone app replaced the desktop release, and `scripts/build.sh` no longer
 builds `Atlas.exe`.
 
 **Phase 8 (design & experience — this release):** the Claude Design
-redesign (`docs/Yu's Atlas page redesign.zip`, references in `docs/design/`)
+redesign (references in `docs/design/`)
 carried through every surface, the theme system, bilingual UI, search, LAN
 sharing, thumbnails, backups UI and tests — see the sections below.
 
@@ -428,8 +428,7 @@ and cloud sync.
 ## Design
 
 The page follows the Claude Design reference composition
-(`docs/Yu's Atlas page redesign.zip` → `Yu's Atlas.dc.html`, plus
-`docs/design/light-reference.png` / `night-reference.png`) within the rules of
+(`docs/design/light-reference.png` / `night-reference.png`) within the rules of
 VISUAL_SPEC:
 
 - **Header** — compass-rose wordmark (named after the profile: “Yu’s Atlas”),
