@@ -471,7 +471,7 @@ A theme (`apps/web/src/themes/*.ts`) is pure tokens: colours, fonts
 map palette, relief, city lights, glass, markers, routes and two season palettes (line
 colours and legible season ink). `applyTheme()` writes them as CSS variables
 and snapshots them so the next load paints the right theme before React
-hydrates. Switch with the palette button, Profile or Settings.
+hydrates. Switch in the Profile or in Settings.
 
 ### Language
 

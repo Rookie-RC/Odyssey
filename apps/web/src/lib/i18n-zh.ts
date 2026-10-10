@@ -43,8 +43,6 @@ export const ZH: Record<string, string> = {
   "Airy parchment and soft relief": "轻盈的羊皮纸与柔和地形",
   "Deep navy and city lights": "深海军蓝与城市灯火",
   "Follows your system: Light or Night": "跟随系统：浅色或夜间",
-  "Choose a theme": "选择主题",
-  "Theme: {name}": "主题：{name}",
   "Themes change colour, type, texture, map style and photo treatment — never your data.":
     "主题会改变配色、字体、纹理、地图风格与照片处理——但绝不改变你的数据。",
 

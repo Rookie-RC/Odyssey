@@ -627,9 +627,6 @@ export default function AtlasApp() {
       <Topbar
         profile={profile}
         wordmark={wordmark}
-        theme={theme}
-        themePreference={themePref}
-        onThemeChange={changeTheme}
         onOpenProfile={openProfile}
         onOpenSearch={() => setSearchOpen(true)}
         onExpandMap={() => scrollToSection("map")}

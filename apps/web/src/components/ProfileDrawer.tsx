@@ -331,9 +331,7 @@ export default function ProfileDrawer({
                   })}
                 </h3>
                 <ThemePicker
-                  variant="inline"
                   preference={themePreference}
-                  active={theme}
                   onChange={onThemeChange}
                   className="atlas-profile__themes"
                 />

@@ -10,7 +10,6 @@ import type { Media, Place, Profile, Settings, Visit, Wishlist } from "../../lib
 import { HttpAtlasRepository, type AtlasRepository } from "../../lib/repository";
 import type { RuntimeInfo } from "../../lib/api";
 import type { AtlasTheme, ThemePreference } from "../../themes";
-import ThemePicker from "../ThemePicker";
 import { t, type LocalePreference } from "../../lib/i18n";
 import ManageOverview from "./ManageOverview";
 import ManagePlaces from "./ManagePlaces";
@@ -160,7 +159,6 @@ export default function ManageAtlas({
           {runtime?.mode === "cloud" ? <span className="atlas-manage__datadir">{runtime.user?.email}</span> : null}
         </div>
         <div className="atlas-manage__topbar-actions">
-          <ThemePicker preference={themePreference} active={theme} onChange={onThemeChange} />
           <Btn kind="primary" onClick={onExit}>
             {t("Back to Atlas")}
           </Btn>

@@ -200,15 +200,6 @@ export const SearchIcon = (p: IconProps) => (
   </Svg>
 );
 
-export const PaletteIcon = (p: IconProps) => (
-  <Svg {...p}>
-    <path d="M10 2.6a7.4 7.4 0 0 0 0 14.8c1.1 0 1.6-.8 1.3-1.7-.4-1.2.2-2.3 1.5-2.3h1.8a2.8 2.8 0 0 0 2.8-2.8c0-4.4-3.3-8-7.4-8Z" />
-    <circle cx="6.4" cy="9.4" r="1" fill="currentColor" stroke="none" />
-    <circle cx="8.6" cy="6" r="1" fill="currentColor" stroke="none" />
-    <circle cx="12.4" cy="6.2" r="1" fill="currentColor" stroke="none" />
-  </Svg>
-);
-
 export const SunMoonIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10 3a7 7 0 1 0 7 7 5.4 5.4 0 0 1-7-7Z" />

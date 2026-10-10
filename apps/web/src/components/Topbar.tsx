@@ -1,17 +1,12 @@
 "use client";
 
-import type { AtlasTheme, ThemePreference } from "../themes";
 import type { Profile } from "../lib/types";
-import ThemePicker from "./ThemePicker";
 import { CompassRose, ExpandIcon, SearchIcon } from "./Icons";
 import { t } from "../lib/i18n";
 
 interface TopbarProps {
   profile: Profile | null;
   wordmark: string;
-  theme: AtlasTheme;
-  themePreference: ThemePreference;
-  onThemeChange: (pref: ThemePreference) => void;
   onOpenProfile: () => void;
   onOpenSearch: () => void;
   onExpandMap: () => void;
@@ -35,9 +30,6 @@ export function profileInitials(name?: string): string {
 export default function Topbar({
   profile,
   wordmark,
-  theme,
-  themePreference,
-  onThemeChange,
   onOpenProfile,
   onOpenSearch,
   onExpandMap,
@@ -64,8 +56,6 @@ export default function Topbar({
           <SearchIcon size={16} />
           <span className="atlas-topbar__search-label">{t("Search")}</span>
         </button>
-
-        <ThemePicker preference={themePreference} active={theme} onChange={onThemeChange} glass />
 
         <button type="button" className="atlas-profile-pill atlas-glass" onClick={onOpenProfile}>
           {profile?.avatar ? (

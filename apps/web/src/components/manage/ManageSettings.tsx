@@ -47,9 +47,7 @@ export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
           {t("Themes change colour, type, texture, map style and photo treatment — never your data.")}
         </p>
         <ThemePicker
-          variant="inline"
           preference={themePreference}
-          active={theme}
           onChange={(pref) => {
             onThemeChange(pref);
             notify(

@@ -1,61 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { THEME_ORDER, themes, type AtlasTheme, type ThemePreference } from "../themes";
-import { PaletteIcon } from "./Icons";
 import { t } from "../lib/i18n";
 
 interface ThemePickerProps {
   preference: ThemePreference;
-  /** Theme currently in effect (Auto resolves to Light or Night). */
-  active: AtlasTheme;
   onChange: (pref: ThemePreference) => void;
-  /** Visual variant: a round icon button (top bar / strip) or an inline grid
-   * (Manage Atlas settings). */
-  variant?: "popover" | "inline";
   className?: string;
-  /** Liquid glass trigger and popover (when floating over the map). */
-  glass?: boolean;
 }
 
 const OPTIONS: ThemePreference[] = ["auto", ...THEME_ORDER];
 
-/** Theme picker (VISUAL_SPEC §26). Each option previews its own palette and
- * display face, so the choice is made by looking, not by reading. */
-export default function ThemePicker({
-  preference,
-  active,
-  onChange,
-  variant = "popover",
-  glass = false,
-  className,
-}: ThemePickerProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+/** Theme picker (VISUAL_SPEC §26), in the Profile and in Settings. Each option
+ * previews its own palette and display face, so the choice is made by
+ * looking, not by reading. */
+export default function ThemePicker({ preference, onChange, className }: ThemePickerProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("keydown", onKey, true);
-    // Focus the selected option so arrow keys work immediately.
-    requestAnimationFrame(() => {
-      listRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
-    });
-    return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("keydown", onKey, true);
-    };
-  }, [open]);
 
   const onListKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
@@ -66,54 +27,13 @@ export default function ThemePicker({
     items[(idx + delta + items.length) % items.length]?.focus();
   };
 
-  const grid = (
-    <div
-      ref={listRef}
-      className="atlas-theme-grid"
-      role="radiogroup"
-      aria-label={t("Theme")}
-      onKeyDown={onListKey}
-    >
-      {OPTIONS.map((opt) => (
-        <ThemeOption
-          key={opt}
-          pref={opt}
-          checked={preference === opt}
-          onSelect={() => {
-            onChange(opt);
-            if (variant === "popover") setOpen(false);
-          }}
-        />
-      ))}
-    </div>
-  );
-
-  if (variant === "inline") return <div className={className}>{grid}</div>;
-
   return (
-    <div ref={rootRef} className={"atlas-theme-picker " + (className ?? "")}>
-      <button
-        type="button"
-        className={"atlas-chip-btn" + (glass ? " atlas-glass" : "")}
-        aria-haspopup="true"
-        aria-expanded={open}
-        aria-label={t("Theme: {name}", {
-          name: preference === "auto" ? t("Auto ({theme})", { theme: t(active.label) }) : t(active.label),
-        })}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <PaletteIcon size={17} />
-      </button>
-      {open ? (
-        <div
-          className={"atlas-theme-popover" + (glass ? " atlas-glass atlas-glass--menu" : "")}
-          role="dialog" aria-label={t("Choose a theme")}>
-          <div className="atlas-theme-popover__head">
-            <span className="atlas-eyebrow">{t("Theme")}</span>
-          </div>
-          {grid}
-        </div>
-      ) : null}
+    <div className={className}>
+      <div ref={listRef} className="atlas-theme-grid" role="radiogroup" aria-label={t("Theme")} onKeyDown={onListKey}>
+        {OPTIONS.map((opt) => (
+          <ThemeOption key={opt} pref={opt} checked={preference === opt} onSelect={() => onChange(opt)} />
+        ))}
+      </div>
     </div>
   );
 }
