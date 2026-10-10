@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type RuntimeInfo } from "../lib/api";
-import { signOut } from "../lib/account";
 import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
 import { HttpAtlasRepository } from "../lib/repository";
 import type { SyncFocus } from "../lib/sync";
@@ -24,17 +23,15 @@ import WhereNext from "./WhereNext";
 import PlaceDetailSheet from "./PlaceDetailSheet";
 import ProfileDrawer from "./ProfileDrawer";
 import IdeasBoard from "./IdeasBoard";
-import CommandPalette, { type PaletteCommand } from "./CommandPalette";
+import SearchPanel from "./SearchPanel";
 import ShareDialog, { type ShareRequest } from "./ShareDialog";
 import Topbar from "./Topbar";
 import ManageAtlas from "./manage/ManageAtlas";
 import { HeartIcon, WifiIcon } from "./Icons";
 import {
-  THEME_ORDER,
   applyTheme,
   parseThemePreference,
   resolveTheme,
-  themes,
   type ThemePreference,
 } from "../themes";
 
@@ -115,7 +112,7 @@ export default function AtlasApp() {
   const [season, setSeason] = useState<Season>("summer");
   const [overlay, setOverlay] = useState<ActiveOverlay>(null);
   const [closingOverlay, setClosingOverlay] = useState(false);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   // Share as a ticket (a trip, a country, the whole journey).
   const [share, setShare] = useState<ShareRequest | null>(null);
   const closeShare = useCallback(() => setShare(null), []);
@@ -450,12 +447,12 @@ export default function AtlasApp() {
   // --- keyboard: Escape closes the open overlay ---
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (paletteOpen || share) return; // those dialogs own the keyboard
+      if (searchOpen || share) return; // those dialogs own the keyboard
       if (e.key === "Escape" && overlay) closeOverlay();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [overlay, closeOverlay, paletteOpen, share]);
+  }, [overlay, closeOverlay, searchOpen, share]);
 
   // Android back button (apps/android calls window.odysseyBack): close the
   // topmost layer, leave Manage Atlas, then return to the top of the page.
@@ -465,8 +462,8 @@ export default function AtlasApp() {
   useEffect(() => {
     const w = window as unknown as { odysseyBack?: () => boolean };
     w.odysseyBack = () => {
-      if (paletteOpen) {
-        setPaletteOpen(false);
+      if (searchOpen) {
+        setSearchOpen(false);
         return true;
       }
       if (share) {
@@ -501,7 +498,7 @@ export default function AtlasApp() {
     return () => {
       delete w.odysseyBack;
     };
-  }, [paletteOpen, share, overlay, closeOverlay, view, showToast]);
+  }, [searchOpen, share, overlay, closeOverlay, view, showToast]);
 
   // Lock page scroll while an overlay or Manage Atlas is open.
   useEffect(() => {
@@ -563,103 +560,6 @@ export default function AtlasApp() {
     : null;
 
   const overlayOpen = overlay != null || closingOverlay;
-
-  // --- command palette commands ---
-  const commands = useMemo<PaletteCommand[]>(() => {
-    const go = t("Go to");
-    const list: PaletteCommand[] = [
-      { id: "go-map", group: go, label: t("The map"), run: () => scrollToSection("map") },
-      { id: "go-journey", group: go, label: t("My journey"), run: () => scrollToSection("journey") },
-      { id: "go-wherenext", group: go, label: t("Where next"), run: () => scrollToSection("wherenext") },
-      { id: "ideas", group: go, label: t("All ideas"), run: () => openIdeas() },
-      { id: "profile", group: go, label: t("Profile"), run: openProfile },
-    ];
-    if (writable) {
-      list.push({ id: "manage", group: go, label: t("Manage Atlas"), run: () => openManage() });
-    }
-    for (const id of ["auto", ...THEME_ORDER] as ThemePreference[]) {
-      list.push({
-        id: "theme-" + id,
-        group: t("Theme"),
-        label: id === "auto" ? t("Auto (system)") : t(themes[id].label),
-        detail: id === "auto" ? t("Follows Light / Night") : t(themes[id].description),
-        active: themePref === id,
-        run: () => changeTheme(id),
-      });
-    }
-    for (const [id, label] of [
-      ["auto", t("Auto")],
-      ["en", "English"],
-      ["zh", "简体中文"],
-    ] as [LocalePreference, string][]) {
-      list.push({
-        id: "lang-" + id,
-        group: t("Language"),
-        label,
-        detail: id === "auto" ? t("Follows your system") : undefined,
-        active: localePref === id,
-        run: () => changeLanguage(id),
-      });
-    }
-    list.push(
-      {
-        id: "layer-routes",
-        group: t("Map"),
-        label: layers.routes ? t("Hide routes") : t("Show routes"),
-        run: () => changeLayers({ ...layers, routes: !layers.routes }),
-      },
-      {
-        id: "layer-wishlist",
-        group: t("Map"),
-        label: layers.wishlist ? t("Hide wishlist pins") : t("Show wishlist pins"),
-        run: () => changeLayers({ ...layers, wishlist: !layers.wishlist }),
-      },
-      {
-        id: "layer-countries",
-        group: t("Map"),
-        label: layers.countries ? t("Hide visited countries") : t("Show visited countries"),
-        run: () => changeLayers({ ...layers, countries: !layers.countries }),
-      },
-      {
-        id: "export-poster",
-        group: t("Map"),
-        label: t("Save map as image"),
-        run: () => {
-          // Capture the full hero, not a half-expanded strip (the map then
-          // waits for its camera to settle back from the strip view).
-          scrollToSection("map");
-          whenAtTop(() => setExportNonce((n) => n + 1));
-        },
-      }
-    );
-    if (runtime?.mode === "cloud" && runtime.user) {
-      list.push({ id: "sign-out", group: t("Account"), label: t("Sign out"), detail: runtime.user.email, run: () => signOut() });
-    }
-    if (visits.length > 0) {
-      list.push(
-        { id: "share-journey", group: t("Share"), label: t("Share my journey"), detail: t("As an atlas pass"), run: () => setShare({ scope: "journey" }) },
-        { id: "share-trip", group: t("Share"), label: t("Share a trip"), detail: t("As a boarding pass"), run: () => setShare({ scope: "trip" }) },
-        { id: "share-country", group: t("Share"), label: t("Share a country"), detail: t("Every city there, on one pass"), run: () => setShare({ scope: "country" }) }
-      );
-    }
-    return list;
-    // locale: labels are translated at build time of the list
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    writable,
-    runtime,
-    themePref,
-    localePref,
-    locale,
-    layers,
-    changeTheme,
-    changeLanguage,
-    changeLayers,
-    openIdeas,
-    openProfile,
-    scrollToSection,
-    visits.length,
-  ]);
 
   const remote = runtime?.remote === true;
   const posterSubtitle = useMemo(
@@ -752,7 +652,7 @@ export default function AtlasApp() {
         themePreference={themePref}
         onThemeChange={changeTheme}
         onOpenProfile={openProfile}
-        onOpenSearch={() => setPaletteOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
         onExpandMap={() => scrollToSection("map")}
       />
 
@@ -820,21 +720,20 @@ export default function AtlasApp() {
         />
       ) : null}
 
-      {paletteOpen ? (
-        <CommandPalette
+      {searchOpen ? (
+        <SearchPanel
           places={places}
           visits={visits}
           wishlist={wishlist}
           media={media}
           profile={profile}
-          commands={commands}
-          onClose={() => setPaletteOpen(false)}
+          onClose={() => setSearchOpen(false)}
           onOpenPlace={(id) => {
-            setPaletteOpen(false);
+            setSearchOpen(false);
             openPlace(id);
           }}
           onShowOnMap={(id) => {
-            setPaletteOpen(false);
+            setSearchOpen(false);
             showOnMap(id);
           }}
         />

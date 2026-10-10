@@ -219,25 +219,6 @@ html[data-theme="film"] .atlas-date {
   overflow-wrap: break-word;
 }
 
-/* Keyboard hint chips (⌘K, /, ?) */
-.atlas-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  background: var(--surface-elevated);
-  color: var(--text-secondary);
-  font-family: var(--font-ui);
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 1;
-}
-
 /* Round icon button used across the Atlas (arrows, close, map controls). */
 .atlas-icon-btn {
   display: inline-grid;
@@ -399,7 +380,7 @@ html[data-theme="film"] .atlas-date {
    draw a focus ring nobody asked for); keyboard users Tab onwards. */
 .atlas-sheet:focus,
 .atlas-dialog:focus,
-.atlas-palette:focus {
+.atlas-search:focus {
   outline: none;
 }
 

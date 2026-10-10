@@ -96,12 +96,12 @@ interface HeroMapProps {
   /** Optional default map position from Settings (PRODUCT_SPEC §34). */
   initialCenter?: [number, number] | null;
   initialZoom?: number | null;
-  /** Imperative "show on map" request (command palette); nonce re-triggers. */
+  /** Imperative "show on map" request (search); nonce re-triggers. */
   flyTo?: { placeId: string; nonce: number } | null;
   /** Caption for "Save map as image". */
   posterTitle: string;
   posterSubtitle: string;
-  /** Imperative "save map as image" request (command palette); nonce re-triggers. */
+  /** Imperative "save map as image" request; nonce re-triggers. */
   exportNonce?: number;
   onNotice?: (message: string) => void;
   /** False until Settings (theme, language, default position) are known; the
@@ -937,7 +937,7 @@ export default function HeroMap({
     emphasizedSegIdRef.current = segId;
   }, [focus, layers.routes, trajectory, mapReady, styleGen]);
 
-  // --- "show on map" (command palette) ---
+  // --- "show on map" (search) ---
   useEffect(() => {
     if (!flyTo || !mapReady) return;
     const map = mapRef.current;

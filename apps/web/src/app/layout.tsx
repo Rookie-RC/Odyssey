@@ -22,7 +22,7 @@ import "../styles/map.css";
 import "../styles/journey.css";
 import "../styles/wherenext.css";
 import "../styles/overlays.css";
-import "../styles/palette.css";
+import "../styles/search.css";
 import "../styles/glass.css";
 import "../styles/manage.css";
 import "../styles/auth.css";
