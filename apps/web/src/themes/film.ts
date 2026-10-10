@@ -53,7 +53,6 @@ export const filmTheme: AtlasTheme = {
     saturate: 1.2,
     highlight: "rgba(255, 250, 240, 0.85)",
     edge: "rgba(255, 247, 232, 0.3)",
-    refraction: 7,
   },
   image: {
     filter: "sepia(0.16) saturate(0.86) contrast(1.06) brightness(1.03) hue-rotate(-4deg)",

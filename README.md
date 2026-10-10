@@ -54,7 +54,7 @@ Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一�
 
 - **五套主题 + 自动**：浅色、夜间（城市灯火）、手账（米色纸与墨迹）、极简（生成色与朱印）、胶片（颗粒与日期印记）。主题会改变配色、字体、纹理、地图风格与照片处理，但不改变数据。
 - **地图**：去过的地点插一面小国旗，去过的国家实心着色、想去的国家斜线标出；每次旅行可选交通方式（飞机为默认、火车、大巴、自驾），路线分别画成虚线航线、铁轨、公路，中点显示对应的交通工具。
-- **液态玻璃（Liquid Glass）**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的玻璃，在 Chrome / Edge 和安卓 App 中还会折射下方的地图；内容本身仍是纸面。
+- **磨砂玻璃**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的磨砂玻璃；内容本身仍是纸面。
 - **中英文界面**：在个人主页或设置中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
 - **搜索**地点、回忆与心愿、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
 - **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」和个人主页（整个旅程或点国旗）；可下载、复制或调用系统分享。图片在本机生成，不会上传。
@@ -452,10 +452,8 @@ VISUAL_SPEC:
   dreaming of*, and the *All ideas* board.
 - **Liquid glass** — chrome that floats over the world (header pills, map
   controls and their menus, actions over photographs) is a pane of glass:
-  tinted, frosted, with a specular rim. In Chromium (Chrome, Edge, the
-  Android app's WebView) the rim also refracts what lies beneath, from a displacement
-  map drawn per element size (`lib/liquid-glass.ts`); other engines keep the
-  frosted pane, and *reduce transparency* turns it solid. Content — timeline,
+  tinted, frosted, with a specular rim; *reduce transparency* turns it
+  solid. Content — timeline,
   cards, sheets — stays on paper, so the two never compete. Each theme tunes
   its glass (Minimal keeps a flat frosted pane), and a test keeps text on
   glass legible over every part of the map.

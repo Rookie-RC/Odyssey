@@ -52,7 +52,6 @@ export const journalTheme: AtlasTheme = {
     saturate: 1.25,
     highlight: "rgba(255, 252, 244, 0.95)",
     edge: "rgba(255, 249, 235, 0.35)",
-    refraction: 7,
   },
   image: { filter: "sepia(0.1) saturate(0.92) contrast(1.02)", frame: "4px solid #FFFCF5" },
   map: {

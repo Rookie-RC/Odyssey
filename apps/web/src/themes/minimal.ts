@@ -45,7 +45,7 @@ export const minimalTheme: AtlasTheme = {
     lg: "0 20px 48px rgba(20, 20, 18, 0.09)",
   },
   texture: { paper: TEXTURE.paper, paperOpacity: 0.04, grain: TEXTURE.none, grainOpacity: 0 },
-  // Minimal keeps a flat, frosted pane: no refraction, little tint play.
+  // Minimal keeps a flat, frosted pane with little tint play.
   glass: {
     tint: "rgba(252, 251, 248, 0.8)",
     tintHover: "rgba(252, 251, 248, 0.94)",
@@ -53,7 +53,6 @@ export const minimalTheme: AtlasTheme = {
     saturate: 1.1,
     highlight: "rgba(255, 255, 255, 0.7)",
     edge: "rgba(255, 255, 255, 0.2)",
-    refraction: 0,
   },
   image: { filter: "saturate(0.86) contrast(1.02)", frame: "none" },
   map: {

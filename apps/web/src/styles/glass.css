@@ -1,9 +1,7 @@
 /* Liquid glass (themes/types.ts → glass).
    Reserved for chrome that floats over the world — the top-bar pills, the map
    controls and their menus, actions laid over photographs. Content stays on
-   paper. Everywhere: a frosted, tinted pane with a specular rim. Where the
-   engine supports it, lib/liquid-glass.ts also bends the backdrop at the rim
-   (--glass-filter, set per element). */
+   paper. A frosted, tinted pane with a specular rim. */
 
 .atlas-glass {
   --glass-frost: blur(var(--glass-blur, 8px)) saturate(var(--glass-saturate, 1.5));
@@ -16,7 +14,7 @@
     0 10px 28px -12px rgba(20, 16, 10, 0.32), 0 2px 6px -2px rgba(20, 16, 10, 0.12);
   background: var(--glass-sheen), var(--glass-tint);
   -webkit-backdrop-filter: var(--glass-frost);
-  backdrop-filter: var(--glass-filter, var(--glass-frost));
+  backdrop-filter: var(--glass-frost);
   border-color: color-mix(in srgb, var(--glass-highlight) 45%, transparent);
   box-shadow: var(--glass-shadow);
 }

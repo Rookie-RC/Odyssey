@@ -8,7 +8,6 @@ import type { SyncFocus } from "../lib/sync";
 import type { TimelineNode } from "../lib/timeline";
 import { seasonFromMonth } from "../lib/timeline";
 import { atlasFacts, atlasFactsLine, atlasWordmark } from "../lib/domain";
-import { startLiquidGlass, type LiquidGlass } from "../lib/liquid-glass";
 import {
   LocaleContext,
   parseLocalePreference,
@@ -236,21 +235,9 @@ export default function AtlasApp() {
   // --- apply theme tokens ---
   // Not before the stored preference is known: the boot script has already
   // painted the last-used theme, and the Light default would flash over it.
-  // Liquid glass panes follow the theme's refraction and corner radii.
-  const glassRef = useRef<LiquidGlass | null>(null);
   useEffect(() => {
-    if (!loaded) return;
-    applyTheme(theme);
-    if (glassRef.current) glassRef.current.update(theme.glass.refraction);
-    else glassRef.current = startLiquidGlass(theme.glass.refraction);
+    if (loaded) applyTheme(theme);
   }, [theme, loaded]);
-  useEffect(
-    () => () => {
-      glassRef.current?.stop();
-      glassRef.current = null;
-    },
-    []
-  );
 
   const wordmark = atlasWordmark(profile?.name);
   useEffect(() => {

@@ -51,7 +51,6 @@ export const nightTheme: AtlasTheme = {
     saturate: 1.5,
     highlight: "rgba(255, 255, 255, 0.26)",
     edge: "rgba(255, 255, 255, 0.08)",
-    refraction: 9,
   },
   image: { filter: "saturate(0.95)", frame: "none" },
   map: {

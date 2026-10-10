@@ -143,9 +143,6 @@ export interface AtlasTheme {
     /** Specular rim: the bright upper edge and the softer lower one. */
     highlight: string;
     edge: string;
-    /** How far the backdrop bends at the rim, in px. 0 keeps a quiet frosted
-     * pane. Refraction needs Chromium; other engines show the frost alone. */
-    refraction: number;
   };
   image: {
     /** CSS filter applied to photographs (memory fragments, hero images). */

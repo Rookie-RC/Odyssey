@@ -52,7 +52,6 @@ export const lightTheme: AtlasTheme = {
     saturate: 1.7,
     highlight: "rgba(255, 255, 255, 0.9)",
     edge: "rgba(255, 255, 255, 0.3)",
-    refraction: 9,
   },
   image: { filter: "none", frame: "none" },
   map: {
