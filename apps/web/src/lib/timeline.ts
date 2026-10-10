@@ -10,17 +10,22 @@
 //     the next occurrence of that season
 //   - countries are never Timeline nodes (they are Place metadata only)
 import type {
+  Activity,
   Inspiration,
   Media,
   Place,
   Profile,
   Season,
   TargetTime,
+  Transport,
   Visit,
   VisitHighlight,
   VisitType,
   Wishlist,
 } from "./types";
+import type { AbroadBand, AbroadMilestone } from "./abroad";
+import { primaryActivity } from "./activity";
+import { transportOf } from "./transport";
 import { monthYear, t } from "./i18n";
 
 export type TimelineNodeKind = "past" | "now" | "future";
@@ -35,6 +40,12 @@ export interface TimelineNode {
   season: Season | null;
   /** Human label for the point in time, e.g. "May 2025", "Now", "Summer 2027". */
   dateLabel: string;
+  /** False for a visit without any date: it gets a synthetic early position
+   * and the label "Earlier", and belongs to no year. */
+  dated: boolean;
+  /** The Visit's own dates (past/now nodes), for showing its whole range. */
+  startDate?: string;
+  endDate?: string;
   /** Secondary state label, e.g. "Trip", "Living here", "Wishlist". */
   metaLabel: string;
   withFriends?: boolean;
@@ -44,9 +55,10 @@ export interface TimelineNode {
   inspirations?: Inspiration[];
   priority?: number;
   visitType?: VisitType;
-  /** Visit record id when this node is a Visit (past/now nodes). Used by the
-   * Map ↔ Timeline synchronization (v1.3) to link a focused node back to its
-   * Visit for the multiple-Visit rule and route-segment emphasis. */
+  /** How a trip was made and what it was for; unset for a residence. */
+  transport?: Transport;
+  activity?: Activity;
+  /** Visit record id when this node is a Visit (past/now nodes). */
   visitId?: string;
   mediaIds: string[];
   /** Visual weight of a past node (current > lived > trip > ... > transit). */
@@ -237,11 +249,16 @@ export function getTimelineItems(
           : v.endDate
             ? formatMonthYear(v.endDate)
             : t("Earlier"),
+      dated: isNow || vt != null,
+      startDate: v.startDate,
+      endDate: v.endDate,
       metaLabel: isNow ? t("Living here") : visitTypeLabel(v.visitType),
       withFriends: v.withFriends,
       highlights: v.highlights,
       reflection: v.reflection,
       visitType: v.visitType,
+      transport: v.visitType === "lived" ? undefined : transportOf(v),
+      activity: v.visitType === "lived" ? undefined : primaryActivity(v) ?? undefined,
       visitId: v.id,
       mediaIds: v.mediaIds ?? [],
       depthRank: isNow ? 6 : VISIT_RANK[v.visitType],
@@ -259,6 +276,7 @@ export function getTimelineItems(
         time: nowTime,
         season: nowSeason,
         dateLabel: t("Now"),
+        dated: true,
         metaLabel: t("Current base"),
         mediaIds: [],
         depthRank: 6,
@@ -280,6 +298,7 @@ export function getTimelineItems(
       time,
       season,
       dateLabel,
+      dated: true,
       metaLabel: t("Wishlist"),
       why: w.why,
       inspirations: w.inspirations,
@@ -310,4 +329,195 @@ export function getPrimaryMedia(mediaIds: string[], media: Media[]): Media | nul
     if (m && m.type === "image") return m;
   }
   return null;
+}
+
+// --- The Journey as a vertical list ---
+//
+// Reading order, top to bottom: NOW, what lies ahead (nearest first), then the
+// past (newest first) under year headings. The line therefore runs as two
+// threads: NOW and the future, then the past. Study-abroad milestones are
+// entries like any other, and the time abroad tints the stretches of line it
+// covers.
+
+interface JourneyEntryBase {
+  /** The node's or milestone's id. */
+  id: string;
+  time: number;
+  /** Season tinting the line at this entry (null = neutral). */
+  season: Season | null;
+  /** First entry of a run of the same season in the past: the list names the
+   * season there. */
+  seasonStart: boolean;
+  /** The line from the entry above / to the entry below runs through time
+   * abroad. */
+  abroadUp: boolean;
+  abroadDown: boolean;
+}
+
+export type JourneyEntry = JourneyEntryBase &
+  ({ node: TimelineNode; milestone?: undefined } | { milestone: AbroadMilestone; node?: undefined });
+
+export interface JourneyYear {
+  /** Calendar year; null for visits without any date. */
+  year: number | null;
+  entries: JourneyEntry[];
+}
+
+export interface Journey {
+  /** The current base (null when there is none). */
+  now: JourneyEntry | null;
+  /** Everything after NOW, nearest first. */
+  ahead: JourneyEntry[];
+  /** Everything before it, newest first; undated visits come last. */
+  past: JourneyYear[];
+}
+
+/** The meteorological season of a fractional year. */
+function seasonAt(time: number): Season {
+  const year = Math.floor(time);
+  return seasonFromMonth(Math.floor((time - year) * 12) + 1);
+}
+
+// Winter spans New Year: December belongs to the following winter.
+function seasonRun(node: TimelineNode): string | null {
+  if (!node.season) return null;
+  const year = Math.floor(node.time);
+  const month = Math.floor((node.time - year) * 12) + 1;
+  return node.season + (node.season === "winter" && month === 12 ? year + 1 : year);
+}
+
+/** Fraction (0–1) of the time between `a` and `b` spent abroad. */
+export function abroadFraction(a: number, b: number, bands: AbroadBand[]): number {
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  let spent = 0;
+  for (const band of bands) {
+    // The band minus the time back home.
+    const stays: [number, number][] = [];
+    let from = band.from;
+    for (const [g1, g2] of band.gaps) {
+      if (g1 > from) stays.push([from, g1]);
+      from = Math.max(from, g2);
+    }
+    if (band.to >= from) stays.push([from, band.to]);
+    for (const [s1, s2] of stays) {
+      if (hi === lo) {
+        if (lo >= s1 && lo <= s2) return 1;
+      } else {
+        spent += Math.max(0, Math.min(hi, s2) - Math.max(lo, s1));
+      }
+    }
+  }
+  return hi === lo ? 0 : Math.min(1, spent / (hi - lo));
+}
+
+function nodeEntry(node: TimelineNode): JourneyEntry {
+  return {
+    id: node.id,
+    time: node.time,
+    season: node.season,
+    seasonStart: false,
+    abroadUp: false,
+    abroadDown: false,
+    node,
+  };
+}
+
+function milestoneEntry(milestone: AbroadMilestone): JourneyEntry {
+  return {
+    id: milestone.id,
+    time: milestone.time,
+    season: seasonAt(milestone.time),
+    seasonStart: false,
+    abroadUp: false,
+    abroadDown: false,
+    milestone,
+  };
+}
+
+// Nodes (already in order) and milestones share one axis. A milestone goes
+// before the nodes at a later time — and, for an arrival, before those at the
+// same time: you land, then you live there.
+function interleave(nodes: TimelineNode[], milestones: AbroadMilestone[]): JourneyEntry[] {
+  const pending = [...milestones].sort((a, b) => a.time - b.time);
+  const out: JourneyEntry[] = [];
+  for (const node of nodes) {
+    while (
+      pending.length > 0 &&
+      (pending[0].time < node.time || (pending[0].time === node.time && pending[0].kind === "arrive"))
+    ) {
+      out.push(milestoneEntry(pending.shift()!));
+    }
+    out.push(nodeEntry(node));
+  }
+  for (const m of pending) out.push(milestoneEntry(m));
+  return out;
+}
+
+// A stretch of line is "abroad" when most of the time it spans was; undated
+// visits sit at a made-up time and never are.
+function markAbroad(thread: JourneyEntry[], bands: AbroadBand[]): void {
+  for (let i = 0; i + 1 < thread.length; i++) {
+    const a = thread[i];
+    const b = thread[i + 1];
+    if ((a.node && !a.node.dated) || (b.node && !b.node.dated)) continue;
+    if (abroadFraction(a.time, b.time, bands) < 0.5) continue;
+    a.abroadDown = true;
+    b.abroadUp = true;
+  }
+}
+
+function markSeasonStarts(thread: JourneyEntry[]): void {
+  let last: string | null = null;
+  for (const e of thread) {
+    const run = e.node ? seasonRun(e.node) : null;
+    if (run == null || run === last) continue;
+    last = run;
+    e.seasonStart = true;
+  }
+}
+
+/** Lays the timeline nodes (as getTimelineItems returns them) and the
+ * study-abroad milestones out as the Journey list. What is ahead is judged by
+ * time, not by node kind, so a wish for the rest of this year still counts. */
+export function getJourney(
+  nodes: TimelineNode[],
+  nowTime: number,
+  milestones: AbroadMilestone[] = [],
+  bands: AbroadBand[] = []
+): Journey {
+  // Every Visit to the current base is a NOW node; the one you live in anchors
+  // the list, any other sits with the past at the top of this year.
+  const nowNode =
+    nodes.find((n) => n.kind === "now" && n.visitType === "lived") ?? nodes.find((n) => n.kind === "now") ?? null;
+  const others = nodes.filter((n) => n !== nowNode);
+  const isAhead = (n: TimelineNode) => n.kind === "future" || n.time > nowTime;
+
+  const now = nowNode ? nodeEntry(nowNode) : null;
+  const ahead = interleave(
+    others.filter(isAhead),
+    milestones.filter((m) => m.time > nowTime)
+  );
+  markAbroad(now ? [now, ...ahead] : ahead, bands);
+
+  const behind = interleave(
+    others.filter((n) => !isAhead(n)),
+    milestones.filter((m) => m.time <= nowTime)
+  ).reverse();
+  const dated = behind.filter((e) => !e.node || e.node.dated);
+  const undated = behind.filter((e) => e.node && !e.node.dated);
+  const thread = [...dated, ...undated];
+  markAbroad(thread, bands);
+  markSeasonStarts(thread);
+
+  const past: JourneyYear[] = [];
+  for (const entry of dated) {
+    const year = Math.floor(entry.time);
+    const group = past[past.length - 1];
+    if (group && group.year === year) group.entries.push(entry);
+    else past.push({ year, entries: [entry] });
+  }
+  if (undated.length > 0) past.push({ year: null, entries: undated });
+
+  return { now, ahead, past };
 }
