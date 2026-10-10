@@ -148,7 +148,7 @@ export interface AbroadPeriod {
 }
 
 export interface Settings {
-  /** Theme preference: "auto" | "light" | "night" | "journal" | "minimal" | "film". */
+  /** Theme preference: "auto" | "light" | "night" (anything else reads as "light"). */
   theme?: string;
   geocodingProvider?: string;
   defaultMapPosition?: { lat: number; lng: number };

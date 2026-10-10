@@ -166,7 +166,8 @@ describe("theme map adaptation", () => {
     expect(order).toContain("atlas-city-glow");
     expect(order.indexOf("atlas-city-glow")).toBeLessThan(order.indexOf(LAYER_BEFORE.routes));
     expect(ids(adaptBaseStyle(base, themes.light))).not.toContain("atlas-city-glow");
-    expect(ids(adaptBaseStyle(base, themes.minimal))).not.toContain("atlas-relief");
+    const flat = { ...themes.light, map: { ...themes.light.map, hillshade: null } };
+    expect(ids(adaptBaseStyle(base, flat))).not.toContain("atlas-relief");
   });
 
   test("the Chinese interface names places from name:zh", () => {
@@ -177,9 +178,8 @@ describe("theme map adaptation", () => {
     );
   });
 
-  test("seas are named at hero zoom; Minimal hides country names", () => {
+  test("seas are named at hero zoom; disputed borders stay", () => {
     expect(layer(adaptBaseStyle(base, themes.light), "watername_sea").minzoom).toBeLessThan(5);
-    expect(layer(adaptBaseStyle(base, themes.minimal), "place_country_1").layout?.visibility).toBe("none");
     expect(ids(adaptBaseStyle(base, themes.light))).toContain("boundary_country_disputed");
   });
 });

@@ -106,7 +106,9 @@ describe.each(THEME_ORDER.map((id) => [id, themes[id]] as [string, AtlasTheme]))
 test("Auto resolves to Light or Night; unknown preferences fall back to Light", () => {
   expect(resolveTheme("auto", true).id).toBe("night");
   expect(resolveTheme("auto", false).id).toBe("light");
-  expect(resolveTheme("film", true).id).toBe("film");
+  expect(resolveTheme("night", false).id).toBe("night");
   expect(parseThemePreference("sepia-ish")).toBe("light");
-  expect(parseThemePreference("journal")).toBe("journal");
+  // The retired themes read as Light.
+  expect(parseThemePreference("journal")).toBe("light");
+  expect(resolveTheme(parseThemePreference("film"), true).id).toBe("light");
 });

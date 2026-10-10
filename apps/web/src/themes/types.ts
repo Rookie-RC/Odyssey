@@ -7,7 +7,7 @@
 // theme; only colour, typography, geometry, texture, map style, marker
 // appearance, season palette and image treatment change.
 
-export type ThemeId = "light" | "night" | "journal" | "minimal" | "film";
+export type ThemeId = "light" | "night";
 
 /** What the user picks. "auto" follows the OS light/dark preference and
  * resolves to the Light or Night theme. */
@@ -45,8 +45,6 @@ export interface MapPalette {
   labelMinor: string;
   labelRoad: string;
   labelHalo: string;
-  /** Hide basemap country names entirely (very quiet themes). */
-  hideCountryLabels?: boolean;
 }
 
 export interface Hillshade {
@@ -94,7 +92,7 @@ export interface AtlasTheme {
     nowSoft: string;
     scrim: string;
     danger: string;
-    /** Colour of small date stamps (Film prints them like a camera imprint). */
+    /** Colour of small date stamps. */
     dateInk: string;
   };
   fonts: {
@@ -126,7 +124,7 @@ export interface AtlasTheme {
     /** Paper laid *under* the content (only the page ground shows it). */
     paper: string;
     paperOpacity: number;
-    /** Grain laid *over* everything, photographs included (film look). */
+    /** Grain laid *over* everything, photographs included. */
     grain: string;
     grainOpacity: number;
   };
@@ -134,7 +132,7 @@ export interface AtlasTheme {
    * and photographs (top-bar pills, map controls, photo actions). Content
    * itself stays on paper surfaces. */
   glass: {
-    /** Tint laid over the frosted, refracted backdrop; a stronger one on hover. */
+    /** Tint laid over the frosted backdrop; a stronger one on hover. */
     tint: string;
     tintHover: string;
     /** Backdrop frost: blur radius (px) and saturation boost. */
@@ -181,8 +179,6 @@ export interface AtlasTheme {
   };
   routes: {
     line: string;
-    /** Optional dash pattern (Journal draws itineraries like ink dashes). */
-    dash?: [number, number];
   };
   /** Season semantics are stable across themes (spring green, summer gold,
    * autumn amber, winter blue); only luminance/saturation shift (§20).

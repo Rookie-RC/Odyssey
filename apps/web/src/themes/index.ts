@@ -1,29 +1,23 @@
 import type { AtlasTheme, MapPalette, ThemeId, ThemePreference } from "./types";
 import { lightTheme } from "./light";
 import { nightTheme } from "./night";
-import { journalTheme } from "./journal";
-import { minimalTheme } from "./minimal";
-import { filmTheme } from "./film";
 
 export type { AtlasTheme, MapPalette, ThemeId, ThemePreference };
 
 export const themes: Record<ThemeId, AtlasTheme> = {
   light: lightTheme,
   night: nightTheme,
-  journal: journalTheme,
-  minimal: minimalTheme,
-  film: filmTheme,
 };
 
 /** Picker order. */
-export const THEME_ORDER: ThemeId[] = ["light", "night", "journal", "minimal", "film"];
+export const THEME_ORDER: ThemeId[] = ["light", "night"];
 
 export function isThemePreference(v: unknown): v is ThemePreference {
   return v === "auto" || (typeof v === "string" && v in themes);
 }
 
-/** Settings may carry any string (older atlases, hand edits); anything
- * unknown falls back to Light rather than failing. */
+/** Settings may carry any string (older atlases, hand edits, the retired
+ * Journal / Minimal / Film themes); anything unknown falls back to Light. */
 export function parseThemePreference(v: unknown): ThemePreference {
   return isThemePreference(v) ? v : "light";
 }

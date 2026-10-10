@@ -55,15 +55,6 @@ html.atlas-collapsed .atlas-topbar__brand {
   text-shadow: 0 0 10px var(--marker-label-halo), 0 0 2px var(--marker-label-halo);
 }
 
-html[data-theme="minimal"] .atlas-wordmark {
-  font-size: 28px;
-  letter-spacing: 0.02em;
-}
-
-html[data-theme="film"] .atlas-wordmark {
-  font-size: 30px;
-}
-
 .atlas-topbar__actions {
   display: flex;
   align-items: center;

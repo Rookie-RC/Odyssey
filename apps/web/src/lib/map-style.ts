@@ -260,7 +260,6 @@ function applyPalette(style: StyleLike, p: MapPalette): void {
   for (const id of ["place_country_1", "place_country_2"]) {
     layout(style, id, "text-letter-spacing", 0.18);
     layout(style, id, "text-transform", "uppercase");
-    if (p.hideCountryLabels) layout(style, id, "visibility", "none");
   }
 
   // Density: keep minor settlements, POIs, secondary states and small-country

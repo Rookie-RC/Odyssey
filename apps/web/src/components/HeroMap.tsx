@@ -1378,7 +1378,7 @@ function routeLayers(theme: AtlasTheme): RouteLayer[] {
       paint: {
         "line-color": line,
         "line-width": width(1.3, 1.7, 2.3, 1.1),
-        "line-dasharray": theme.routes.dash ?? [2.2, 1.8],
+        "line-dasharray": [2.2, 1.8],
         "line-opacity": em(0.95, 0.75),
       },
     },

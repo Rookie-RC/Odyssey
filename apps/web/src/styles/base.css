@@ -127,7 +127,7 @@ html[data-mode="dark"] body::before {
   mix-blend-mode: screen;
 }
 
-/* Grain: lies over everything, photographs included (Film, Night). */
+/* Grain: lies over everything, photographs included (Night). */
 body::after {
   content: "";
   position: fixed;
@@ -163,8 +163,7 @@ img {
   -webkit-user-drag: none;
 }
 
-/* Photographs carry the theme's image treatment (Film warms and softens,
-   Journal sepias slightly, Night desaturates a touch). */
+/* Photographs carry the theme's image treatment (Night desaturates a touch). */
 .atlas-photo {
   filter: var(--image-filter);
 }
@@ -192,12 +191,6 @@ img {
   font-family: var(--font-date);
   color: var(--date-ink);
   font-variant-numeric: tabular-nums;
-}
-
-html[data-theme="film"] .atlas-date {
-  letter-spacing: 0.04em;
-  font-weight: 600;
-  text-shadow: 0 0 6px rgba(240, 120, 40, 0.35);
 }
 
 .atlas-season-ink--spring { color: var(--season-spring-ink); }

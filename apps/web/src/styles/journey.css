@@ -358,10 +358,6 @@ html[data-mode="dark"] .atlas-tl-node--now .atlas-tl-node__dot {
   outline-offset: 3px;
 }
 
-html[data-theme="journal"] .atlas-tl-card__media {
-  box-shadow: 0 2px 6px rgba(60, 40, 20, 0.16);
-}
-
 .atlas-tl-card__img {
   display: block;
   width: 100%;
@@ -431,14 +427,6 @@ html[data-theme="journal"] .atlas-tl-card__media {
   font-weight: 650;
   line-height: 1.25;
   color: var(--text-primary);
-}
-
-html[data-theme="journal"] .atlas-tl-card__name,
-html[data-theme="minimal"] .atlas-tl-card__name,
-html[data-theme="film"] .atlas-tl-card__name {
-  font-family: var(--font-display);
-  font-weight: var(--display-weight);
-  font-size: 17px;
 }
 
 .atlas-tl-card__meta {

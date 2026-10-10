@@ -9,9 +9,6 @@ const CJK_SERIF = '"Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", SimS
 export const FONT = {
   inter: `"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, ${CJK_SANS}`,
   newsreader: `"Newsreader Variable", Newsreader, Georgia, "Times New Roman", ${CJK_SERIF}`,
-  fraunces: `"Fraunces Variable", Fraunces, Georgia, "Times New Roman", ${CJK_SERIF}`,
-  instrument: `"Instrument Serif", "Newsreader Variable", Georgia, ${CJK_SERIF}`,
-  cormorant: `"Cormorant Garamond", "Newsreader Variable", Georgia, ${CJK_SERIF}`,
   mono: `"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace`,
 };
 
@@ -39,7 +36,5 @@ export const TEXTURE = {
   grain: noise({ freq: 0.9, octaves: 3, alpha: 0.55 }),
   /** Softer, larger fibres: paper. */
   paper: noise({ freq: 0.55, octaves: 4, alpha: 0.5, tint: "#5a4630" }),
-  /** Paper fibres faint enough to lie directly over the map canvas. */
-  paperFaint: noise({ freq: 0.6, octaves: 4, alpha: 0.12, tint: "#5a4630" }),
   none: "none",
 };

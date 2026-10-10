@@ -420,14 +420,6 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   font-weight: 650;
 }
 
-html[data-theme="journal"] .atlas-marker--current .atlas-marker__label-name,
-html[data-theme="minimal"] .atlas-marker--current .atlas-marker__label-name,
-html[data-theme="film"] .atlas-marker--current .atlas-marker__label-name {
-  font-family: var(--font-display);
-  font-weight: var(--display-weight);
-  font-size: 19px;
-}
-
 .atlas-marker__label-country {
   display: block;
   margin-top: 3px;

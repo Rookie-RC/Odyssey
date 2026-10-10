@@ -5,14 +5,6 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/newsreader";
 import "@fontsource-variable/newsreader/wght-italic.css";
-import "@fontsource-variable/fraunces";
-import "@fontsource-variable/fraunces/wght-italic.css";
-import "@fontsource/instrument-serif/400.css";
-import "@fontsource/instrument-serif/400-italic.css";
-import "@fontsource/cormorant-garamond/400.css";
-import "@fontsource/cormorant-garamond/500.css";
-import "@fontsource/cormorant-garamond/600.css";
-import "@fontsource/cormorant-garamond/400-italic.css";
 import "@fontsource-variable/jetbrains-mono";
 
 import "./globals.css";
@@ -46,7 +38,7 @@ export const viewport: Viewport = {
 };
 
 // Applies the last-used theme's CSS variables before first paint, so a Night
-// (or Journal, Film…) atlas never flashes the default Light palette while the
+// atlas never flashes the default Light palette while the
 // settings load. applyTheme() keeps this snapshot current.
 const THEME_BOOT = `(function(){try{var s=localStorage.getItem("atlas.theme.snapshot");if(!s)return;var t=JSON.parse(s),r=document.documentElement;r.dataset.theme=t.id;r.dataset.mode=t.mode;r.style.colorScheme=t.mode;for(var k in t.vars)r.style.setProperty(k,t.vars[k]);}catch(e){}})();`;
 

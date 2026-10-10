@@ -22,8 +22,8 @@ development, and as a multi-user website (`-mode cloud`).
   *All ideas* board for every wish.
 - **Place Detail** — reflection, highlights, every visit, inspirations, a photo
   gallery with a full-screen lightbox, prev/next through the journey.
-- **Five themes + Auto** — Light, Night, Journal, Minimal and Film change colour,
-  type, texture, map style, markers and photo treatment (never your data).
+- **Light, Night and Auto** — the theme changes colour, texture, map style,
+  markers and photo treatment (never your data); Auto follows the system.
 - **English / 简体中文** interface; search across places, memories and wishes.
 - **Save map as image** — a poster of the map as it looks right now (pins,
   labels, routes, theme) with a caption band, from the map layers menu.
@@ -52,7 +52,7 @@ development, and as a multi-user website (`-mode cloud`).
 
 Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一张全屏地图，标出生活与旅行过的地方；向下滚动，地图收成顶部的一条，下面依次是按季节着色的**旅程时间线**和**下一站**心愿墙。主要形态是**安卓 App**：数据只存在你的手机里，不需要服务器和账号。整本地图集就是 JSON 与照片，可以整体导出为一个 `.atlas` 文件，换手机、备份都靠它。
 
-- **五套主题 + 自动**：浅色、夜间（城市灯火）、手账（米色纸与墨迹）、极简（生成色与朱印）、胶片（颗粒与日期印记）。主题会改变配色、字体、纹理、地图风格与照片处理，但不改变数据。
+- **浅色、夜间、自动**：夜间主题有城市灯火；主题会改变配色、纹理、地图风格与照片处理，但不改变数据；自动跟随系统。
 - **地图**：去过的地点插一面小国旗，去过的国家实心着色、想去的国家斜线标出；每次旅行可选交通方式（飞机为默认、火车、大巴、自驾），路线分别画成虚线航线、铁轨、公路，中点显示对应的交通工具。
 - **磨砂玻璃**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的磨砂玻璃；内容本身仍是纸面。
 - **中英文界面**：在个人主页或设置中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
@@ -103,7 +103,7 @@ apps/
                                ProfileDrawer, IdeasBoard, CommandPalette, …) + manage/ + edit/
     src/lib/                   domain layer: types, api, repository, timeline, routes, map-data,
                                map-style (theme → basemap adapter), i18n (+ zh dictionaries)
-    src/themes/                theme contract + light / night / journal / minimal / film
+    src/themes/                theme contract + light / night
     src/styles/                base, topbar, map, journey, wherenext, overlays, palette, manage
     scripts/copy-flags.mjs     copies SVG country flags into public/flags (dev/build)
   runtime/                     Go runtime: cmd/atlas, internal/{api,atlas,cloud,config,domain,
@@ -455,8 +455,8 @@ VISUAL_SPEC:
   tinted, frosted, with a specular rim; *reduce transparency* turns it
   solid. Content — timeline,
   cards, sheets — stays on paper, so the two never compete. Each theme tunes
-  its glass (Minimal keeps a flat frosted pane), and a test keeps text on
-  glass legible over every part of the map.
+  its glass, and a test keeps text on glass legible over every part of the
+  map.
 
 ### Themes
 
@@ -464,14 +464,10 @@ VISUAL_SPEC:
 |---|---|
 | Light | airy parchment, sage relief, forest-green pins, green NOW |
 | Night | deep navy, city lights, amber memories, blue NOW |
-| Journal | cream paper with fibres, sepia ink, terracotta present, routes drawn as ink dashes, framed photos |
-| Minimal | kinari white, sumi-ink pins, a single vermilion seal, flat geography, hairline geometry |
-| Film | warm faded stock, grain over everything, photos printed warm, dates stamped in orange mono |
 | Auto | follows the OS: Light or Night |
 
 A theme (`apps/web/src/themes/*.ts`) is pure tokens: colours, fonts
-(self-hosted Inter, Newsreader, Fraunces, Instrument Serif, Cormorant
-Garamond, JetBrains Mono), radii, shadows, paper/grain textures, photo filter,
+(self-hosted Inter, Newsreader, JetBrains Mono), radii, shadows, paper/grain textures, photo filter,
 map palette, relief, city lights, glass, markers, routes and two season palettes (line
 colours and legible season ink). `applyTheme()` writes them as CSS variables
 and snapshots them so the next load paints the right theme before React
@@ -499,8 +495,8 @@ restore (which itself backs up the current Atlas first) and delete.
 
 ## Third-party assets
 
-- Fonts: Inter, Newsreader, Fraunces, Instrument Serif, Cormorant Garamond,
-  JetBrains Mono — SIL Open Font License, via `@fontsource`.
+- Fonts: Inter, Newsreader, JetBrains Mono — SIL Open Font License, via
+  `@fontsource`.
 - Country flags: `country-flag-icons` (MIT), copied to `public/flags` at build.
 - Basemap © CARTO, © OpenStreetMap contributors; relief from Mapzen / AWS
   Terrain Tiles; country polygons from Natural Earth.

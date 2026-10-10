@@ -1,6 +1,6 @@
 // Ticket images for sharing (lib/share.ts holds the data). Each ticket is a
 // stub-and-body pass in the active theme: its paper, ink, accent and date
-// stamp, its typefaces, paper fibres or film grain, its photograph treatment.
+// stamp, its typefaces, paper fibres or grain, its photograph treatment.
 //   trip     — a landscape boarding pass (train ticket, bus ticket, road trip),
 //              with the destination's photograph and a tear-off stub
 //   country  — a portrait pass: the country's outline with its cities pinned,
