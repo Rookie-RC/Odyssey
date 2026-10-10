@@ -4,11 +4,14 @@
 // whole Atlas as a single portable .atlas file, replace-import with an
 // automatic backup, and start a blank Atlas. All packaging/validation happens
 // in the Go runtime; this section only triggers it and reports results.
+// On a phone the Atlas lives nowhere else, so the file can also leave through
+// the system share sheet (Drive, WeChat, email …) instead of staying in Downloads.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BackupInfo } from "../../lib/api";
 import type { ManageContext } from "./ManageAtlas";
 import { Btn, Card, EmptyState } from "./FormUI";
 import { getLocale, t } from "../../lib/i18n";
+import { androidBridge, androidSave, canShareFile, shareBlob } from "../../lib/native";
 import { downloadBlob } from "../../lib/poster";
 
 function formatBytes(n: number): string {
@@ -26,13 +29,14 @@ function formatWhen(iso: string): string {
 
 export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
   const { repo, notify, reload } = ctx;
-  const [busy, setBusy] = useState<string | null>(null); // "export" | "import" | "new"
+  const [busy, setBusy] = useState<string | null>(null); // "export" | "share" | "import" | "new"
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [confirmNew, setConfirmNew] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [backups, setBackups] = useState<BackupInfo[] | null>(null);
   const [backupError, setBackupError] = useState("");
   const [confirmBackup, setConfirmBackup] = useState<{ name: string; action: "restore" | "delete" } | null>(null);
+  const [canShare] = useState(() => canShareFile("odyssey.atlas", "application/zip"));
 
   const loadBackups = useCallback(async () => {
     try {
@@ -71,17 +75,48 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
 
   const setMsg = (kind: "ok" | "error", text: string) => setMessage({ kind, text });
 
+  const packAtlas = async () => {
+    setMsg("ok", t("Packaging your Atlas…"));
+    const blob = await repo.exportAtlas();
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[-:T]/g, "")
+      .slice(0, 14);
+    return { blob, name: "odyssey-" + stamp + ".atlas" };
+  };
+
   const doExport = async () => {
     setBusy("export");
-    setMsg("ok", t("Packaging your Atlas…"));
     try {
-      const blob = await repo.exportAtlas();
-      const stamp = new Date()
-        .toISOString()
-        .replace(/[-:T]/g, "")
-        .slice(0, 14);
-      downloadBlob(blob, "odyssey-" + stamp + ".atlas");
-      setMsg("ok", t("Export complete — the .atlas file was downloaded."));
+      const { blob, name } = await packAtlas();
+      const android = androidBridge();
+      if (android) {
+        // Wait for the app to write it: a backup that did not land must not read as done.
+        const where = await androidSave(android, blob, name);
+        if (!where) throw new Error(t("Could not save the backup."));
+        setMsg("ok", t("Export complete — saved to {where}.", { where }));
+      } else {
+        downloadBlob(blob, name);
+        setMsg("ok", t("Export complete — the .atlas file was downloaded."));
+      }
+    } catch (e) {
+      setMsg("error", e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doShare = async () => {
+    setBusy("share");
+    try {
+      const { blob, name } = await packAtlas();
+      try {
+        await shareBlob(blob, name, t("Odyssey backup"));
+      } catch {
+        // A browser also refuses when the tap is too old by the time a big Atlas is packed.
+        throw new Error(t("Could not share the backup. Export it instead, then share the saved file."));
+      }
+      setMessage(null); // the share sheet is the answer
     } catch (e) {
       setMsg("error", e instanceof Error ? e.message : String(e));
     } finally {
@@ -151,6 +186,11 @@ export default function ManageTransfer({ ctx }: { ctx: ManageContext }) {
           <Btn kind="primary" onClick={doExport} disabled={busy !== null}>
             {busy === "export" ? t("Exporting…") : t("Export")}
           </Btn>
+          {canShare ? (
+            <Btn onClick={doShare} disabled={busy !== null}>
+              {busy === "share" ? t("Exporting…") : t("Share backup…")}
+            </Btn>
+          ) : null}
         </div>
       </Card>
 

@@ -2,8 +2,11 @@
 
 // Share as a ticket (lib/share.ts → lib/ticket.ts): one trip as a boarding
 // pass, a country as a multi-city pass, the whole journey as an atlas pass —
-// in the active theme. The image is drawn locally; it leaves the machine only
-// through what the person does with it (download, copy, the system share).
+// in the active theme. The image is drawn locally; it leaves the device only
+// through what the person does with it. In the Android app that is the system
+// share sheet (WeChat, Xiaohongshu …) with saving to Downloads beside it; in a
+// browser, a download, with copy and the system share where it has them. On a
+// phone this is a bottom sheet that can be dragged away.
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AtlasTheme } from "../themes";
 import type { Media, Place, Profile, Visit, Wishlist } from "../lib/types";
@@ -18,7 +21,8 @@ import {
 } from "../lib/share";
 import { renderTicket, type CountryShapes } from "../lib/ticket";
 import { downloadBlob } from "../lib/poster";
-import { androidBridge, androidShare } from "../lib/native";
+import { androidBridge, canShareFile, shareBlob } from "../lib/native";
+import { SLIDE_MS, useSheetDrag } from "../lib/sheet-drag";
 import { formatMonthYear, visitTypeLabel } from "../lib/timeline";
 import { t, tn, useLocale } from "../lib/i18n";
 import { Btn, Select } from "./manage/FormUI";
@@ -59,16 +63,6 @@ function canCopyImages(): boolean {
   );
 }
 
-function canShareFiles(): boolean {
-  if (androidBridge()) return true; // the Android app's system share sheet
-  try {
-    const probe = new File([new Blob()], "ticket.png", { type: "image/png" });
-    return typeof navigator.canShare === "function" && navigator.canShare({ files: [probe] });
-  } catch {
-    return false;
-  }
-}
-
 export default function ShareDialog({
   request,
   places,
@@ -95,8 +89,11 @@ export default function ShareDialog({
   const [url, setUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [copyOk] = useState(canCopyImages);
-  const [shareOk] = useState(canShareFiles);
+  // The Android app puts the system share sheet first; a browser, the download.
+  const [native] = useState(() => androidBridge() != null);
+  // A WebView cannot be relied on to copy an image; the share sheet has "Copy".
+  const [copyOk] = useState(() => !native && canCopyImages());
+  const [shareOk] = useState(() => canShareFile("ticket.png", "image/png"));
 
   const ticket: Ticket | null = useMemo(() => {
     const records = { places, visits, wishlist, profile, media };
@@ -143,6 +140,17 @@ export default function ShareDialog({
     return () => URL.revokeObjectURL(u);
   }, [blob]);
 
+  // Dragged away on a phone: the sheet slides down and the dim fades, then it goes.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  useSheetDrag(dialogRef, {
+    enabled: true,
+    onDismiss: () => {
+      setLeaving(true);
+      window.setTimeout(onClose, SLIDE_MS);
+    },
+  });
+
   // Focus in, Escape out (capture: the sheet beneath must not close too).
   const closeRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -172,10 +180,11 @@ export default function ShareDialog({
     return (base + "-" + what.replace(/[\\/:*?"<>|’'\s]+/g, "-") + ".png").replace(/-+/g, "-");
   }, [ticket, wordmark]);
 
-  const download = () => {
+  const save = () => {
     if (!blob) return;
     downloadBlob(blob, fileName);
-    onNotice(t("Image saved"));
+    // The Android app toasts where it saved the file, or why it could not.
+    if (!native) onNotice(t("Image saved"));
   };
   const copy = async () => {
     if (!blob) return;
@@ -186,18 +195,9 @@ export default function ShareDialog({
       onNotice(t("Could not copy the image"));
     }
   };
-  const share = async () => {
+  const share = () => {
     if (!blob) return;
-    const android = androidBridge();
-    if (android) {
-      androidShare(android, blob, fileName, wordmark).catch(() => onNotice(t("Could not share the image")));
-      return;
-    }
-    try {
-      await navigator.share({ files: [new File([blob], fileName, { type: "image/png" })], title: wordmark });
-    } catch {
-      // dismissed, or the system declined: nothing to report
-    }
+    shareBlob(blob, fileName, wordmark).catch(() => onNotice(t("Could not share the image")));
   };
 
   const altText =
@@ -207,14 +207,28 @@ export default function ShareDialog({
         ? t("Ticket for {place}", { place: ticket.country })
         : t("Atlas pass");
 
+  const saveButton = (
+    <Btn kind={native ? "default" : "primary"} onClick={save} disabled={!blob || busy}>
+      <DownloadIcon size={15} /> {native ? t("Save image") : t("Download")}
+    </Btn>
+  );
+
   return (
     <div
-      className="atlas-dialog-backdrop atlas-share-backdrop"
+      className={"atlas-dialog-backdrop atlas-share-backdrop" + (leaving ? " is-leaving" : "")}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="atlas-dialog atlas-share" data-owns-keyboard role="dialog" aria-modal="true" aria-label={t("Share")}>
+      <div
+        ref={dialogRef}
+        className="atlas-dialog atlas-share"
+        data-owns-keyboard
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("Share")}
+      >
+        <div className="atlas-sheet__grabber" aria-hidden="true" />
         <div className="atlas-dialog__head">
           <h2 className="atlas-display">{t("Share as a ticket")}</h2>
           <button ref={closeRef} type="button" className="atlas-icon-btn atlas-icon-btn--sm" onClick={onClose} aria-label={t("Close")}>
@@ -266,20 +280,19 @@ export default function ShareDialog({
         </div>
 
         <div className="atlas-share__actions">
-          <span className="atlas-share__hint">{t("Drawn on this computer, in your theme.")}</span>
+          <span className="atlas-share__hint">{t("Made on this device, never uploaded.")}</span>
           {copyOk ? (
             <Btn onClick={copy} disabled={!blob || busy}>
               <CopyIcon size={15} /> {t("Copy image")}
             </Btn>
           ) : null}
+          {native ? saveButton : null}
           {shareOk ? (
-            <Btn onClick={share} disabled={!blob || busy}>
+            <Btn kind={native ? "primary" : "default"} onClick={share} disabled={!blob || busy}>
               <ShareIcon size={15} /> {t("Share…")}
             </Btn>
           ) : null}
-          <Btn kind="primary" onClick={download} disabled={!blob || busy}>
-            <DownloadIcon size={15} /> {t("Download")}
-          </Btn>
+          {native ? null : saveButton}
         </div>
       </div>
     </div>

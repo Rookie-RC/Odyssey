@@ -240,6 +240,12 @@ export const ZH_MANAGE: Record<string, string> = {
   "Exporting…": "导出中…",
   "Packaging your Atlas…": "正在打包你的地图集…",
   "Export complete — the .atlas file was downloaded.": "导出完成——.atlas 文件已下载。",
+  "Export complete — saved to {where}.": "导出完成——已保存到 {where}。",
+  "Could not save the backup.": "无法保存备份。",
+  "Share backup…": "分享备份…",
+  "Odyssey backup": "Odyssey 备份",
+  "Could not share the backup. Export it instead, then share the saved file.":
+    "无法分享备份。请改用「导出」，再分享保存好的文件。",
   "Import Atlas": "导入地图集",
   "Replace the current Atlas with a .atlas file. A backup of the current Atlas is created automatically first; the package is validated before anything is replaced.":
     "用一个 .atlas 文件替换当前地图集。系统会先自动备份当前地图集，并在替换任何内容之前校验文件包。",
