@@ -314,8 +314,5 @@ export const ZH: Record<string, string> = {
   Map: "地图",
   Place: "地点",
   "Wishlist · {when}": "心愿 · {when}",
-  "Save map as image": "保存地图为图片",
-  "Saving image…": "正在生成图片…",
   "Image saved": "图片已保存",
-  "Could not create the image: {error}": "无法生成图片：{error}",
 };

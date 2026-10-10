@@ -15,6 +15,12 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* Where cards docked over the map end: just above the tab bar
+     (styles/tabs.css: 56px tall, 16px off the bottom). HeroMap sets
+     --dock-lift to the docked card's height; on phones the controls and the
+     map credits climb by it. */
+  --dock-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  --dock-lift: 0px;
 }
 
 /* Explicit size + doubled specificity: maplibre-gl.css (loaded after this
@@ -47,6 +53,21 @@
   height: 0;
   cursor: pointer;
   outline: none;
+}
+
+/* Every pin carries an invisible 44px hit area, however small it looks: a
+   fingertip is far bigger than a 6px dot. Where two areas overlap,
+   HeroMap.pickPin decides which pin the tap was meant for. */
+.atlas-marker::before,
+.atlas-wishpin::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
 }
 
 .atlas-marker__dot {
@@ -92,7 +113,6 @@
   filter: var(--image-filter);
 }
 
-.atlas-marker:hover .atlas-marker__flag,
 .atlas-marker:focus-visible .atlas-marker__flag {
   transform: scale(1.12);
 }
@@ -238,17 +258,34 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
 }
 
-.atlas-marker:hover .atlas-marker__dot,
 .atlas-marker:focus-visible .atlas-marker__dot {
   transform: translate(-50%, -50%) scale(1.25);
-}
-
-.atlas-marker:focus-visible .atlas-marker__dot {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
-/* Map ↔ Timeline focus: a restrained ring around the focused place. */
+/* A pointer that hovers gets a nudge; on touch :hover would stick after a tap. */
+@media (hover: hover) {
+  .atlas-marker:hover .atlas-marker__flag {
+    transform: scale(1.12);
+  }
+
+  .atlas-marker:hover .atlas-marker__dot {
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+}
+
+/* The selected place — its card is open, or the Journey tab focused it (Map ↔
+   Timeline): a restrained ring around a slightly larger pin, above its
+   neighbours. */
+.atlas-marker--focused {
+  z-index: 1;
+}
+
+.atlas-marker--focused .atlas-marker__dot {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
 .atlas-marker--focused::after {
   content: "";
   position: absolute;
@@ -363,13 +400,9 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
 }
 
-.atlas-wishpin:hover .atlas-wishpin__dot,
 .atlas-wishpin:focus-visible .atlas-wishpin__dot {
   transform: translate(-50%, -50%) scale(1.18);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--marker-wish) 24%, transparent), 0 2px 6px rgba(0, 0, 0, 0.22);
-}
-
-.atlas-wishpin:focus-visible .atlas-wishpin__dot {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -402,7 +435,8 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   opacity: 0;
 }
 
-/* When to go: revealed on hover / focus, below the name. */
+/* When to go: revealed on hover / focus, below the name. Touch has no hover;
+   a tap opens the place, whose detail carries it. */
 .atlas-wishpin__meta {
   position: absolute;
   top: 100%;
@@ -421,14 +455,24 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   right: 0;
 }
 
-.atlas-wishpin:hover .atlas-wishpin__label,
 .atlas-wishpin:focus-visible .atlas-wishpin__label,
-.atlas-wishpin:hover .atlas-wishpin__meta,
 .atlas-wishpin:focus-visible .atlas-wishpin__meta {
   opacity: 1;
 }
 
-/* --- Micro preview (hover/focus) --- */
+@media (hover: hover) {
+  .atlas-wishpin:hover .atlas-wishpin__dot {
+    transform: translate(-50%, -50%) scale(1.18);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--marker-wish) 24%, transparent), 0 2px 6px rgba(0, 0, 0, 0.22);
+  }
+
+  .atlas-wishpin:hover .atlas-wishpin__label,
+  .atlas-wishpin:hover .atlas-wishpin__meta {
+    opacity: 1;
+  }
+}
+
+/* --- Micro preview (hover/focus; HeroMap shows it for hovering pointers only) --- */
 .atlas-micro {
   position: absolute;
   z-index: 6;
@@ -462,157 +506,155 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   color: var(--text-secondary);
 }
 
-/* --- Expanded memory card (reference: Bordeaux card) --- */
-.atlas-memory-card {
+/* --- Place card: the tapped place, docked above the tab bar ---
+   Full width less the gutters on phones, a centred 420px on wide screens. It
+   stands where the pin cannot be covered by it (HeroMap eases the camera when
+   it would be), and the layers sheet below uses the same dock. */
+.atlas-peek-card {
   position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--dock-bottom);
   z-index: 7;
-  padding: 16px 16px 6px;
+  width: min(420px, calc(100% - 2 * var(--gutter)));
+  margin: 0 auto;
+  padding: 20px 16px 0;
   border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
-  animation: atlas-card-in 0.28s var(--ease-out);
+  animation: atlas-dock-in 0.28s var(--ease-out);
   cursor: default;
+  /* Swiping it down dismisses it (handled in HeroMap): the browser must not
+     claim the gesture for itself. */
+  touch-action: none;
 }
 
-@keyframes atlas-card-in {
-  from { opacity: 0; transform: translateX(-8px) scale(0.98); }
+@keyframes atlas-dock-in {
+  from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: none; }
 }
 
-.atlas-memory-card--left {
-  animation-name: atlas-card-in-left;
-}
-
-@keyframes atlas-card-in-left {
-  from { opacity: 0; transform: translateX(8px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-
-/* caret pointing at the pin */
-.atlas-memory-card::before {
+/* The grabber: pull down to dismiss. */
+.atlas-peek-card::before {
   content: "";
   position: absolute;
-  top: var(--caret-top, 50%);
-  left: -7px;
-  width: 12px;
-  height: 12px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  transform: translateY(-50%) rotate(45deg);
+  top: 8px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  margin-left: -18px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
 }
 
-.atlas-memory-card--left::before {
-  left: auto;
-  right: -7px;
-  transform: translateY(-50%) rotate(-135deg);
-}
-
-.atlas-memory-card__head {
+.atlas-peek-card__head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
 }
 
-.atlas-memory-card__place {
+.atlas-peek-card__place {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   min-width: 0;
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 650;
   color: var(--text-primary);
 }
 
-.atlas-memory-card__place svg {
+.atlas-peek-card__place svg {
   flex: none;
   color: var(--text-secondary);
   align-self: center;
 }
 
-.atlas-memory-card__date {
+.atlas-peek-card__date {
   flex: none;
   font-size: 12px;
 }
 
-.atlas-memory-card__sub {
+.atlas-peek-card__sub {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 7px;
-  margin: 7px 0 13px;
+  margin: 7px 0 12px;
   font-size: 12.5px;
   color: var(--text-secondary);
 }
 
-.atlas-memory-card__transport {
+.atlas-peek-card__transport {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.atlas-memory-card__photos {
+.atlas-peek-card__photos {
   display: grid;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.atlas-memory-card__photos--2 {
+.atlas-peek-card__photos--2 {
   grid-template-columns: 1.4fr 1fr;
 }
 
-.atlas-memory-card__photos img {
+.atlas-peek-card__photos img {
   width: 100%;
-  height: 112px;
+  height: 96px;
   object-fit: cover;
   border-radius: var(--radius-sm);
   display: block;
   background: var(--surface-sunken);
 }
 
-.atlas-memory-card__quote {
-  margin: 2px 0 10px;
-  font-family: var(--font-body);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+/* A short screen (a phone on its side) has no room for photographs. */
+@media (max-height: 520px) {
+  .atlas-peek-card__photos {
+    display: none;
+  }
 }
 
-.atlas-memory-card__open {
+.atlas-peek-card__open {
   display: flex;
   width: calc(100% + 32px);
+  min-height: 48px;
   margin: 0 -16px;
-  padding: 12px 16px;
+  padding: 0 16px;
   justify-content: space-between;
   align-items: center;
   border: 0;
   border-top: 1px solid var(--border);
   background: none;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   transition: background 0.18s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.atlas-memory-card__open:hover {
+.atlas-peek-card__open:active {
   background: var(--surface-sunken);
 }
 
-.atlas-memory-card__open svg {
+.atlas-peek-card__open svg {
   color: var(--text-secondary);
   transition: transform 0.2s var(--ease-out);
 }
 
-.atlas-memory-card__open:hover svg {
-  transform: translateX(3px);
+@media (hover: hover) {
+  .atlas-peek-card__open:hover {
+    background: var(--surface-sunken);
+  }
+
+  .atlas-peek-card__open:hover svg {
+    transform: translateX(3px);
+  }
 }
 
 /* --- Map controls (bottom-right): zoom / reset + layers --- */
@@ -626,6 +668,7 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
+  transition: bottom 0.28s var(--ease-out);
 }
 
 .atlas-map-controls__group,
@@ -650,6 +693,16 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   color: var(--text-primary);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A fingertip needs 44px. */
+@media (pointer: coarse) {
+  .atlas-map-controls__group button,
+  .atlas-map-controls__single {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .atlas-map-controls__group button + button {
@@ -660,11 +713,17 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   color: var(--text-secondary);
 }
 
-.atlas-map-controls__group button:hover,
-.atlas-map-controls__single:hover,
 .atlas-map-controls__single.is-open {
   background: var(--surface-sunken);
   color: var(--text-primary);
+}
+
+@media (hover: hover) {
+  .atlas-map-controls__group button:hover,
+  .atlas-map-controls__single:hover {
+    background: var(--surface-sunken);
+    color: var(--text-primary);
+  }
 }
 
 .atlas-map-layers {
@@ -706,10 +765,17 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.atlas-map-layers__item:hover {
+.atlas-map-layers__item:active {
   background: var(--surface-sunken);
+}
+
+@media (hover: hover) {
+  .atlas-map-layers__item:hover {
+    background: var(--surface-sunken);
+  }
 }
 
 .atlas-map-layers__icon {
@@ -799,6 +865,7 @@ html[data-mode="dark"] .atlas-marker--current .atlas-marker__dot {
   box-shadow: inset 0 1px 0 0 var(--glass-highlight);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  transition: margin 0.28s var(--ease-out);
 }
 
 .atlas-hero .maplibregl-ctrl-attrib-inner,
@@ -836,38 +903,49 @@ html[data-mode="dark"] .atlas-hero .maplibregl-ctrl-attrib-button {
   color: var(--text-secondary);
 }
 
+/* --- Phones: the card and the layers sheet cover the width of the screen, so
+   the controls and the map credits stand on top of whichever is open
+   (--dock-lift is its height, set by HeroMap). --- */
 @media (max-width: 720px) {
   .atlas-map-controls {
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(124px + env(safe-area-inset-bottom, 0px) + var(--dock-lift));
   }
-  .atlas-memory-card__photos img {
-    height: 92px;
+
+  .atlas-hero .maplibregl-ctrl-bottom-right .maplibregl-ctrl.maplibregl-ctrl-attrib {
+    margin-bottom: calc(88px + env(safe-area-inset-bottom, 0px) + var(--dock-lift));
   }
-}
 
-.atlas-map-layers__action {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 10px 10px;
-  border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  background: none;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-}
+  /* The layers menu becomes a bottom sheet in the same dock, with big rows. */
+  .atlas-map-layers__menu {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--dock-bottom);
+    width: min(420px, calc(100% - 2 * var(--gutter)));
+    margin: 0 auto;
+    padding: 6px 10px 10px;
+    animation-name: atlas-dock-in;
+    transform-origin: bottom center;
+  }
 
-.atlas-map-layers__action:hover:not(:disabled) {
-  color: var(--accent);
-}
+  .atlas-map-layers__title {
+    padding: 10px 8px 6px;
+  }
 
-.atlas-map-layers__action:disabled {
-  opacity: 0.6;
-  cursor: progress;
+  .atlas-map-layers__item {
+    min-height: 56px;
+  }
+
+  .atlas-map-layers__icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .atlas-map-layers__label {
+    font-size: 15px;
+  }
+
+  .atlas-map-layers__hint {
+    font-size: 12.5px;
+  }
 }

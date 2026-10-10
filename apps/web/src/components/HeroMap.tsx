@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Media, Place, Profile, Transport, Visit, Wishlist } from "../lib/types";
@@ -36,7 +36,6 @@ import {
   RouteIcon,
   StarIcon,
   HomeIcon,
-  ImageIcon,
   TransportIcon,
   ActivityIcon,
 } from "./Icons";
@@ -44,6 +43,15 @@ import {
 const EUROPE_CENTER: [number, number] = [10, 50];
 const EUROPE_ZOOM = 4.2;
 const FIT_MAX_ZOOM = 5.2;
+/** A wishlist pin's disc radius (label collisions, tap picking). */
+const WISH_RADIUS = 9;
+/** A pin within this many px above the place card's top edge, or under the
+ * card, counts as hidden by it… */
+const CARD_CLEARANCE = 28;
+/** …and the camera lifts it to this far above the card. */
+const CARD_BREATHING = 64;
+/** The top bar's bottom edge: a lifted pin never goes above it. */
+const TOPBAR_EDGE = 72;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
@@ -66,9 +74,14 @@ export interface MapLayers {
   countries: boolean;
 }
 
-interface PreviewState {
+/** Something on the map that can be tapped: a visited place or a wish. */
+type Pin = { kind: "visit"; marker: MapMarker } | { kind: "wish"; wish: WishMarker };
+
+/** The hover tooltip: a marker and where it sits on the map. */
+interface MicroState {
   marker: MapMarker;
-  mode: "micro" | "expanded";
+  x: number;
+  y: number;
 }
 
 interface HeroMapProps {
@@ -79,8 +92,8 @@ interface HeroMapProps {
   countriesGeo: CountryCollection | null;
   theme: AtlasTheme;
   media: Media[];
-  /** True while something covers the map: an overlay (place detail, ideas)
-   * or another tab. Closes the map's own preview and layers menu. */
+  /** True while something covers the map: an overlay (place detail, ideas),
+   * Manage Atlas or another tab. Closes the map's own card and layers menu. */
   obscured: boolean;
   layers: MapLayers;
   onLayersChange: (next: MapLayers) => void;
@@ -88,9 +101,10 @@ interface HeroMapProps {
    * initiated (`source === "timeline"`): the marker is emphasized and the
    * camera is gently adjusted only when needed. */
   focus?: SyncFocus | null;
-  /** Emitted when a marker is clicked/selected (Map → Timeline sync). */
+  /** Emitted when a marker is tapped/selected (Map → Timeline sync). */
   onFocusPlace?: (placeId: string) => void;
-  /** Emitted when the map background is clicked (selection cleared). */
+  /** Emitted when the selection ends: the map is tapped or the place card is
+   * dismissed. */
   onClearFocus?: () => void;
   onOpenPlace?: (placeId: string) => void;
   /** Optional default map position from Settings (PRODUCT_SPEC §34). */
@@ -98,10 +112,6 @@ interface HeroMapProps {
   initialZoom?: number | null;
   /** Imperative "show on map" request (search); nonce re-triggers. */
   flyTo?: { placeId: string; nonce: number } | null;
-  /** Caption for "Save map as image". */
-  posterTitle: string;
-  posterSubtitle: string;
-  onNotice?: (message: string) => void;
   /** False until Settings (theme, language, default position) are known; the
    * map is created only then, so it never paints the wrong basemap first. */
   ready?: boolean;
@@ -113,6 +123,7 @@ interface MarkerEntry {
   label: HTMLSpanElement | null;
   labelSize: { w: number; h: number } | null;
   lngLat: [number, number];
+  pin: Pin;
   rank: number;
   isCurrent: boolean;
   hasFlag: boolean;
@@ -147,20 +158,26 @@ export default function HeroMap({
   initialCenter,
   initialZoom,
   flyTo,
-  posterTitle,
-  posterSubtitle,
-  onNotice,
   ready = true,
 }: HeroMapProps) {
+  const heroRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const layersRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const entriesRef = useRef<Map<string, MarkerEntry>>(new Map());
   const wishObjsRef = useRef<maplibregl.Marker[]>([]);
   // Wishlist pins whose names join the label layout (after visited labels).
   const wishEntriesRef = useRef<
-    { el: HTMLDivElement; label: HTMLSpanElement; labelSize: { w: number; h: number } | null; lngLat: [number, number] }[]
+    {
+      el: HTMLDivElement;
+      label: HTMLSpanElement;
+      labelSize: { w: number; h: number } | null;
+      lngLat: [number, number];
+      pin: Pin;
+    }[]
   >([]);
-  const previewRef = useRef<PreviewState | null>(null);
+  const peekRef = useRef<MapMarker | null>(null);
+  const microRef = useRef<MicroState | null>(null);
   const userMovedRef = useRef(false);
   const appliedThemeRef = useRef<string | null>(null);
   // True between a style's `style.load` and the next setStyle. Style-bound
@@ -172,9 +189,14 @@ export default function HeroMap({
   const [mapReady, setMapReady] = useState(false);
   const [styleGen, setStyleGen] = useState(0);
   const [mapError, setMapError] = useState("");
-  const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [previewPixel, setPreviewPixel] = useState<{ x: number; y: number } | null>(null);
+  // The tapped place, as a card docked above the tab bar.
+  const [peek, setPeek] = useState<MapMarker | null>(null);
+  // The hover tooltip (hover-capable pointers only).
+  const [micro, setMicro] = useState<MicroState | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  // Height of whatever is docked at the bottom (the card or, on phones, the
+  // layers sheet), so the map controls can sit above it.
+  const [dockH, setDockH] = useState(0);
 
   // Labels inside the derived markers are localized: recompute on a language switch.
   const locale = useLocale();
@@ -186,8 +208,6 @@ export default function HeroMap({
     () => buildWishMarkers(places, visits, wishlist),
     [places, visits, wishlist, locale] // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const wishMarkersRef = useRef(wishMarkers);
-  wishMarkersRef.current = wishMarkers;
   const countryCodes = useMemo(() => visitedCountryCodes(places, visits), [places, visits]);
   const wishCodes = useMemo(() => wishlistCountryCodes(places, visits, wishlist), [places, visits, wishlist]);
   // Residence-based route trajectory, derived in the domain layer (lib/routes)
@@ -198,50 +218,81 @@ export default function HeroMap({
   // Latest values for map callbacks (kept stable across renders).
   const contentRef = useRef({ theme, countryCodes, wishCodes, countriesGeo, layers, trajectory, markers });
   contentRef.current = { theme, countryCodes, wishCodes, countriesGeo, layers, trajectory, markers };
-  previewRef.current = preview;
+  peekRef.current = peek;
+  microRef.current = micro;
 
-  // An overlay or another tab supersedes the map preview and the layers menu.
+  // An overlay or another tab supersedes the place card and the layers menu.
   useEffect(() => {
     if (obscured) {
-      setPreview(null);
+      setPeek(null);
+      setMicro(null);
       setLayersOpen(false);
     }
   }, [obscured]);
 
-  // --- preview helpers (stable) ---
-  const projectPreview = useCallback((m: MapMarker) => {
+  // --- place card and hover tooltip helpers (stable) ---
+  const showMicro = useCallback((m: MapMarker) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || peekRef.current) return;
     const p = map.project([m.place.coordinates.lng, m.place.coordinates.lat]);
-    setPreviewPixel({ x: p.x, y: p.y });
+    setMicro({ marker: m, x: p.x, y: p.y });
   }, []);
-
-  const showMicro = useCallback(
-    (m: MapMarker) => {
-      setPreview((prev) => (prev?.mode === "expanded" ? prev : { marker: m, mode: "micro" }));
-      if (previewRef.current?.mode !== "expanded") projectPreview(m);
-    },
-    [projectPreview]
-  );
 
   const clearMicro = useCallback((m: MapMarker) => {
-    setPreview((prev) =>
-      prev && prev.mode === "micro" && prev.marker.place.id === m.place.id ? null : prev
-    );
+    setMicro((prev) => (prev?.marker.place.id === m.place.id ? null : prev));
   }, []);
 
-  const expandMarker = useCallback(
-    (m: MapMarker, opts: { pan?: boolean } = {}) => {
-      setPreview({ marker: m, mode: "expanded" });
-      const map = mapRef.current;
-      if (!map) return;
-      if (opts.pan) {
-        map.easeTo({ center: [m.place.coordinates.lng, m.place.coordinates.lat], duration: 420 });
+  const openPeek = useCallback((m: MapMarker) => {
+    setMicro(null);
+    setLayersOpen(false);
+    setPeek(m);
+  }, []);
+
+  // Dismissing the card ends its selection, as tapping the map does.
+  const closePeek = useCallback(() => {
+    const open = peekRef.current != null;
+    setPeek(null);
+    if (open) onClearFocus?.();
+  }, [onClearFocus]);
+
+  // What a tap on a pin does: a visited place opens its card, a wish its detail.
+  const activate = useCallback(
+    (pin: Pin) => {
+      if (pin.kind === "wish") {
+        onOpenPlace?.(pin.wish.place.id);
+        return;
       }
-      projectPreview(m);
+      openPeek(pin.marker);
+      // Map → Timeline synchronization (v1.3).
+      onFocusPlace?.(pin.marker.place.id);
     },
-    [projectPreview]
+    [openPeek, onOpenPlace, onFocusPlace]
   );
+
+  // Every pin has an invisible 44 px hit area, and close pins' areas overlap;
+  // the browser would give the overlap to whichever pin was added last. A tap
+  // is settled here instead: the pin whose disc it is nearest to (deepest
+  // inside, if it landed in one), a higher-ranked pin first on a tie.
+  const pickPin = useCallback((clientX: number, clientY: number, fallback: Pin): Pin => {
+    const map = mapRef.current;
+    if (!map) return fallback;
+    const box = map.getContainer().getBoundingClientRect();
+    const x = clientX - box.left;
+    const y = clientY - box.top;
+    let best = fallback;
+    let bestGap = Infinity;
+    const consider = (pin: Pin, lngLat: [number, number], radius: number) => {
+      const p = map.project(lngLat);
+      const gap = Math.hypot(p.x - x, p.y - y) - radius;
+      if (gap < bestGap) {
+        best = pin;
+        bestGap = gap;
+      }
+    };
+    for (const e of entriesRef.current.values()) consider(e.pin, e.lngLat, e.radius);
+    for (const w of wishEntriesRef.current) consider(w.pin, w.lngLat, WISH_RADIUS);
+    return best;
+  }, []);
 
   // --- label collision layout ---
   // Every visited place may carry a name label, but labels never collide: in
@@ -277,11 +328,13 @@ export default function HeroMap({
         taken.push({ x: q.x - 9, y: q.y - 9, w: 18, h: 18 });
       }
     }
-    for (const { p } of wishes) taken.push({ x: p.x - 9, y: p.y - 9, w: 18, h: 18 });
-    // Floating chrome (map controls, top bar, tab bar) is an obstacle too, so
-    // a label never slides underneath a button.
+    for (const { p } of wishes) {
+      taken.push({ x: p.x - WISH_RADIUS, y: p.y - WISH_RADIUS, w: WISH_RADIUS * 2, h: WISH_RADIUS * 2 });
+    }
+    // Floating chrome (map controls, top bar, tab bar, the open place card) is
+    // an obstacle too, so a label never slides underneath a button or the card.
     const box = map.getContainer().getBoundingClientRect();
-    for (const sel of [".atlas-map-controls", ".atlas-topbar__actions", ".atlas-tabbar"]) {
+    for (const sel of [".atlas-map-controls", ".atlas-topbar__actions", ".atlas-tabbar", ".atlas-peek-card"]) {
       const el = document.querySelector(sel);
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -538,7 +591,7 @@ export default function HeroMap({
         setStyleGen((g) => g + 1);
       });
       map.on("click", () => {
-        setPreview(null);
+        setPeek(null);
         setLayersOpen(false);
         onClearFocus?.();
       });
@@ -549,13 +602,12 @@ export default function HeroMap({
         if (e.originalEvent) userMovedRef.current = true;
       });
       map.on("move", () => {
-        const prev = previewRef.current;
-        if (prev) {
-          const m = mapRef.current;
-          if (m) {
-            const p = m.project([prev.marker.place.coordinates.lng, prev.marker.place.coordinates.lat]);
-            setPreviewPixel({ x: p.x, y: p.y });
-          }
+        const hovered = microRef.current;
+        const m = mapRef.current;
+        if (hovered && m) {
+          const { lng, lat } = hovered.marker.place.coordinates;
+          const p = m.project([lng, lat]);
+          setMicro({ ...hovered, x: p.x, y: p.y });
         }
         scheduleLabels();
       });
@@ -620,22 +672,27 @@ export default function HeroMap({
       const name = m.place.name + ", " + m.place.country;
       el.setAttribute("aria-label", m.isCurrent ? t("{place} — current base", { place: name }) : name);
       el.tabIndex = 0;
-      el.addEventListener("mouseenter", () => showMicro(m));
-      el.addEventListener("mouseleave", () => clearMicro(m));
-      el.addEventListener("focus", () => showMicro(m));
+      const pin: Pin = { kind: "visit", marker: m };
+      // The tooltip is for hover-capable pointers: a touch (which also moves
+      // focus to the tapped pin) goes straight to the card.
+      el.addEventListener("pointerenter", (ev) => {
+        if (ev.pointerType !== "touch") showMicro(m);
+      });
+      el.addEventListener("pointerleave", () => clearMicro(m));
+      el.addEventListener("focus", () => {
+        if (el.matches(":focus-visible")) showMicro(m);
+      });
       el.addEventListener("blur", () => clearMicro(m));
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        expandMarker(m);
-        // Map → Timeline synchronization (v1.3).
-        onFocusPlace?.(m.place.id);
+        // detail is 0 for a click made without a pointer (assistive tech).
+        activate(ev.detail > 0 ? pickPin(ev.clientX, ev.clientY, pin) : pin);
       });
       el.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" && ev.key !== " ") return;
         ev.preventDefault();
         ev.stopPropagation();
-        expandMarker(m);
-        onFocusPlace?.(m.place.id);
+        activate(pin);
       });
       entriesRef.current.set(m.place.id, {
         marker,
@@ -643,6 +700,7 @@ export default function HeroMap({
         label,
         labelSize: null,
         lngLat,
+        pin,
         rank: m.rank,
         isCurrent: m.isCurrent,
         hasFlag: markerHasFlag(m),
@@ -650,7 +708,7 @@ export default function HeroMap({
       });
     }
     scheduleLabels();
-  }, [markers, mapReady, showMicro, clearMicro, expandMarker, onFocusPlace, scheduleLabels]);
+  }, [markers, mapReady, showMicro, clearMicro, activate, pickPin, scheduleLabels]);
 
   // Label metrics depend on the theme's fonts: re-measure after a theme switch.
   useEffect(() => {
@@ -676,24 +734,25 @@ export default function HeroMap({
       const { el, label } = makeWishElement(w);
       const lngLat: [number, number] = [w.place.coordinates.lng, w.place.coordinates.lat];
       const marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat(lngLat).addTo(map);
-      wishEntriesRef.current.push({ el, label, labelSize: null, lngLat });
+      const pin: Pin = { kind: "wish", wish: w };
+      wishEntriesRef.current.push({ el, label, labelSize: null, lngLat, pin });
       el.setAttribute("aria-label", t("Wishlist: {place}", { place: w.place.name + ", " + w.place.country }));
       el.tabIndex = 0;
-      const open = (ev: Event) => {
+      el.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        onOpenPlace?.(w.place.id);
-      };
-      el.addEventListener("click", open);
+        activate(ev.detail > 0 ? pickPin(ev.clientX, ev.clientY, pin) : pin);
+      });
       el.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
-          open(ev);
+          ev.stopPropagation();
+          activate(pin);
         }
       });
       wishObjsRef.current.push(marker);
     }
     scheduleLabels();
-  }, [wishMarkers, layers.wishlist, mapReady, onOpenPlace, scheduleLabels]);
+  }, [wishMarkers, layers.wishlist, mapReady, activate, pickPin, scheduleLabels]);
 
   // --- first framing: fit the visited places once they are known ---
   const framedRef = useRef(false);
@@ -706,12 +765,56 @@ export default function HeroMap({
   }, [mapReady, markers, initialCenter, frameAtlas, scheduleLabels]);
 
   // --- Map ↔ Timeline synchronization (v1.3): marker emphasis ---
+  // The pin whose card is open stays marked too, whoever holds the focus.
+  const peekId = peek?.place.id ?? null;
   useEffect(() => {
     const focusPlaceId = focus && entriesRef.current.has(focus.placeId) ? focus.placeId : null;
     for (const [placeId, e] of entriesRef.current) {
-      e.el.classList.toggle("atlas-marker--focused", placeId === focusPlaceId);
+      e.el.classList.toggle("atlas-marker--focused", placeId === focusPlaceId || placeId === peekId);
     }
-  }, [focus, markers, mapReady]);
+  }, [focus, markers, mapReady, peekId]);
+
+  // --- place card: never hide its own pin ---
+  // The card is docked over the bottom of the map. When the tapped pin lies
+  // under it (or too close to read), the camera lifts the pin into clear view;
+  // a pin that is already well above the card leaves the map where it is.
+  useEffect(() => {
+    const map = mapRef.current;
+    const card = heroRef.current?.querySelector<HTMLElement>(".atlas-peek-card");
+    if (!map || !peek || !card || dockH === 0) return;
+    const { lng, lat } = peek.place.coordinates;
+    const p = map.project([lng, lat]);
+    const top = card.offsetTop;
+    if (p.y < top - CARD_CLEARANCE) return;
+    const dy = p.y - Math.max(TOPBAR_EDGE, top - CARD_BREATHING);
+    if (dy > 0) map.panBy([0, dy], { duration: 420 });
+  }, [peek, dockH]);
+
+  // The card and the controls move together; lay the labels out again once
+  // they have settled.
+  useEffect(() => {
+    scheduleLabels();
+    const id = window.setTimeout(scheduleLabels, 320);
+    return () => window.clearTimeout(id);
+  }, [dockH, scheduleLabels]);
+
+  // --- layers menu: closes on any outside press and on Escape ---
+  useEffect(() => {
+    if (!layersOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!layersRef.current?.contains(e.target as Node)) setLayersOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLayersOpen(false);
+    };
+    // Capture: a pin or the map may stop the event before it reaches the document.
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [layersOpen]);
 
   // --- Map ↔ Timeline synchronization (v1.3): restrained camera ---
   // Only a timeline-initiated focus moves the camera, and only when the Place
@@ -761,54 +864,9 @@ export default function HeroMap({
       essential: true,
     });
     if (m) {
-      map.once("moveend", () => expandMarker(m));
+      map.once("moveend", () => openPeek(m));
     }
-  }, [flyTo, mapReady, places, markers, expandMarker]);
-
-  // --- "Save map as image" (poster) ---
-  const [exporting, setExporting] = useState(false);
-  const exportPoster = useCallback(async () => {
-    const map = mapRef.current;
-    if (!map || exporting) return;
-    setExporting(true);
-    setLayersOpen(false);
-    onNotice?.(t("Saving image…"));
-    try {
-      // Let a camera move in flight finish first.
-      const deadline = performance.now() + 2500;
-      while (performance.now() < deadline && map.isMoving()) {
-        await new Promise((r) => window.setTimeout(r, 80));
-      }
-      const labelSides = new Map<string, "left" | "right" | null>();
-      for (const [id, e] of entriesRef.current) {
-        labelSides.set(
-          id,
-          e.el.classList.contains("atlas-marker--label-hidden")
-            ? null
-            : e.el.classList.contains("atlas-marker--label-left")
-              ? "left"
-              : "right"
-        );
-      }
-      const { renderPoster, downloadBlob } = await import("../lib/poster");
-      const blob = await renderPoster({
-        map,
-        markers: contentRef.current.markers,
-        wishes: contentRef.current.layers.wishlist ? wishMarkersRef.current : [],
-        labelSides,
-        theme: contentRef.current.theme,
-        title: posterTitle,
-        subtitle: posterSubtitle,
-      });
-      const stamp = new Date().toISOString().slice(0, 10);
-      downloadBlob(blob, posterTitle.replace(/[\\/:*?"<>|’']/g, "").replace(/\s+/g, "-") + "-" + stamp + ".png");
-      onNotice?.(t("Image saved"));
-    } catch (e) {
-      onNotice?.(t("Could not create the image: {error}", { error: e instanceof Error ? e.message : String(e) }));
-    } finally {
-      setExporting(false);
-    }
-  }, [exporting, onNotice, posterTitle, posterSubtitle]);
+  }, [flyTo, mapReady, places, markers, openPeek]);
 
   const zoomBy = (delta: number) => {
     const map = mapRef.current;
@@ -818,20 +876,22 @@ export default function HeroMap({
   };
 
   const resetView = () => {
-    setPreview(null);
+    closePeek();
     frameAtlas(true);
   };
 
   const story = useMemo(
-    () =>
-      preview?.mode === "expanded"
-        ? getPlaceStory(preview.marker.place.id, places, visits, [], profile, media)
-        : null,
-    [preview, places, visits, profile, media]
+    () => (peek ? getPlaceStory(peek.place.id, places, visits, [], profile, media) : null),
+    [peek, places, visits, profile, media]
   );
 
   return (
-    <div className="atlas-hero">
+    <div
+      ref={heroRef}
+      className="atlas-hero"
+      // On phones the controls climb above whatever is docked at the bottom.
+      style={{ "--dock-lift": dockH ? dockH + 4 + "px" : "0px" } as React.CSSProperties}
+    >
       <div ref={containerRef} className="atlas-hero__map" />
       <div className="atlas-hero__tint" aria-hidden="true" />
 
@@ -847,53 +907,22 @@ export default function HeroMap({
             <RecenterIcon size={16} />
           </button>
         </div>
-        <div className="atlas-map-layers">
+        <div ref={layersRef} className="atlas-map-layers">
           <button
             type="button"
             className={"atlas-map-controls__single atlas-glass" + (layersOpen ? " is-open" : "")}
-            onClick={() => setLayersOpen((o) => !o)}
+            onClick={() => {
+              // The card and the menu share the bottom of the screen.
+              if (!layersOpen) closePeek();
+              setLayersOpen(!layersOpen);
+            }}
             aria-expanded={layersOpen}
             aria-label={t("Map layers")}
             title={t("Map layers")}
           >
             <LayersIcon size={17} />
           </button>
-          {layersOpen ? (
-            <div className="atlas-map-layers__menu atlas-glass atlas-glass--menu" role="menu" aria-label={t("Map layers")}>
-              <div className="atlas-map-layers__title">{t("On the map")}</div>
-              <LayerToggle
-                icon={<RouteIcon size={16} />}
-                label={t("Routes")}
-                hint={t("Trips radiating from each home")}
-                on={layers.routes}
-                onChange={(v) => onLayersChange({ ...layers, routes: v })}
-              />
-              <LayerToggle
-                icon={<StarIcon size={16} />}
-                label={t("Wishlist")}
-                hint={t("Places I dream of")}
-                on={layers.wishlist}
-                onChange={(v) => onLayersChange({ ...layers, wishlist: v })}
-              />
-              <LayerToggle
-                icon={<span className="atlas-map-layers__swatch" />}
-                label={t("Countries")}
-                hint={t("A soft wash over visited countries")}
-                on={layers.countries}
-                onChange={(v) => onLayersChange({ ...layers, countries: v })}
-              />
-              <button
-                type="button"
-                role="menuitem"
-                className="atlas-map-layers__action"
-                onClick={exportPoster}
-                disabled={exporting}
-              >
-                <ImageIcon size={15} />
-                {exporting ? t("Saving image…") : t("Save map as image")}
-              </button>
-            </div>
-          ) : null}
+          {layersOpen ? <LayersMenu layers={layers} onChange={onLayersChange} onHeight={setDockH} /> : null}
         </div>
       </div>
 
@@ -904,34 +933,80 @@ export default function HeroMap({
         </div>
       ) : null}
 
-      {preview && previewPixel ? (
-        preview.mode === "expanded" && story ? (
-          <MemoryCard
-            marker={preview.marker}
-            pixel={previewPixel}
-            container={containerRef.current}
-            photos={story.media.slice(0, 2)}
-            primaryVisit={story.primaryVisit}
-            onOpen={() => {
-              setPreview(null);
-              onOpenPlace?.(preview.marker.place.id);
-            }}
-            onClose={() => setPreview(null)}
-          />
-        ) : preview.mode === "micro" ? (
-          <div className="atlas-micro" style={{ left: previewPixel.x, top: previewPixel.y }} role="tooltip">
-            <span className="atlas-micro__name">{preview.marker.place.name}</span>
-            <span className="atlas-micro__meta">
-              {preview.marker.place.country}
-              {preview.marker.isCurrent
-                ? " · " + t("Living here")
-                : (preview.marker.dateLabel ? " · " + preview.marker.dateLabel : "") +
-                  " · " +
-                  visitTypeLabel(preview.marker.visitType)}
-            </span>
-          </div>
-        ) : null
+      {micro ? (
+        <div className="atlas-micro" style={{ left: micro.x, top: micro.y }} role="tooltip">
+          <span className="atlas-micro__name">{micro.marker.place.name}</span>
+          <span className="atlas-micro__meta">
+            {micro.marker.place.country}
+            {micro.marker.isCurrent
+              ? " · " + t("Living here")
+              : (micro.marker.dateLabel ? " · " + micro.marker.dateLabel : "") +
+                " · " +
+                visitTypeLabel(micro.marker.visitType)}
+          </span>
+        </div>
       ) : null}
+
+      {peek && story ? (
+        <PeekCard
+          key={peek.place.id}
+          marker={peek}
+          photos={story.media.slice(0, 2)}
+          primaryVisit={story.primaryVisit}
+          onHeight={setDockH}
+          onOpen={() => {
+            setPeek(null);
+            onOpenPlace?.(peek.place.id);
+          }}
+          onClose={closePeek}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The layers menu: a popover beside the button on wide screens, a bottom sheet
+ * above the tab bar on phones (styles/map.css). */
+function LayersMenu({
+  layers,
+  onChange,
+  onHeight,
+}: {
+  layers: MapLayers;
+  onChange: (next: MapLayers) => void;
+  onHeight: (h: number) => void;
+}) {
+  const ref = useReportHeight(onHeight);
+  return (
+    <div
+      ref={ref}
+      className="atlas-map-layers__menu atlas-glass atlas-glass--menu"
+      role="menu"
+      aria-label={t("Map layers")}
+      data-owns-keyboard
+    >
+      <div className="atlas-map-layers__title">{t("On the map")}</div>
+      <LayerToggle
+        icon={<RouteIcon size={16} />}
+        label={t("Routes")}
+        hint={t("Trips radiating from each home")}
+        on={layers.routes}
+        onChange={(v) => onChange({ ...layers, routes: v })}
+      />
+      <LayerToggle
+        icon={<StarIcon size={16} />}
+        label={t("Wishlist")}
+        hint={t("Places I dream of")}
+        on={layers.wishlist}
+        onChange={(v) => onChange({ ...layers, wishlist: v })}
+      />
+      <LayerToggle
+        icon={<span className="atlas-map-layers__swatch" />}
+        label={t("Countries")}
+        hint={t("A soft wash over visited countries")}
+        on={layers.countries}
+        onChange={(v) => onChange({ ...layers, countries: v })}
+      />
     </div>
   );
 }
@@ -969,31 +1044,50 @@ function LayerToggle({
   );
 }
 
-// Expanded "memory" card (reference: Bordeaux card): place + date, company,
-// up to two photographs, and the way into the full memory. Placed beside the
-// pin on whichever side has room, clamped inside the map.
-function MemoryCard({
+/** Reports an element's height while it is on screen, so the map's controls
+ * can sit above whatever is docked at the bottom of the map. */
+function useReportHeight(onHeight: (height: number) => void) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const report = () => onHeight(el.offsetHeight);
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      onHeight(0);
+    };
+  }, [onHeight]);
+  return ref;
+}
+
+// The place card (reference: Bordeaux card): where and when, who with, how
+// there, up to two photographs, and the way into the full memory. Docked above
+// the tab bar rather than floating beside the pin, where on a phone it would
+// cover that very pin. Swipe it down, tap the map or press Escape to dismiss.
+function PeekCard({
   marker,
-  pixel,
-  container,
   photos,
   primaryVisit,
+  onHeight,
   onOpen,
   onClose,
 }: {
   marker: MapMarker;
-  pixel: { x: number; y: number };
-  container: HTMLElement | null;
   photos: Media[];
   primaryVisit: Visit | null;
+  onHeight: (h: number) => void;
   onOpen: () => void;
   onClose: () => void;
 }) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const [h, setH] = useState(260);
-  useEffect(() => {
-    if (cardRef.current) setH(cardRef.current.offsetHeight);
-  }, [marker, photos.length]);
+  const cardRef = useReportHeight(onHeight);
+  const drag = useRef<{ pointer: number; startY: number; startT: number; dy: number; active: boolean } | null>(
+    null
+  );
+  const exitTimer = useRef<number | null>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -1002,14 +1096,55 @@ function MemoryCard({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const W = container?.clientWidth ?? 1200;
-  const H = container?.clientHeight ?? 800;
-  const cardW = Math.min(320, W - 32);
-  const gap = 22;
-  const placeRight = pixel.x + gap + cardW <= W - 16 || pixel.x < W / 2;
-  const left = clamp(placeRight ? pixel.x + gap : pixel.x - gap - cardW, 16, W - cardW - 16);
-  const top = clamp(pixel.y - h / 2, 90, Math.max(90, H - h - 90));
-  const caretTop = clamp(pixel.y - top, 22, h - 22);
+  useEffect(
+    () => () => {
+      if (exitTimer.current != null) window.clearTimeout(exitTimer.current);
+    },
+    []
+  );
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    drag.current = { pointer: e.pointerId, startY: e.clientY, startT: e.timeStamp, dy: 0, active: false };
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || d.pointer !== e.pointerId) return;
+    if (e.buttons === 0) {
+      drag.current = null; // released somewhere else: not a drag any more
+      return;
+    }
+    const dy = e.clientY - d.startY;
+    if (!d.active) {
+      // A tap wobbles; only a clear pull downward starts the swipe. From then
+      // on the card owns the pointer, so a swipe that began on "View memory"
+      // does not end in a click on it.
+      if (dy < 10) return;
+      d.active = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      e.currentTarget.style.transition = "none";
+    }
+    d.dy = Math.max(0, dy);
+    e.currentTarget.style.transform = `translateY(${d.dy}px)`;
+  };
+
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>, cancelled: boolean) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.active) return;
+    const el = e.currentTarget;
+    const speed = d.dy / Math.max(1, e.timeStamp - d.startT); // px per ms
+    if (!cancelled && (d.dy > 64 || (d.dy > 24 && speed > 0.5))) {
+      el.style.transition = "transform 0.18s ease-in, opacity 0.18s ease-in";
+      el.style.transform = "translateY(110%)";
+      el.style.opacity = "0";
+      exitTimer.current = window.setTimeout(onClose, 170);
+    } else {
+      el.style.transition = "transform 0.2s var(--ease-out)";
+      el.style.transform = "";
+    }
+  };
 
   const place = marker.place;
   const when = primaryVisit
@@ -1023,22 +1158,25 @@ function MemoryCard({
   return (
     <div
       ref={cardRef}
-      className={"atlas-memory-card" + (placeRight ? "" : " atlas-memory-card--left")}
-      style={{ left, top, width: cardW, "--caret-top": caretTop + "px" } as React.CSSProperties}
+      className="atlas-peek-card"
       role="dialog"
       aria-label={place.name + ", " + place.country}
-      onClick={(e) => e.stopPropagation()}
+      data-owns-keyboard
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={(e) => endDrag(e, false)}
+      onPointerCancel={(e) => endDrag(e, true)}
     >
-      <div className="atlas-memory-card__head">
-        <span className="atlas-memory-card__place">
+      <div className="atlas-peek-card__head">
+        <span className="atlas-peek-card__place">
           <PinIcon size={15} />
           <span className="atlas-break">
             {place.name}, {place.country}
           </span>
         </span>
-        {when ? <span className="atlas-memory-card__date atlas-date">{when}</span> : null}
+        {when ? <span className="atlas-peek-card__date atlas-date">{when}</span> : null}
       </div>
-      <div className="atlas-memory-card__sub">
+      <div className="atlas-peek-card__sub">
         {marker.isCurrent ? (
           <>
             <HomeIcon size={14} /> {t("Living here")}
@@ -1051,19 +1189,19 @@ function MemoryCard({
           visitTypeLabel(marker.visitType)
         )}
         {!marker.isCurrent && primaryVisit && primaryVisit.visitType !== "lived" ? (
-          <span className="atlas-memory-card__transport">
+          <span className="atlas-peek-card__transport">
             · <TransportIcon mode={transportOf(primaryVisit)} size={13} /> {transportLabel(transportOf(primaryVisit))}
           </span>
         ) : null}
         {!marker.isCurrent && primaryVisit && primaryVisit.visitType !== "lived" && primaryActivity(primaryVisit) ? (
-          <span className="atlas-memory-card__transport">
+          <span className="atlas-peek-card__transport">
             · <ActivityIcon activity={primaryActivity(primaryVisit)!} size={13} />{" "}
             {activityLabel(primaryActivity(primaryVisit)!)}
           </span>
         ) : null}
       </div>
       {photos.length > 0 ? (
-        <div className={"atlas-memory-card__photos atlas-memory-card__photos--" + photos.length}>
+        <div className={"atlas-peek-card__photos atlas-peek-card__photos--" + photos.length}>
           {photos.map((m) => (
             <img
               key={m.id}
@@ -1075,10 +1213,7 @@ function MemoryCard({
           ))}
         </div>
       ) : null}
-      {primaryVisit?.reflection ? (
-        <p className="atlas-memory-card__quote">{primaryVisit.reflection}</p>
-      ) : null}
-      <button type="button" className="atlas-memory-card__open" onClick={onOpen}>
+      <button type="button" className="atlas-peek-card__open" onClick={onOpen}>
         <span>{t("View memory")}</span>
         <ChevronRight size={15} />
       </button>

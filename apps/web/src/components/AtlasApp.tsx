@@ -7,7 +7,7 @@ import { HttpAtlasRepository } from "../lib/repository";
 import type { SyncFocus } from "../lib/sync";
 import type { TimelineNode } from "../lib/timeline";
 import { seasonFromMonth } from "../lib/timeline";
-import { atlasFacts, atlasFactsLine, atlasWordmark } from "../lib/domain";
+import { atlasWordmark } from "../lib/domain";
 import {
   LocaleContext,
   parseLocalePreference,
@@ -448,12 +448,6 @@ export default function AtlasApp() {
 
   const overlayOpen = overlay != null || closingOverlay;
 
-  const posterSubtitle = useMemo(
-    () => atlasFactsLine(atlasFacts(places, visits, wishlist), false),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [places, visits, wishlist, locale]
-  );
-
   return (
     <LocaleContext.Provider value={locale}>
       <section className="atlas-map-layer" id="map" aria-label={t("Map")} aria-hidden={tab !== "map"}>
@@ -465,7 +459,7 @@ export default function AtlasApp() {
           countriesGeo={countriesGeo}
           theme={theme}
           media={media}
-          obscured={overlayOpen || tab !== "map"}
+          obscured={overlayOpen || tab !== "map" || view === "manage"}
           layers={layers}
           onLayersChange={changeLayers}
           focus={syncFocus}
@@ -475,9 +469,6 @@ export default function AtlasApp() {
           initialCenter={defaultMapPosition}
           flyTo={flyTo}
           ready={loaded}
-          posterTitle={wordmark}
-          posterSubtitle={posterSubtitle}
-          onNotice={showToast}
         />
         {tab === "map" ? <Topbar wordmark={wordmark} onOpenSearch={() => setSearchOpen(true)} /> : null}
       </section>
