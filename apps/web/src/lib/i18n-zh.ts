@@ -81,21 +81,13 @@ export const ZH: Record<string, string> = {
   // --- journey ---
   "My journey": "我的旅程",
   "Journey timeline": "旅程时间线",
-  Past: "过去",
-  "Drag or scroll": "拖动或滚动",
   Future: "未来",
   "Your journey begins here.": "你的旅程从这里开始。",
   "Add your first place": "添加第一个地点",
   "Add a place you want to go": "添加一个想去的地方",
-  "Add a visit or a wish in Manage Atlas and it will take its place on the line — past to the left, future to the right.":
-    "在“管理地图集”中添加一次旅行或一个心愿，它就会出现在时间线上——过去在左，未来在右。",
-  Later: "更晚",
-  "Horizontal timeline — use arrow keys to move through time": "横向时间线——用方向键在时间中移动",
+  "Add a visit or a wish in Manage Atlas and it will take its place on the line.":
+    "在“管理地图集”中添加一次旅行或一个心愿，它就会出现在时间线上。",
   "Where next?": "下一站去哪？",
-  Visited: "去过",
-  Current: "当前",
-  "View wish": "查看心愿",
-  "Inspired by {source}": "灵感来自 {source}",
 
   // --- where next ---
   "Where next": "下一站",

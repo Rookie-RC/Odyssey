@@ -5,7 +5,6 @@ import { api, type RuntimeInfo } from "../lib/api";
 import type { Media, Place, Profile, Season, Settings, Visit, Wishlist } from "../lib/types";
 import { HttpAtlasRepository } from "../lib/repository";
 import type { SyncFocus } from "../lib/sync";
-import type { TimelineNode } from "../lib/timeline";
 import { seasonFromMonth } from "../lib/timeline";
 import { atlasWordmark } from "../lib/domain";
 import {
@@ -79,7 +78,7 @@ export default function AtlasApp() {
   // Optional Hero Map layers, persisted through Settings.
   const [layers, setLayers] = useState<MapLayers>({ routes: false, wishlist: true, countries: true });
 
-  // Shared contextual focus for Map ↔ Timeline synchronization (v1.3).
+  // The place selected on the map (a marker tapped).
   const [syncFocus, setSyncFocus] = useState<SyncFocus | null>(null);
 
   // Where Next season (defaults to the coming season) + global overlay.
@@ -297,7 +296,7 @@ export default function AtlasApp() {
     setFlyTo({ placeId, nonce: Date.now() });
   }, [cancelPendingClose]);
 
-  // --- Map ↔ Timeline synchronization (v1.3) ---
+  // --- Map selection ---
   // Multiple-Visit rule: the focused Visit is (1) the one already in context
   // when it belongs to this Place, (2) the current-base Visit when the Place is
   // the current base, (3) otherwise the most recent Visit (stable tie-break).
@@ -319,10 +318,6 @@ export default function AtlasApp() {
     },
     [visits, profile]
   );
-
-  const handleTimelineSelect = useCallback((node: TimelineNode) => {
-    setSyncFocus({ placeId: node.place.id, nodeId: node.id, visitId: node.visitId, source: "timeline" });
-  }, []);
 
   const handleMapFocus = useCallback(
     (placeId: string) => {
@@ -481,12 +476,7 @@ export default function AtlasApp() {
             wishlist={wishlist}
             profile={profile}
             media={media}
-            theme={theme}
             loaded={loaded}
-            emphasizedSeason={season}
-            overlayOpen={overlayOpen}
-            focus={syncFocus}
-            onSelectNode={handleTimelineSelect}
             onOpenPlace={openPlace}
             onWhereNext={() => setTab("wherenext")}
             onAddFirst={writable ? () => openManage("visit") : undefined}

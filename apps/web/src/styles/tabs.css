@@ -33,10 +33,6 @@ html[data-mode="dark"] .atlas-tabpage::before {
   mix-blend-mode: screen;
 }
 
-.atlas-tabpage--journey .atlas-journey {
-  padding-top: 40px;
-}
-
 .atlas-tabpage--wherenext .atlas-wherenext {
   margin-top: 0;
   border-top: 0;
