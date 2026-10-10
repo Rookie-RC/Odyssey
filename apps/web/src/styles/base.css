@@ -159,6 +159,12 @@ button {
   color: inherit;
 }
 
+/* A WebView flashes a grey box on every tap; the controls draw their own
+   pressed states. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 img {
   -webkit-user-drag: none;
 }
@@ -228,9 +234,13 @@ img {
     box-shadow 0.18s ease, opacity 0.18s ease;
 }
 
-.atlas-icon-btn:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+/* Hover only where there is a pointer to hover with: on a touch screen it
+   would stick to the last button tapped. */
+@media (hover: hover) {
+  .atlas-icon-btn:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .atlas-icon-btn:active {
@@ -248,14 +258,27 @@ img {
   height: 30px;
 }
 
+/* Notices float above the tab bar (56px tall, 16px up) and the bottom safe
+   area. Under a sheet and in Manage Atlas the bar is hidden (styles/tabs.css),
+   so they come down with it. */
+:root {
+  --notice-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+body:has(.atlas-overlay, .atlas-manage) {
+  --notice-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
 /* Error banner */
 .atlas-error {
   position: fixed;
   left: 50%;
-  bottom: 20px;
+  bottom: var(--notice-bottom);
   transform: translateX(-50%);
   z-index: 90;
-  max-width: min(560px, 92vw);
+  /* left: 50% would otherwise leave it half the screen to wrap in */
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
   padding: 10px 16px;
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -269,13 +292,16 @@ img {
 .atlas-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  bottom: var(--notice-bottom);
   z-index: 95;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 9px 16px;
+  text-align: center;
   border-radius: 999px;
   background: var(--text-primary);
   color: var(--bg);
@@ -519,4 +545,20 @@ html[lang="zh-CN"] .atlas-map-layers__title {
 
 html[lang="zh-CN"] body {
   line-height: 1.6;
+}
+
+/* Touch: whatever size a control is drawn at for a mouse, a finger gets 44px.
+   Last in the file so it outranks the sizes set above. */
+@media (pointer: coarse) {
+  .atlas-icon-btn,
+  .atlas-icon-btn--sm {
+    width: 44px;
+    height: 44px;
+  }
+
+  .atlas-btn,
+  .atlas-segmented__item,
+  .atlas-activity-chip {
+    min-height: 44px;
+  }
 }

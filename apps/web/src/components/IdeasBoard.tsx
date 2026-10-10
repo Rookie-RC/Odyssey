@@ -9,6 +9,7 @@ import { mediaSrc } from "../lib/api";
 import { CloseIcon, SeasonIcon } from "./Icons";
 import { leadInspiration } from "./WhereNext";
 import { t, tn } from "../lib/i18n";
+import { useSheetDrag } from "../lib/sheet-drag";
 
 const SEASONS: Season[] = ["spring", "summer", "autumn", "winter"];
 
@@ -54,6 +55,8 @@ export default function IdeasBoard({
     shellRef.current?.focus();
     return () => prev?.focus?.();
   }, []);
+  // On a phone the board can be dragged down to close.
+  useSheetDrag(shellRef, { enabled: !closing, onDismiss: onClose });
 
   const byId = useMemo(() => new Map(places.map((p) => [p.id, p])), [places]);
 

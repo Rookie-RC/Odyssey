@@ -14,6 +14,7 @@ import { getTimelineItems, seasonFromMonth, seasonLabel } from "../lib/timeline"
 import { mediaSrc } from "../lib/api";
 import type { AtlasRepository } from "../lib/repository";
 import { t } from "../lib/i18n";
+import { useSheetDrag } from "../lib/sheet-drag";
 import { transportLabel, transportOf } from "../lib/transport";
 import type { AtlasTheme } from "../themes";
 import DirectEdit from "./edit/DirectEdit";
@@ -120,6 +121,10 @@ export default function PlaceDetailSheet({
       prev?.focus?.();
     };
   }, []);
+
+  // On a phone the sheet can be dragged down to close. Not while editing:
+  // that has its own discard prompt, and the form's scrolling matters more.
+  useSheetDrag(shellRef, { enabled: !editing && !closing, onDismiss: onClose });
 
   const canEdit = writable && story != null && (story.primaryVisit != null || story.wishlist != null);
 

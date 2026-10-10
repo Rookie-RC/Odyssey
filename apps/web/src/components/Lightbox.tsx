@@ -61,7 +61,9 @@ export default function Lightbox({ items, startIndex, title, onClose }: Lightbox
         if (e.target === e.currentTarget) onClose();
       }}
       onTouchStart={(e) => {
-        touchX.current = e.touches[0]?.clientX ?? null;
+        // Swiping the thumbnails scrolls them; it must not also turn the page.
+        const inStrip = (e.target as Element).closest(".atlas-lightbox__strip") != null;
+        touchX.current = inStrip ? null : (e.touches[0]?.clientX ?? null);
       }}
       onTouchEnd={(e) => {
         const start = touchX.current;
