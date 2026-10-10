@@ -94,8 +94,9 @@ export const ZH_MANAGE: Record<string, string> = {
   "Map marker": "地图标记",
 
   // --- overview ---
-  "Everything is stored locally in your atlas-data folder — no files to edit by hand.":
-    "所有内容都保存在本地的 atlas-data 文件夹中——无需手动编辑任何文件。",
+  "Everything is stored in your account.": "所有内容都保存在你的账号里。",
+  "Everything stays on this device. Export it now and then to keep a copy.":
+    "所有内容都只保存在这台设备上。记得不时导出一份备份。",
   "Add to your Atlas": "添加到地图集",
   "Search for a place online — the Atlas fills in the country, coordinates and place type for you.":
     "在线搜索地点——地图集会自动为你填好国家、坐标和地点类型。",
@@ -228,14 +229,6 @@ export const ZH_MANAGE: Record<string, string> = {
   "Save map position": "保存地图位置",
   "Default map position saved.": "默认地图位置已保存。",
   "Default map position cleared.": "默认地图位置已清除。",
-  Runtime: "运行时",
-  "Data directory": "数据目录",
-  "Geocoding provider": "地理编码服务",
-  Mode: "模式",
-  "(writable)": "（可写）",
-  "(read-only)": "（只读）",
-  "Configured provider": "已配置的服务",
-  "Machine config lives in runtime-config.json.": "本机配置位于 runtime-config.json。",
 
   // --- import / export ---
   "Your whole Atlas travels as one portable .atlas file — structured data and media together. Backups are automatic before any replacement.":

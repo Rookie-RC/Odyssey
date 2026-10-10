@@ -16,7 +16,7 @@ interface Gap {
 }
 
 export default function ManageOverview({ ctx }: { ctx: ManageContext }) {
-  const { places, visits, wishlist, media, profile } = ctx;
+  const { places, visits, wishlist, media, profile, runtime } = ctx;
   const placeName = useMemo(() => new Map(places.map((p) => [p.id, p.name])), [places]);
   // The gap titles are translated inside the memo, so it recomputes on a
   // language switch.
@@ -101,7 +101,9 @@ export default function ManageOverview({ ctx }: { ctx: ManageContext }) {
       <div className="atlas-manage-section__head">
         <h2 className="atlas-manage-section__title">{t("Overview")}</h2>
         <p className="atlas-form-hint">
-          {t("Everything is stored locally in your atlas-data folder — no files to edit by hand.")}
+          {runtime?.mode === "cloud"
+            ? t("Everything is stored in your account.")
+            : t("Everything stays on this device. Export it now and then to keep a copy.")}
         </p>
       </div>
 

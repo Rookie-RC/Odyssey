@@ -157,13 +157,7 @@ export default function ManageAtlas({
       <header className="atlas-manage__topbar">
         <div className="atlas-manage__brand">
           <span className="atlas-manage__title">{t("Manage Atlas")}</span>
-          {runtime?.mode === "cloud" ? (
-            <span className="atlas-manage__datadir">{runtime.user?.email}</span>
-          ) : (
-            <span className="atlas-manage__datadir" title={runtime?.dataDir ?? ""}>
-              {runtime?.dataDir ?? "…"}
-            </span>
-          )}
+          {runtime?.mode === "cloud" ? <span className="atlas-manage__datadir">{runtime.user?.email}</span> : null}
         </div>
         <div className="atlas-manage__topbar-actions">
           <ThemePicker preference={themePreference} active={theme} onChange={onThemeChange} />

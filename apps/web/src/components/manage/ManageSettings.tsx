@@ -1,12 +1,11 @@
 "use client";
 
-// Settings section (PRODUCT_SPEC §34): the minimal V1 settings — theme,
-// optional default map position, plus read-only runtime info (data directory,
-// geocoding provider). No speculative options.
-import { useEffect, useState } from "react";
-import { api, type RuntimeInfo } from "../../lib/api";
+// Settings section (PRODUCT_SPEC §34): theme, language, the optional default
+// map position and, in cloud mode, the account. No speculative options.
+import { useState } from "react";
+import { api } from "../../lib/api";
 import type { ManageContext } from "./ManageAtlas";
-import { Btn, Card, Field } from "./FormUI";
+import { Btn, Card } from "./FormUI";
 import MiniMap from "./MiniMap";
 import ThemePicker from "../ThemePicker";
 import LanguagePicker from "../LanguagePicker";
@@ -103,33 +102,6 @@ export default function ManageSettings({ ctx }: { ctx: ManageContext }) {
       {/* Cloud mode: the account. */}
       {cloud ? <AccountPanel runtime={runtime} notify={notify} /> : null}
 
-      <Card>
-        <h3 className="atlas-manage-card__title">{t("Runtime")}</h3>
-        <div className="atlas-manage-kv">
-          {cloud ? null : (
-            <div>
-              <span className="atlas-manage-kv__label">{t("Data directory")}</span>
-              <span className="atlas-manage-kv__value">{runtime?.dataDir ?? "—"}</span>
-            </div>
-          )}
-          <div>
-            <span className="atlas-manage-kv__label">{t("Geocoding provider")}</span>
-            <span className="atlas-manage-kv__value">{runtime?.geocodingProvider ?? "—"}</span>
-          </div>
-          <div>
-            <span className="atlas-manage-kv__label">{t("Mode")}</span>
-            <span className="atlas-manage-kv__value">
-              {runtime?.mode ?? "—"} {runtime?.writable ? t("(writable)") : t("(read-only)")}
-            </span>
-          </div>
-        </div>
-      </Card>
-
-      {settings?.geocodingProvider ? (
-        <Field label={t("Configured provider")} hint={t("Machine config lives in runtime-config.json.")}>
-          <span className="atlas-form-hint">{settings.geocodingProvider}</span>
-        </Field>
-      ) : null}
     </div>
   );
 }

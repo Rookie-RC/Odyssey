@@ -129,13 +129,12 @@ scripts/build.sh               frontend export → embed → native runtime in b
 Two terminals:
 
 ```bash
-# 1. Go runtime (serves API + embedded frontend, opens browser)
+# 1. Go runtime (serves the API and the embedded frontend)
 cd apps/runtime && go run ./cmd/atlas -data ../../examples/atlas-data
 ```
 
-In development always pass `-data examples/atlas-data`. Without `-data`, the
-runtime uses the **portable** default location (see “Data directory” below),
-not the sample data. The effective path is logged at startup and exposed via
+`-data` is required (or `YUATLAS_DATA`); in development pass
+`examples/atlas-data`. The effective path is logged at startup and exposed via
 `GET /api/runtime`.
 
 For frontend hot-reload, run the Next dev server separately. It automatically
@@ -188,14 +187,9 @@ or updates cannot install over the old version) and the WebView bridges:
 
 The runtime:
 
-1. locates/creates the data directory,
+1. creates the data directory if needed,
 2. picks port 4317 (or a free port),
-3. serves the embedded frontend and the local API,
-4. opens the default browser (disable with `-open-browser=false`).
-
-```text
-http://127.0.0.1:4317
-```
+3. serves the embedded frontend and the local API at `http://127.0.0.1:4317`.
 
 ## Run as a website (cloud mode)
 
@@ -230,17 +224,8 @@ Atlas keeps the application binary and user data strictly separate
 (PRODUCT_SPEC §2–3).
 
 - **Phone app** — the app's private `files/atlas-data/`, passed as `-data`.
-- **On a computer** — pass `-data` (always, in development). Without `-data` /
-  `YUATLAS_DATA`, the data directory is resolved deterministically, never from
-  the process working directory:
-
-1. **Portable** — `<executable-dir>/atlas-data`: a sibling `atlas-data/` next
-   to the binary, created on first run. Replace the binary, keep your data.
-2. **Per-user** — when the executable lives in a read-only location (e.g.
-   Program Files):
-   - Windows: `%LOCALAPPDATA%\YuAtlas\atlas-data`
-   - macOS: `~/Library/Application Support/YuAtlas/atlas-data`
-   - Linux: `$XDG_DATA_HOME/yu-atlas/atlas-data` or `~/.local/share/yu-atlas/atlas-data`
+- **On a computer** — the `-data` flag (or `YUATLAS_DATA`) is required; there
+  is no default location.
 
 `atlas-data/` contains `data/*.json` (the collections), `media/…` (photos, by
 Place), `backups/…` (automatic `.atlas` backups) and optional

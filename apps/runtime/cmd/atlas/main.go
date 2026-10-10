@@ -1,6 +1,7 @@
-// Command atlas runs the local Yu's Atlas runtime: it serves the embedded
-// frontend, exposes the local JSON API, proxies/normalizes geocoding requests,
-// and opens the default browser.
+// Command atlas runs the Odyssey runtime: it serves the embedded frontend,
+// exposes the JSON API over the atlas-data directory and proxies/normalizes
+// geocoding requests. The Android app runs it on the phone (127.0.0.1 only);
+// -mode cloud serves many accounts as a website.
 package main
 
 import (
@@ -13,10 +14,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -32,13 +31,12 @@ import (
 
 func main() {
 	var (
-		dataDir     = flag.String("data", "", "path to atlas-data directory (default: deterministic discovery)")
-		port        = flag.Int("port", 4317, "preferred HTTP port (falls back to a free port)")
-		host        = flag.String("host", "127.0.0.1", "bind address")
-		openBrowser = flag.Bool("open-browser", true, "open the default browser on startup")
-		readonly    = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
+		dataDir  = flag.String("data", "", "path to the atlas-data directory (required; or set YUATLAS_DATA)")
+		port     = flag.Int("port", 4317, "preferred HTTP port (falls back to a free port)")
+		host     = flag.String("host", "127.0.0.1", "bind address")
+		readonly = flag.Bool("readonly", false, "serve read-only: reject all API writes and report writable=false")
 
-		mode         = flag.String("mode", "local", "local: one Atlas on this computer; cloud: multi-user web service (accounts, one Atlas per user)")
+		mode         = flag.String("mode", "local", "local: one Atlas on this device; cloud: multi-user web service (accounts, one Atlas per user)")
 		publicOrigin = flag.String("public-origin", "", "cloud: comma-separated origins the frontend is served from, e.g. https://atlas.example.com")
 		allowSignup  = flag.Bool("allow-signup", true, "cloud: let anyone create an account")
 		userQuotaMB  = flag.Int64("user-quota-mb", 500, "cloud: storage per user in MB (photos, data, backups); 0 = unlimited")
@@ -117,10 +115,6 @@ func main() {
 		}
 	}()
 
-	if *openBrowser {
-		openBrowserURL(url)
-	}
-
 	// Graceful shutdown on Ctrl-C.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -131,96 +125,28 @@ func main() {
 	_ = httpServer.Shutdown(ctx)
 }
 
-// resolveDataDir returns the absolute path of the atlas-data directory to use.
-// Priority:
+// resolveDataDir returns the absolute path of the atlas-data directory: the
+// -data flag, else the YUATLAS_DATA environment variable. There is no default
+// location: the phone app always passes its private directory, and on a
+// computer the runtime is only run for development (with -data
+// examples/atlas-data) or as the cloud-mode server.
 //
-//  1. the explicit -data flag,
-//  2. the YUATLAS_DATA environment variable,
-//  3. a portable default (see defaultDataDir).
-//
-// The result is always an absolute path so the effective location never
-// depends on the process working directory, and it is exposed through
-// GET /api/runtime for debugging.
+// The result is always absolute, so the effective location never depends on
+// the process working directory; it is reported by GET /api/runtime, which
+// the Android app uses to recognise a runtime it started earlier.
 func resolveDataDir(explicit string) (string, error) {
 	dir := explicit
 	if dir == "" {
 		dir = os.Getenv("YUATLAS_DATA")
 	}
 	if dir == "" {
-		dir = defaultDataDir()
+		return "", fmt.Errorf("no data directory: pass -data <dir> (or set YUATLAS_DATA)")
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Clean(abs), nil
-}
-
-// defaultDataDir returns the deterministic, user-writable location for Atlas
-// data (PRODUCT_SPEC §2–3: the binary and atlas-data/ are kept side by side so
-// replacing the executable never touches user data):
-//
-//  1. <executable-dir>/atlas-data — the portable layout (Atlas.exe + atlas-data/).
-//     Chosen when it already exists, or when the executable's directory is
-//     writable (so it can be created there).
-//  2. a per-user OS data directory — for read-only install locations (e.g. the
-//     executable dropped into Program Files).
-//
-// The process working directory is never consulted, so launching Atlas from a
-// different folder (or a shortcut with a different "Start in") keeps the same
-// data. Developers run the source tree with `-data examples/atlas-data`.
-func defaultDataDir() string {
-	if exe, err := os.Executable(); err == nil {
-		exeDir := filepath.Dir(exe)
-		portable := filepath.Join(exeDir, "atlas-data")
-		if dirExists(portable) || dirWritable(exeDir) {
-			return portable
-		}
-	}
-	return userDataDir()
-}
-
-// userDataDir returns a deterministic per-user directory for Atlas data,
-// suitable when the executable lives in a read-only location.
-func userDataDir() string {
-	switch runtime.GOOS {
-	case "windows":
-		if base := os.Getenv("LOCALAPPDATA"); base != "" {
-			return filepath.Join(base, "YuAtlas", "atlas-data")
-		}
-		if home := os.Getenv("USERPROFILE"); home != "" {
-			return filepath.Join(home, "AppData", "Local", "YuAtlas", "atlas-data")
-		}
-	case "darwin":
-		if home := os.Getenv("HOME"); home != "" {
-			return filepath.Join(home, "Library", "Application Support", "YuAtlas", "atlas-data")
-		}
-	default: // linux and other unix
-		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-			return filepath.Join(xdg, "yu-atlas", "atlas-data")
-		}
-		if home := os.Getenv("HOME"); home != "" {
-			return filepath.Join(home, ".local", "share", "yu-atlas", "atlas-data")
-		}
-	}
-	// Last resort (no home/env on an unusual system): current directory.
-	return "atlas-data"
-}
-
-func dirExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.IsDir()
-}
-
-// dirWritable reports whether a new file can be created in dir (the directory
-// itself must already exist).
-func dirWritable(dir string) bool {
-	probe := filepath.Join(dir, ".atlas-write-probe")
-	if err := os.WriteFile(probe, []byte{0}, 0o644); err != nil {
-		return false
-	}
-	_ = os.Remove(probe)
-	return true
 }
 
 func selectProvider(cfg config.Config) geocode.Provider {
@@ -247,21 +173,6 @@ func staticHandler() http.Handler {
 		}
 		http.ServeFileFS(w, r, sub, p)
 	})
-}
-
-func openBrowserURL(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("could not open browser: %v", err)
-	}
 }
 
 // parseDNSServers turns "1.1.1.1, [2001:db8::1], 9.9.9.9:5353" into dialable

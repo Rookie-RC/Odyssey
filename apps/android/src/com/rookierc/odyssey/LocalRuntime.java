@@ -24,9 +24,9 @@ import java.util.Map;
 import java.util.TimeZone;
 
 /**
- * Runs the Odyssey Go runtime on the phone: the same single-user local mode
- * as the desktop program, listening on 127.0.0.1 only, with its data in the
- * app's private storage (files/atlas-data).
+ * Runs the Odyssey Go runtime on the phone in its single-user local mode,
+ * listening on 127.0.0.1 only, with its data in the app's private storage
+ * (files/atlas-data).
  *
  * The runtime is a static linux executable shipped as
  * lib/&lt;abi&gt;/libodyssey.so: Android only lets apps execute files from
@@ -62,8 +62,7 @@ final class LocalRuntime {
                 exe.getAbsolutePath(),
                 "-data", dataDir.getAbsolutePath(),
                 "-host", "127.0.0.1",
-                "-port", String.valueOf(port),
-                "-open-browser=false");
+                "-port", String.valueOf(port));
         Map<String, String> env = pb.environment();
         env.put("HOME", ctx.getFilesDir().getAbsolutePath());
         env.put("XDG_CACHE_HOME", ctx.getCacheDir().getAbsolutePath());
