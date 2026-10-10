@@ -72,7 +72,7 @@ The Android back button calls `window.odysseyBack`, which closes the topmost thi
 
 - **Strings**: `t("English text")` everywhere; Chinese lives in `lib/i18n-zh*.ts`, keyed by the English. User content is never translated.
 - **Themes**: components use CSS variables only (`--bg`, `--text-primary`, `--accent` …). The values come from `themes/light.ts` and `themes/night.ts`. A colour written directly in a component or stylesheet is a bug.
-- **CSS**: classes are `atlas-<block>__<element>--<modifier>`, with state as `is-<state>`. Each stylesheet owns one surface and is imported in `app/layout.tsx`. Tailwind is only there for its reset (preflight); no utility classes are used.
+- **CSS**: classes are `atlas-<block>__<element>--<modifier>`, with state as `is-<state>`. Each stylesheet owns one surface and is imported in `app/layout.tsx`, after `styles/reset.css`. There is no CSS framework.
 - **Touch first**: hit areas are at least 44px, nothing depends on hover, and sheets respect the safe areas. Hover may add detail but never hides a function.
 - **Icons**: `components/Icons.tsx`, one line style, no emoji in the chrome.
 

@@ -7,7 +7,7 @@ import "@fontsource-variable/newsreader";
 import "@fontsource-variable/newsreader/wght-italic.css";
 import "@fontsource-variable/jetbrains-mono";
 
-import "./globals.css";
+import "../styles/reset.css";
 import "../styles/base.css";
 import "../styles/topbar.css";
 import "../styles/map.css";

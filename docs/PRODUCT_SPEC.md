@@ -67,7 +67,7 @@ Recommended implementation:
 
 - Next.js
 - TypeScript
-- Tailwind CSS
+- plain CSS on theme tokens (no CSS framework)
 - MapLibre GL JS
 - Motion / Framer Motion
 - static export

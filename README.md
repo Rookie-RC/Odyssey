@@ -83,7 +83,7 @@ Odyssey runtime (Go, one binary)
         +-- cloud         multi-user website (-mode cloud)
 ```
 
-- **Frontend** (`apps/web`): Next.js 14 + TypeScript + Tailwind. Static export
+- **Frontend** (`apps/web`): Next.js 14 + TypeScript + plain CSS. Static export
   (`output: "export"`), served by the Go runtime. One interface for every
   target; what differs on the phone goes through `src/lib/native.ts`.
 - **Runtime** (`apps/runtime`): Go 1.22, `net/http`, embedded frontend assets,
