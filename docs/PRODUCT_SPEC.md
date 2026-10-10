@@ -25,13 +25,13 @@ The conceptual model is:
 - **Place Detail = Memory / Intention**
 - **Profile = Identity**
 
-The first version runs locally on the user's computer and stores all personal data and images locally.
+It runs primarily as a phone app (Android first) and stores all personal data and images on the device: no server, no account. The Windows desktop release has been retired (2026-10); running the runtime on a computer is for development and testing.
 
 The architecture must also support:
 
-1. one-click local launch
-2. sharing the app binary with friends
-3. local editing through the browser UI
+1. a phone app that works with no server and no account
+2. sharing the app (APK) with friends
+3. local editing through the same web UI (in the app's WebView, or a browser on a computer)
 4. importing/exporting complete Atlas data packages
 5. future public deployment
 6. future migration from local files to a remote backend
@@ -44,7 +44,10 @@ The architecture must also support:
 Yu's Atlas consists of two main layers:
 
 ```text
-YuAtlas executable
+phone app (WebView shell)
+        │
+        ▼
+runtime (one binary, on 127.0.0.1)
         │
         ├── embedded frontend
         │
@@ -56,7 +59,7 @@ YuAtlas executable
            atlas-data/
 ```
 
-The browser UI communicates with a lightweight local runtime.
+The UI (in the app's WebView, or a browser on a computer) communicates with a lightweight local runtime. The app shell stays thin: it starts the runtime and bridges what a WebView cannot do on its own (file and photo pickers, saving to the device, the system share sheet, the back button). All product logic and UI live in the shared frontend, so another platform (iOS) is another shell, not another UI.
 
 Recommended implementation:
 
@@ -78,7 +81,7 @@ Recommended implementation:
 - JSON read/write
 - media upload handling
 - import/export handling
-- browser auto-launch
+- browser auto-launch (on a computer only)
 
 ### Storage
 
@@ -94,24 +97,17 @@ JSON + filesystem
 
 # 2. Distribution Model
 
-The application should be distributable as a portable package.
+The application is distributed as a phone app.
 
-Example releases:
-
-```text
-YuAtlas-Windows-x64.zip
-YuAtlas-macOS-arm64.zip
-YuAtlas-macOS-x64.zip
-YuAtlas-Linux-x64.tar.gz
-```
-
-Example Windows package:
+Release:
 
 ```text
-YuAtlas/
-├── YuAtlas.exe
-└── atlas-data/
+odyssey.apk        Android (arm64-v8a, armeabi-v7a)
 ```
+
+Shared directly (messaging apps, cloud drives) and installed by tapping it; app-store distribution is optional and later. An update is a new APK installed over the old one, keeping the data.
+
+There are no desktop release packages. The runtime binary built on a computer is for development and testing only.
 
 The user should not need:
 
@@ -123,21 +119,21 @@ The user should not need:
 - PostgreSQL
 - a database
 - a development environment
+- a server
+- an account
 
 Expected behavior:
 
 ```text
-double-click YuAtlas.exe
+tap the app icon
         ↓
-check/create atlas-data/
+check/create atlas-data/ in the app's private storage
         ↓
 choose available localhost port
         ↓
 start local server
         ↓
-open default browser
-        ↓
-http://127.0.0.1:<port>
+WebView loads http://127.0.0.1:<port>
 ```
 
 Preferred default port:
@@ -155,7 +151,7 @@ If unavailable, automatically select another free port.
 Application code and personal data must be separated.
 
 ```text
-YuAtlas executable     = application
+the app (APK)          = application
 atlas-data/            = user-owned content
 ```
 
@@ -164,14 +160,16 @@ Updating the application must not require replacing user data.
 Example:
 
 ```text
-YuAtlas v1.0
-      ↓ replace executable
-YuAtlas v1.1
+Odyssey v1.0
+      ↓ install the new APK over it
+Odyssey v1.1
 
 atlas-data/ remains unchanged
 ```
 
-The user must be able to copy `atlas-data/` independently.
+Updates install over the old version only when they are signed with the same key. A changed key forces an uninstall, which deletes the app's data, so the signing key must never change.
+
+The app's private storage is not reachable by the user, and uninstalling the app deletes it. The user's own copy of their data is therefore the export file (§30): the user must always be able to export the complete Atlas to a location they control (e.g. `Download/`), and import it on another device.
 
 ---
 
@@ -183,7 +181,7 @@ Default mode:
 127.0.0.1
 ```
 
-Only the local computer can access the app.
+Only this device can access the app.
 
 Optional future-compatible mode:
 
@@ -1698,7 +1696,7 @@ No traditional full-page reload navigation.
 
 # 37. Responsive Behavior
 
-Desktop is primary.
+Mobile (the phone app) is primary; desktop remains fully supported.
 
 Desktop:
 
@@ -1796,7 +1794,7 @@ Responsibilities:
 6. export `.yuatlas`
 7. import `.yuatlas`
 8. create automatic backups
-9. open browser on startup
+9. open browser on startup (on a computer only; never in the phone app)
 10. choose an available port
 11. expose runtime mode information
 12. proxy/normalize online geocoding requests
@@ -1996,7 +1994,7 @@ Implement only sanity checks necessary for trustworthy behavior.
 Goal:
 
 ```text
-double-click → browser opens → data loads
+launch → UI opens → data loads
 ```
 
 ---
@@ -2048,7 +2046,7 @@ validate the fundamental spatial/time experience.
 - `.yuatlas` import
 - automatic backups
 - blank New Atlas
-- release packaging
+- release packaging (the Android APK)
 
 ---
 

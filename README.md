@@ -5,9 +5,11 @@ travel inspiration** — one continuous page that opens on a full-screen map of
 where life has happened, collapses into a seasonal **Journey Timeline**, and
 ends on **Where Next**, a photographic shelf of places still to come.
 
-It runs as a single self-contained executable (Go runtime + embedded Next.js
-frontend). Your atlas is plain JSON and photos in a folder you own, exportable
-as one portable `.atlas` file.
+Odyssey is a phone app first: an Android app that keeps your atlas on the
+phone, with no server and no account. The atlas is plain JSON and photos in
+the app's own folder, exportable as one portable `.atlas` file. The same code
+(Go runtime + embedded Next.js frontend) also runs on a computer for
+development, and as a multi-user website (`-mode cloud`).
 
 **What's in the box**
 
@@ -39,26 +41,30 @@ as one portable `.atlas` file.
 - **Study abroad** — when you arrived, your trips home and the final return:
   "Day N" abroad, days actually spent abroad, the countries and places of each
   stay, and milestones plus a band on the Journey Timeline.
-- **Website or app** — run it locally, or as a multi-user website
-  (`-mode cloud`, [docs/DEPLOY.md](docs/DEPLOY.md)); installable on a phone's
-  home screen (PWA). Where it is heading: [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Phone app, data on the phone** — the Android app
+  ([apps/android](apps/android/README.md)) runs the runtime on the phone and
+  shows the same interface; photo and file pickers, saving to Downloads, the
+  system share sheet and the back button are bridged to Android. The same
+  program can also serve a multi-user website (`-mode cloud`,
+  [docs/DEPLOY.md](docs/DEPLOY.md)), installable on a home screen (PWA). Where
+  it is heading: [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## 中文简介
 
-Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一张全屏地图，标出生活与旅行过的地方；向下滚动，地图收成顶部的一条，下面依次是按季节着色的**旅程时间线**和**下一站**心愿墙。数据是你自己文件夹里的 JSON 与照片，可以整体导出为一个 `.atlas` 文件。程序只有一个可执行文件（Windows 下为 `Atlas.exe`），双击即用，无需安装。
+Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一张全屏地图，标出生活与旅行过的地方；向下滚动，地图收成顶部的一条，下面依次是按季节着色的**旅程时间线**和**下一站**心愿墙。主要形态是**安卓 App**：数据只存在你的手机里，不需要服务器和账号。整本地图集就是 JSON 与照片，可以整体导出为一个 `.atlas` 文件，换手机、备份都靠它。
 
 - **五套主题 + 自动**：浅色、夜间（城市灯火）、手账（米色纸与墨迹）、极简（生成色与朱印）、胶片（颗粒与日期印记）。主题会改变配色、字体、纹理、地图风格与照片处理，但不改变数据。
 - **地图**：去过的地点插一面小国旗，去过的国家实心着色、想去的国家斜线标出；每次旅行可选交通方式（飞机为默认、火车、大巴、自驾），路线分别画成虚线航线、铁轨、公路，中点显示对应的交通工具。
-- **液态玻璃（Liquid Glass）**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的玻璃，在 Chrome / Edge 中还会折射下方的地图；内容本身仍是纸面。
+- **液态玻璃（Liquid Glass）**：浮在地图与照片之上的控件（顶栏、缩放与图层、照片上的按钮）是带高光边的玻璃，在 Chrome / Edge 和安卓 App 中还会折射下方的地图；内容本身仍是纸面。
 - **中英文界面**：在个人主页、设置或 ⌘K 中切换；日期、季节、地图地名都会随之本地化，你写下的内容保持原样。
 - **⌘K 搜索与命令**、键盘快捷键（按 `?` 查看）、照片灯箱、全部心愿面板、地图图层（路线 / 心愿标记 / 国家底色）、**保存地图为图片**。
 - **票根分享**：把一次旅程做成登机牌（火车、大巴、自驾会变成对应的车票），把一个国家的所有城市做成带国家轮廓的通行证，或把整段旅程做成地图集通行证；配色字体随当前主题。入口在地点详情的「分享」、个人主页（整个旅程或点国旗）和 ⌘K；可下载、复制或调用系统分享。图片在本机生成，不会上传。
 - **管理地图集**：在线搜索地点添加到访与心愿、上传照片、导入导出、自动备份与一键恢复、**局域网只读共享**（附二维码）。
 - **玩法图标**：每次到访可以标记滑雪、冲浪、Citywalk、看展、野餐、追极光等 16 种玩法，第一个玩法就是这个地点在地图上的图标；只是路过住一晚的地点显示月亮。
 - **留学时光**：记录每段留学的抵达日期、中间的回国假期和最终回国时间，自动算出「留学第 N 天」、实际在外天数、期间去过的国家和城市；时间线上标出抵达、回国和结束留学。
-- **网站与手机**：既能本地运行，也能以 `-mode cloud` 部署成多用户网站（见 [docs/DEPLOY.md](docs/DEPLOY.md)）；手机上可「添加到主屏幕」像 App 一样使用。产品路线见 [docs/ROADMAP.md](docs/ROADMAP.md)。
+- **手机 App 优先**：安卓 App 在手机上运行，数据只在手机里；选照片、保存到「下载」、系统分享和返回键都接入了安卓（安装与构建见 [apps/android/README.md](apps/android/README.md)）。同一个程序也能以 `-mode cloud` 部署成多用户网站（见 [docs/DEPLOY.md](docs/DEPLOY.md)），作为备选形态保留。产品路线见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
-开发：`cd apps/runtime && go run ./cmd/atlas -data ../../examples/atlas-data` 与 `cd apps/web && pnpm dev`；构建：`./scripts/build.sh`；测试：`pnpm test` 与 `go test ./...`。
+开发：`cd apps/runtime && go run ./cmd/atlas -data ../../examples/atlas-data` 与 `cd apps/web && pnpm dev`；构建安卓 App：`apps/android/build.sh`；构建电脑上测试用的程序：`./scripts/build.sh`；测试：`pnpm test` 与 `go test ./...`。
 
 > Authoritative specs: [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md) and
 > [docs/design/VISUAL_SPEC.md](docs/design/VISUAL_SPEC.md).
@@ -66,19 +72,26 @@ Odyssey（原名 Yu's Atlas）是一个个人旅行地图集：打开即是一�
 ## Architecture
 
 ```text
-YuAtlas executable
+Odyssey runtime (Go, one binary)
         |
         +-- embedded frontend (Next.js static export)
         |
-        +-- local HTTP server (Go, net/http)
+        +-- HTTP server (net/http) + file API  ->  atlas-data/
         |
-        +-- local file API  ->  atlas-data/
+        runs as
+        +-- Android app   WebView shell, runtime on 127.0.0.1, data in the app's private folder
+        +-- local         on a computer, for development and testing
+        +-- cloud         multi-user website (-mode cloud)
 ```
 
 - **Frontend** (`apps/web`): Next.js 14 + TypeScript + Tailwind. Static export
-  (`output: "export"`), served by the Go runtime.
+  (`output: "export"`), served by the Go runtime. One interface for every
+  target; what differs on the phone goes through `src/lib/native.ts`.
 - **Runtime** (`apps/runtime`): Go 1.22, `net/http`, embedded frontend assets,
-  JSON read/write, geocoding proxy/cache, browser auto-launch.
+  JSON read/write, geocoding proxy/cache, browser auto-launch (local mode).
+- **Android** (`apps/android`): a WebView shell built without Gradle. A few
+  Java classes start the runtime (packaged as `lib/<abi>/libodyssey.so`) and
+  bridge file pickers, saving, sharing and the back button.
 - **Storage**: JSON files on disk (no database). Personal data lives in
   `atlas-data/`, separate from the application binary.
 
@@ -94,17 +107,23 @@ apps/
     src/themes/                theme contract + light / night / journal / minimal / film
     src/styles/                base, topbar, map, journey, wherenext, overlays, palette, manage
     scripts/copy-flags.mjs     copies SVG country flags into public/flags (dev/build)
-  runtime/                     Go runtime: cmd/atlas, internal/{api,atlas,config,domain,
+  runtime/                     Go runtime: cmd/atlas, internal/{api,atlas,cloud,config,domain,
                                geocode,lan,media,storage}, assets (embedded frontend)
-docs/                          PRODUCT_SPEC.md, design/ (VISUAL_SPEC, references, Claude Design export)
+  android/                     Android app: src/ (Java shell), res/, AndroidManifest.xml,
+                               build.sh (frontend + runtime + APK → dist/odyssey.apk)
+deploy/                        example configs for cloud mode (systemd, Caddy)
+docs/                          PRODUCT_SPEC.md, ROADMAP.md, DEPLOY.md, design/ (VISUAL_SPEC,
+                               references, Claude Design export)
 examples/atlas-data/           sample data (data/*.json, CC-licensed photos, runtime-config.json)
-scripts/build.sh               one-shot full build (frontend export → embed → native + Windows)
+scripts/build.sh               frontend export → embed → native runtime in bin/ (for testing)
 ```
 
 ## Prerequisites
 
 - Node.js >= 18 and pnpm
 - Go >= 1.22
+- For the phone app: JDK 17 and an Android SDK — see
+  [apps/android/README.md](apps/android/README.md)
 
 ## Run (development)
 
@@ -148,7 +167,20 @@ The theme test is a legibility guard: every theme must keep primary text at
 ≥ 7:1 and secondary text at ≥ 4.5:1 against its grounds, season labels at ≥ 3:1,
 and white text on its accent at ≥ 4.5:1 (WCAG).
 
-## Run (production-style / one-click)
+## Phone app (Android)
+
+```bash
+apps/android/build.sh                 # frontend + runtime + APK → apps/android/dist/odyssey.apk
+SKIP_FRONTEND=1 apps/android/build.sh # reuse the frontend already embedded
+```
+
+The atlas lives only on the phone, in the app's private `files/atlas-data/`.
+Uninstalling the app deletes it, so export a `.atlas` regularly (saved to
+`Download/Odyssey/`). Tool setup, the signing key (which must never change,
+or updates cannot install over the old version) and the WebView bridges:
+[apps/android/README.md](apps/android/README.md) (中文).
+
+## Run the built binary (computer)
 
 ```bash
 ./scripts/build.sh
@@ -168,8 +200,9 @@ http://127.0.0.1:4317
 
 ## Run as a website (cloud mode)
 
-The same binary can serve many people, each with a private Atlas behind an
-account (email + password):
+Kept as an alternative to the phone app, not the main line (see
+[docs/ROADMAP.md](docs/ROADMAP.md)). The same binary can serve many people,
+each with a private Atlas behind an account (email + password):
 
 ```bash
 ./bin/atlas -mode cloud -data /var/lib/atlas \
@@ -195,12 +228,15 @@ Deployment guide (VPS, systemd, Caddy, backups, pre-launch checklist):
 ## Data directory
 
 Atlas keeps the application binary and user data strictly separate
-(PRODUCT_SPEC §2–3). Without `-data` / `YUATLAS_DATA`, the data directory is
-resolved deterministically, never from the process working directory:
+(PRODUCT_SPEC §2–3).
 
-1. **Portable** — `<executable-dir>/atlas-data`. When you ship `Atlas.exe` (or
-   `atlas`) on its own, it creates a sibling `atlas-data/` next to itself and
-   uses it. This is the V1 layout: replace the executable, keep your data.
+- **Phone app** — the app's private `files/atlas-data/`, passed as `-data`.
+- **On a computer** — pass `-data` (always, in development). Without `-data` /
+  `YUATLAS_DATA`, the data directory is resolved deterministically, never from
+  the process working directory:
+
+1. **Portable** — `<executable-dir>/atlas-data`: a sibling `atlas-data/` next
+   to the binary, created on first run. Replace the binary, keep your data.
 2. **Per-user** — when the executable lives in a read-only location (e.g.
    Program Files):
    - Windows: `%LOCALAPPDATA%\YuAtlas\atlas-data`
@@ -218,25 +254,11 @@ Place), `backups/…` (automatic `.atlas` backups) and optional
 ```
 
 This builds the frontend static export, embeds it into the Go runtime, and
-produces two binaries in `bin/`:
-
-```text
-bin/atlas      native binary (for local testing on this OS)
-bin/Atlas.exe  Windows amd64 release (self-contained)
-```
-
-To cross-compile the Windows executable by hand:
-
-```bash
-cd apps/runtime
-CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o ../bin/Atlas.exe ./cmd/atlas
-```
-
-The `Atlas.exe` is fully self-contained (embedded frontend; no Node/Go/runtime
-required on the target machine). Ship it alone — no source, `node_modules`, or
-development caches. On Windows it is an **unsigned** binary, so SmartScreen may
-warn on first launch; that warning is expected and is not worked around by
-disabling security features.
+produces `bin/atlas` (`bin/atlas.exe` on Windows) for this machine: for local
+testing, and as the server in cloud mode ([docs/DEPLOY.md](docs/DEPLOY.md)
+cross-compiles a Linux build from it). There is no desktop release any more
+(the Windows `Atlas.exe` was retired in 2026-10); the phone app is built by
+`apps/android/build.sh`.
 
 ## Local API
 
@@ -405,7 +427,9 @@ Machine config (`runtime-config.json`) is never exported.
 **Phase 7 (release packaging):** portable single-file distribution — `bin/Atlas.exe`
 (Windows amd64, self-contained, embedded frontend) plus a native `bin/atlas`
 for local testing. Data lives next to the executable (or in a per-user directory
-for read-only install locations); see “Data directory”.
+for read-only install locations); see “Data directory”. Retired in 2026-10:
+the phone app replaced the desktop release, and `scripts/build.sh` no longer
+builds `Atlas.exe`.
 
 **Phase 8 (design & experience — this release):** the Claude Design
 redesign (`docs/Yu's Atlas page redesign.zip`, references in `docs/design/`)
@@ -443,8 +467,8 @@ VISUAL_SPEC:
   dreaming of*, and the *All ideas* board.
 - **Liquid glass** — chrome that floats over the world (header pills, map
   controls and their menus, actions over photographs) is a pane of glass:
-  tinted, frosted, with a specular rim. In Chromium (Chrome, Edge — the
-  Windows default) the rim also refracts what lies beneath, from a displacement
+  tinted, frosted, with a specular rim. In Chromium (Chrome, Edge, the
+  Android app's WebView) the rim also refracts what lies beneath, from a displacement
   map drawn per element size (`lib/liquid-glass.ts`); other engines keep the
   frosted pane, and *reduce transparency* turns it solid. Content — timeline,
   cards, sheets — stays on paper, so the two never compete. Each theme tunes
